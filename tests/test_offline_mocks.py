@@ -7,7 +7,6 @@ calls. CI (which has no data/cache populated) relies on this path.
 from __future__ import annotations
 
 import pandas as pd
-import pytest
 
 
 def test_mock_fred_get_series_returns_sample(mock_fred):
