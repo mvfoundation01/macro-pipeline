@@ -101,6 +101,10 @@ def load_atlanta_wage(
             "source_sheet": WAGE_SHEET,
             "source_column": SOURCE_COL,
             "full_history_revisable": True,
+            # Layer 1.5C.5 (E.1): full-history-revisable series gets a
+            # 0.60 confidence cap; quality_caps.compute_final_confidence_cap
+            # picks this up as ``vintage_confidence_cap``.
+            "vintage_confidence_cap": 0.60,
             "vintage_caveat": (
                 "Atlanta Fed revises entire series with each monthly release; "
                 "backtest may have ~1-3% optimistic bias from latest "

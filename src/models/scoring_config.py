@@ -53,3 +53,23 @@ CDRS_ALERT_THRESHOLDS: dict[str, float] = {
 def requires_zscore(indicator_id: str) -> bool:
     """Returns True if this series must be z-score-normalized before scoring."""
     return indicator_id in set(POSITIONING_INDICATORS_REQUIRING_ZSCORE)
+
+
+# ---------------------------------------------------------------------------
+# Source-quality confidence caps (Layer 1.5C.5)
+# ---------------------------------------------------------------------------
+# Maximum confidence the system may report for an indicator depending on
+# the trustworthiness of its source pipeline. ChatGPT 2026-05-09 D7
+# requested explicit caps for OCR / stale / unofficial data.
+#
+# These are proportions in [0, 1]; multiply by 100 to get a percentage cap.
+# The "free_api" cap of 1.00 means no source-quality discount applies (the
+# data is fetched from a maintained authoritative API).
+SOURCE_QUALITY_CAPS: dict[str, float] = {
+    "manual_image_csv": 0.60,   # OCR-transcribed (e.g. Damodaran ERP image)
+    "stale_local_file": 0.50,   # Tier 5 frozen file
+    "tradingview_csv":  0.75,   # TradingView-exported CSV (re-export, no API contract)
+    "yahoo_unofficial": 0.80,   # Yahoo data on a ticker without an official endpoint
+    "free_download":    0.90,   # Free CSV/XLS download from a primary source
+    "free_api":         1.00,   # FRED / CFTC Socrata / other versioned APIs
+}

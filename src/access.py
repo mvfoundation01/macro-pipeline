@@ -237,12 +237,26 @@ class PitSeriesReader:
             )
         s = df[column_name].dropna().rename(indicator_id)
 
+        # Layer 1.5C.5 / E.2: compute staleness in quarters at as_of and
+        # surface it on the metadata. quality_caps.vintage_staleness_cap
+        # picks this up to derive an additional 0.80 cap when stale > 2.
+        from src.models.quality_caps import (
+            stale_quarters_since_release, vintage_staleness_cap,
+        )
+        pub = df.attrs.get("publication_date")
+        stale_q = stale_quarters_since_release(pub, as_of)
+        staleness_cap = vintage_staleness_cap(stale_q)
+
         meta = {
             **latest_meta,
             "pit_source": "hlw_vintage_panel",
             "hlw_vintage": df.attrs.get("vintage"),
-            "hlw_vintage_publication_date": df.attrs.get("publication_date"),
+            "hlw_vintage_publication_date": pub,
+            "stale_quarters_since_release": stale_q,
         }
+        if staleness_cap is not None:
+            meta["vintage_staleness_cap"] = staleness_cap
+
         return IndicatorBundle(
             indicator_id=indicator_id,
             data=s,

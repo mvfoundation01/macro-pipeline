@@ -198,6 +198,10 @@ TV_FILES_REGISTRY: dict[str, dict] = {
         "freq": "Q", "unit": "index",
         "expected_min": 100, "expected_max": 1e5, "tier": 5,
         "data_status": "stale",
+        # last_valid_date is the last DATE for which the underlying source
+        # had real data; downstream `align_to_business_days` ffills past
+        # that to today, so `last_obs` is misleading for E.3 cutoff logic.
+        "last_valid_date": "2024-04-01",
         "stale_reason": "Wilshire revoked FRED license 2024-06-03; series stops 2024-04-01",
         "use_for": ["backtest", "regression", "historical_derived"],
         "do_not_use_for": ["real_time_signal", "current_alert", "live_crps", "live_cdrs"],
@@ -209,6 +213,7 @@ TV_FILES_REGISTRY: dict[str, dict] = {
         "freq": "M", "unit": "index",
         "expected_min": 80, "expected_max": 110, "tier": 5,
         "data_status": "stale",
+        "last_valid_date": "2024-01-01",
         "stale_reason": "OECD methodology change; FRED stops updating 2024-01-01",
         "use_for": ["backtest", "regression", "historical_derived"],
         "do_not_use_for": ["real_time_signal", "current_alert", "live_crps", "live_cdrs"],
@@ -335,6 +340,7 @@ def load_tv_file(
         extra.update({
             "tier": 5,
             "data_status": spec.get("data_status"),
+            "last_valid_date": spec.get("last_valid_date"),
             "stale_reason": spec.get("stale_reason"),
             "use_for": spec.get("use_for"),
             "do_not_use_for": spec.get("do_not_use_for"),

@@ -84,11 +84,63 @@ FRED_SERIES_API: dict[str, dict] = {
         "expected_min": 0.0, "expected_max": 10.0, "release_lag_days": 1,
         "description": "Interest on Reserve Balances rate",
     },
+    # --- Short rates needed by NTFS (Layer 1.5C.1) ---
+    "TB3MS": {
+        "freq": "M", "vintage": False, "unit": "pct",
+        "expected_min": 0.0, "expected_max": 25.0, "release_lag_days": 1,
+        "description": (
+            "3-Month Treasury Bill secondary market rate, monthly average. "
+            "Used by NTFS_OFFICIAL_REPL as the spot 3-month yield."
+        ),
+    },
+    "DTB3": {
+        "freq": "D", "vintage": False, "unit": "pct",
+        "expected_min": 0.0, "expected_max": 25.0, "release_lag_days": 1,
+        "description": (
+            "3-Month Treasury Bill secondary market rate, daily. "
+            "Used by NTFS_DAILY_DASHBOARD as the spot 3-month yield."
+        ),
+    },
     # --- Sahm rule / labor market ---
     "SAHMREALTIME": {
         "freq": "M", "vintage": True, "unit": "pct",
         "expected_min": -1.0, "expected_max": 10.0, "release_lag_days": 7,
-        "description": "Sahm Rule real-time recession indicator",
+        # Layer 1.5C.4 re-classification (ChatGPT review):
+        # Sahm is COINCIDENT, not 12M-leading. CRPS/CDRS builders that
+        # ask for a 12M_leading_composite must reject this indicator.
+        "signal_type": "coincident",
+        "valid_uses": [
+            "recession_start_detection",
+            "real_time_recession_indicator",
+        ],
+        "INVALID_uses": [
+            "12M_recession_probability_composite",
+            "12M_leading_indicator",
+        ],
+        "description": (
+            "Sahm Rule real-time recession indicator. COINCIDENT signal "
+            "(detects recession start, not 12M ahead). Use for "
+            "recession_start_detection only — see 1.5C.4."
+        ),
+    },
+    # --- Philly Fed STATE Leading Index (NOT Conference Board LEI) ---
+    # Layer 1.5C.3 (ChatGPT review): the FRED series id is USSLIND but the
+    # build guide called it CB_LEI. USSLIND is Philly Fed's STATE leading
+    # index aggregate; its inputs already include T10Y3M and ISM data, so
+    # combining USSLIND + T10Y3M + ISM in CRPS double-counts the same
+    # signal. We expose it as PHILLY_LEI_PROXY with a double-counting flag
+    # so any composite builder that uses it next to T10Y3M/ISM can warn.
+    "USSLIND": {
+        "freq": "M", "vintage": False, "unit": "pct",
+        "expected_min": -10.0, "expected_max": 10.0, "release_lag_days": 30,
+        "indicator_id": "PHILLY_LEI_PROXY",
+        "double_counting_risk": True,
+        "overlap_components": ["T10Y3M", "ISM_NEW_ORDERS", "IC4WSA"],
+        "description": (
+            "Philly Fed STATE leading index aggregate (FRED id USSLIND). "
+            "Mislabeled as Conference Board LEI in earlier builds. "
+            "Double-counts T10Y3M and ISM data — see 1.5C.3."
+        ),
     },
     "PAYEMS": {
         "freq": "M", "vintage": True, "unit": "count_k",

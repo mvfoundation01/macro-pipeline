@@ -126,6 +126,12 @@ def load_fred_series(
             f"Add it to src/config.py before requesting."
         )
     spec = FRED_SERIES_API[series_id]
+    # Layer 1.5C.3: spec may carry an ``indicator_id`` alias when the FRED
+    # series id is a misnomer (e.g. USSLIND -> PHILLY_LEI_PROXY). The cache
+    # file name still uses the FRED id (so the on-disk artefact is stable
+    # across renames) but the IndicatorMetadata.indicator_id and the
+    # parquet column name use the alias.
+    indicator_id = spec.get("indicator_id", series_id)
     fred = Fred(api_key=FRED_API_KEY)
 
     parquet, _sidecar = _cache_paths(series_id)
@@ -163,7 +169,7 @@ def load_fred_series(
         master_end = pd.Timestamp(vintage_date) if vintage_date else None
         result = run_universal_pipeline(
             raw_series,
-            indicator_id=series_id,
+            indicator_id=indicator_id,
             unit=spec["unit"],
             native_freq=spec["freq"],
             expected_min=spec.get("expected_min"),
@@ -179,8 +185,24 @@ def load_fred_series(
         first_obs, last_obs = raw_series.index.min(), raw_series.index.max()
         n_outliers = 0
 
+    # Pass through the spec-level enrichment fields so consumers (Sahm
+    # use-context guard, PHILLY_LEI_PROXY double-counting checker, etc.)
+    # can read them directly off IndicatorMetadata.extra.
+    extra = {
+        "fred_series_id": series_id,
+        "vintage_date": str(vintage_date) if vintage_date else None,
+        "n_outliers_iqr5": n_outliers,
+        "n_obs": int(series.notna().sum()),
+    }
+    for key in (
+        "signal_type", "valid_uses", "INVALID_uses",
+        "double_counting_risk", "overlap_components",
+    ):
+        if key in spec:
+            extra[key] = spec[key]
+
     meta = IndicatorMetadata(
-        indicator_id=series_id,
+        indicator_id=indicator_id,
         source="FRED_ALFRED" if vintage_date else "FRED_API",
         frequency=spec["freq"],
         first_obs=first_obs,
@@ -193,20 +215,19 @@ def load_fred_series(
         expected_min=spec.get("expected_min"),
         expected_max=spec.get("expected_max"),
         data_quality_suspect_periods=spec.get("data_quality_suspect_periods", []),
-        extra={
-            "vintage_date": str(vintage_date) if vintage_date else None,
-            "n_outliers_iqr5": n_outliers,
-            "n_obs": int(series.notna().sum()),
-        },
+        extra=extra,
     )
 
-    # Cache only the live (non-vintage) series.
+    # Cache only the live (non-vintage) series. Cache file naming uses
+    # the FRED series id for stability across indicator-id renames; the
+    # parquet column is named by the (possibly aliased) indicator_id so
+    # cross-source joins in Layer 3 align cleanly.
     if vintage_date is None and not use_cache and apply_pipeline:
         cache_series_to_parquet(
             series,
             cache_dir=DATA_CACHE,
             file_stem=f"fred_{series_id}",
-            column_name=series_id,
+            column_name=indicator_id,
             metadata=meta.to_dict(),
         )
 
@@ -239,8 +260,10 @@ def load_fred_all(
             s, meta = load_fred_series(
                 sid, vintage_date=vintage_date, force_refresh=force_refresh
             )
-            results[sid] = s
-            metadata[sid] = meta
+            # Key by indicator_id so aliased entries (e.g. USSLIND ->
+            # PHILLY_LEI_PROXY) appear under their canonical name.
+            results[meta.indicator_id] = s
+            metadata[meta.indicator_id] = meta
         except (RetryError, ValueError, ConnectionError) as exc:
             failures[sid] = str(exc)
             log.error("FRED %s: failed - %s", sid, exc)
