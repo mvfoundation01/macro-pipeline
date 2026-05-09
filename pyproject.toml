@@ -72,6 +72,11 @@ ignore = ["E501", "RUF002", "RUF003", "RUF046", "RUF059"]
 # weights tuple unpacking — both are math notation, not style bugs.
 "macro_pipeline/models/signal_probability.py" = ["N806", "N802", "N803", "N815"]
 "macro_pipeline/models/conviction.py" = ["N806"]
+# Layer 3D analysis: forward-return helpers use Hansen-Hodrick math
+# notation (p_tH = price at t+H); regression dataclass uses LR-style
+# upper-case for HAC. Math notation, not style bugs.
+"macro_pipeline/analysis/regression_target.py" = ["N806"]
+"macro_pipeline/analysis/newey_west_hac.py" = ["N802", "N806", "N815"]
 # Tests routinely do top-of-test imports after pytest fixtures and
 # conditional imports; allow E402 there as well. test_signal_probability
 # uses S2/S4 in test names to mirror the PriorStrength enum aliases.
