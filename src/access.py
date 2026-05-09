@@ -163,24 +163,40 @@ class LatestSeriesReader:
 # ---------------------------------------------------------------------------
 # PIT reader
 # ---------------------------------------------------------------------------
+# Map HLW indicator ids (latest-cache names) → vintage-panel column names.
+# The Phase 4D vintage cache stores three columns named with a `_VINTAGE`
+# suffix; the user-facing latest-cache loader exposes the same indicators
+# without the suffix. Both names point to the same underlying series, so
+# PIT lookups for the bare names route through the vintage panel.
+HLW_VINTAGE_INDICATORS: dict[str, str] = {
+    "HLW_RSTAR":         "HLW_RSTAR_VINTAGE",
+    "HLW_TREND_GROWTH":  "HLW_TREND_GROWTH_VINTAGE",
+    "HLW_OUTPUT_GAP":    "HLW_OUTPUT_GAP_VINTAGE",
+}
+
+
 @dataclass
 class PitSeriesReader:
     """Returns a series as known on ``as_of``.
 
-    For series in ``fred_vintage_panel.VINTAGE_REQUIRED_SERIES``: looks up
-    the materialized vintage panel and dispatches to ``get_pit_series``.
-    The returned index is the *observation_date* but each value is the
-    latest vintage with ``realtime_start <= as_of``. ``release_lag_days``
-    is NOT additionally applied — the panel encodes visibility directly.
+    Dispatches to the right vintage source based on indicator id:
 
-    For non-vintage series: applies ``to_visibility_index`` (shift index by
-    ``release_lag_days``), truncates at ``as_of``, then shifts back so the
-    series is again indexed by observation_date.
+    - In ``fred_vintage_panel.VINTAGE_REQUIRED_SERIES``: uses the
+      materialized FRED vintage panel via ``get_pit_series``. The returned
+      index is the *observation_date*; each value is the latest vintage
+      whose ``realtime_start <= as_of``. ``release_lag_days`` is not
+      additionally applied — the panel encodes visibility directly.
 
-    For ``needs_vintage=True`` series that lack a materialized vintage panel
-    (e.g. HLW_RSTAR which uses a separate quarterly-vintage cache) the
-    reader logs a warning and falls back to the latest cache truncated at
-    ``as_of`` — this is a known limitation, see Layer 1.5A audit notes.
+    - In ``HLW_VINTAGE_INDICATORS`` (``HLW_RSTAR`` /
+      ``HLW_TREND_GROWTH`` / ``HLW_OUTPUT_GAP``): routes through
+      ``hlw_rstar_vintage.get_pit_rstar`` (Phase 4D quarterly vintage
+      panel). The metadata records the matched ``hlw_vintage`` and its
+      ``hlw_vintage_publication_date`` for audit. (Layer 1.5B.5 — closed
+      the warning previously emitted by ``_load_via_visibility_shift``.)
+
+    - Otherwise: applies ``to_visibility_index`` (shift index by
+      ``release_lag_days``), truncates at ``as_of``, then shifts back so
+      the series is again indexed by observation_date.
     """
 
     def load(self, indicator_id: str, as_of: pd.Timestamp) -> IndicatorBundle:
@@ -197,7 +213,43 @@ class PitSeriesReader:
         if indicator_id in VINTAGE_REQUIRED_SERIES:
             return self._load_via_vintage_panel(indicator_id, as_of_ts, load_panel, get_pit_series)
 
+        if indicator_id in HLW_VINTAGE_INDICATORS:
+            return self._load_via_hlw_vintage(indicator_id, as_of_ts)
+
         return self._load_via_visibility_shift(indicator_id, as_of_ts)
+
+    def _load_via_hlw_vintage(
+        self, indicator_id: str, as_of: pd.Timestamp,
+    ) -> IndicatorBundle:
+        # Local import keeps the heavy openpyxl/pandas chain off the
+        # critical path for callers that never touch HLW.
+        from src.loaders.hlw_rstar_vintage import get_pit_rstar
+
+        column_name = HLW_VINTAGE_INDICATORS[indicator_id]
+        stem = _find_cache_stem(indicator_id)
+        _, latest_meta = _read_cached_series_and_meta(stem, indicator_id)
+
+        df = get_pit_rstar(asof_date=as_of, raise_on_no_vintage=True)
+        if column_name not in df.columns:
+            raise KeyError(
+                f"{indicator_id}: column {column_name!r} missing from HLW "
+                f"vintage panel; available: {list(df.columns)}"
+            )
+        s = df[column_name].dropna().rename(indicator_id)
+
+        meta = {
+            **latest_meta,
+            "pit_source": "hlw_vintage_panel",
+            "hlw_vintage": df.attrs.get("vintage"),
+            "hlw_vintage_publication_date": df.attrs.get("publication_date"),
+        }
+        return IndicatorBundle(
+            indicator_id=indicator_id,
+            data=s,
+            metadata=meta,
+            pit_safe=True,
+            as_of=as_of,
+        )
 
     def _load_via_vintage_panel(
         self,
