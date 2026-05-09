@@ -18,7 +18,11 @@ See ``LAYER_3_BUILD_SPEC.md`` §4 for the full spec.
 from __future__ import annotations
 
 from macro_pipeline.regime.dalio_cycle import DalioResult, classify_dalio
-from macro_pipeline.regime.exceptions import PitDataUnavailableError, RegimeClassifierError
+from macro_pipeline.regime.exceptions import (
+    PitDataUnavailableError,
+    RegimeClassifierError,
+    RegimeContextError,
+)
 from macro_pipeline.regime.hmm_states import (
     HMM_FEATURES,
     HMM_PICKLE_PATH,
@@ -58,6 +62,7 @@ __all__ = [
     "PitDataUnavailableError",
     "RegimeClassifierError",
     "RegimeContext",
+    "RegimeContextError",
     "TrainedHmm",
     "build_regime_context",
     "classify_dalio",

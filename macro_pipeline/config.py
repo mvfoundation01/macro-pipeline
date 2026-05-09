@@ -64,6 +64,20 @@ FRED_SERIES_API: dict[str, dict] = {
         "expected_min": -5.0, "expected_max": 5.0, "release_lag_days": 1,
         "description": "10-Year minus 2-Year Treasury yield spread",
     },
+    # Layer 3B: added retroactively for CRPS yield-curve component.
+    # T10Y3M is the canonical recession yield-curve signal in the
+    # Estrella/Mishkin tradition (NY Fed recession-probability model
+    # and Bauer-Mertens), preferred over T10Y2Y for the 12M leading
+    # signal. Daily, no vintage. FRED publishes BC_10YEAR − BC_3MONTH.
+    "T10Y3M": {
+        "freq": "D", "vintage": False, "unit": "pct",
+        "expected_min": -6.0, "expected_max": 6.0, "release_lag_days": 1,
+        "description": (
+            "10-Year minus 3-Month Treasury yield spread — canonical "
+            "recession yield-curve signal (NY Fed Estrella-Mishkin "
+            "model, Bauer-Mertens 2018)."
+        ),
+    },
     "DFII10": {
         "freq": "D", "vintage": False, "unit": "pct",
         "expected_min": -2.0, "expected_max": 6.0, "release_lag_days": 1,

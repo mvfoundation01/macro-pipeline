@@ -56,4 +56,12 @@ class RegimeClassifierError(Exception):
         return " ".join(parts)
 
 
-__all__ = ["PitDataUnavailableError", "RegimeClassifierError"]
+@dataclass
+class RegimeContextError(RegimeClassifierError):
+    """Raised when ``RegimeContext.derive_regime_state`` cannot resolve
+    a regime label because both NBER and HMM are unavailable (Layer 3B)."""
+
+    component: str = "regime_context"
+
+
+__all__ = ["PitDataUnavailableError", "RegimeClassifierError", "RegimeContextError"]

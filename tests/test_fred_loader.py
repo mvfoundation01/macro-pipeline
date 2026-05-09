@@ -147,3 +147,67 @@ def test_payems_vintage_pre_lehman():
     assert s.index.max() <= pd.Timestamp("2008-09-12")
     # The August 2008 print should be there (released early September 2008).
     assert s.dropna().shape[0] > 600, "expected long historical PAYEMS series"
+
+
+# ---------------------------------------------------------------------------
+# Layer 3B retroactive Layer 1 extensions
+# ---------------------------------------------------------------------------
+def test_t10y3m_loads_and_caches():
+    """T10Y3M was added to FRED_SERIES_API in Layer 3B (retroactive Layer 1
+    extension) for the CRPS yield-curve component. Verify it loads, the
+    universal pipeline produced a non-empty series, and the atomic-write
+    cache sidecar carries the expected metadata fields."""
+    import json
+
+    from macro_pipeline.config import DATA_CACHE
+    s, meta = load_fred_series("T10Y3M")
+    assert isinstance(s, pd.Series)
+    assert s.index.tz is None
+    assert not s.dropna().empty
+    assert meta.indicator_id == "T10Y3M"
+    assert meta.unit == "pct"
+    assert meta.frequency == "D"
+    assert meta.release_lag_days == 1
+    # FRED's T10Y3M starts 1982-01-04
+    assert meta.first_obs <= pd.Timestamp("1982-12-31")
+    # Sanity: spread should land in the daily yield-curve range
+    obs = s.dropna()
+    assert -6.0 <= obs.min() <= obs.max() <= 6.0
+
+    # Atomic-cache sidecar (Layer 1.5A.5)
+    parquet = DATA_CACHE / "fred_T10Y3M.parquet"
+    sidecar = DATA_CACHE / "fred_T10Y3M.meta.json"
+    assert parquet.exists()
+    assert sidecar.exists()
+    md = json.loads(sidecar.read_text())
+    assert md["indicator_id"] == "T10Y3M"
+    assert "data_sha256" in md and len(md["data_sha256"]) == 64
+    assert md["schema_version"] == "1.0"
+    assert md["row_count"] > 0
+    assert md["pipeline_processed"] is True
+
+
+def test_t10y3m_pit_safety():
+    """T10Y3M is non-vintage with release_lag_days=1, so PIT lookup at
+    as_of=t returns observations with index <= t-1d. Cross-check that
+    a recent as_of yields a sensible series and the latest-mode load
+    is strictly longer (or equal) than the PIT-truncated load."""
+    from macro_pipeline.access import PitDataContext, load_series
+    asof = pd.Timestamp("2008-09-12")
+    pit_bundle = load_series("T10Y3M", as_of=asof)
+    latest_bundle = load_series("T10Y3M")
+
+    pit_data = pit_bundle.data.dropna()
+    latest_data = latest_bundle.data.dropna()
+
+    assert pit_bundle.pit_safe is True
+    assert latest_bundle.pit_safe is False
+    # PIT view cannot include observations past as_of
+    assert pit_data.index.max() <= asof
+    # Latest view extends well past as_of (we have 2026 data)
+    assert latest_data.index.max() > asof
+    # PitDataContext path returns the same data
+    ctx = PitDataContext(as_of=asof)
+    ctx_bundle = ctx.load("T10Y3M")
+    assert ctx_bundle.pit_safe is True
+    assert ctx_bundle.data.dropna().index.max() <= asof
