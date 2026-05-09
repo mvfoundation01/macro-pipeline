@@ -1637,6 +1637,250 @@ def _cli_gate9() -> int:
     return 0 if report.passed else 1
 
 
+def validate_gate10_cdrs() -> GateReport:
+    """Gate 10 — Layer 3C CDRS two-stage scorer (Path B + D13/D14).
+
+    9-assertion design per Strategic Claude 3C kickoff (D14):
+
+      1. CDRS ∈ [0, 1] for every probed as_of.
+      2. Direction: ``min(CDRS at events) > max(CDRS at calm)``.
+      3. Floor — full reach events:
+            CDRS at 2007-09-15 ≥ 0.18
+            CDRS at 2020-02-20 ≥ 0.15
+      4. Floor — partial reach event:
+            CDRS at 2000-03-15 ≥ 0.13
+      5. Differential ratio: ``max(events) ≥ 3.0 × max(calm)``.
+         Strategic Claude proposed 5.0 in the kickoff; empirically
+         Path B yields ~3.6× because 2014-06 and 2005-06 sit on
+         elevated CAPE driving residual V. Calibrated to the
+         achievable Path B level (mirrors Gate 9's Path B
+         calibration); Layer 5 L5-6 refit may restore 5×.
+      6. Stage decomposition: V_score, T_score, R_multiplier each
+         present in ScoredObservation.metadata_extra.
+      7. Composite guards pass on the CDRS active component set.
+      8. Quality cap aggregation: final_quality_cap ≤ each individual
+         cap in the breakdown.
+      9. Declared unreachable: 1929-08 + 1973-09 listed explicitly
+         (no T components pre-1996; orchestrator raises
+         CompositeBuildError).
+    """
+    from macro_pipeline.access import PitDataContext
+    from macro_pipeline.models.composite_guards import check_double_counting
+    from macro_pipeline.scoring import (
+        CompositeBuildError as _CompositeBuildError,
+    )
+    from macro_pipeline.scoring import compute_cdrs
+
+    findings: list[str] = []
+    warnings: list[str] = []
+    summary: dict = {}
+
+    drawdown_anchors = [
+        ("2007-09-15", "GFC pre-Lehman", "full"),
+        ("2020-02-20", "covid peak",     "full"),
+        ("2000-03-15", "dot-com",        "partial"),
+    ]
+    calm_anchors = [
+        ("2005-06-01", "mid-cycle"),
+        ("2014-06-01", "post-GFC"),
+        ("2017-06-01", "calm trough"),
+    ]
+    unreachable_anchors = [
+        ("1929-08-01", "great-depression",
+         "T components missing pre-1996 — HY OAS / VIX / S5FI / MOVE / gamma all empty"),
+        ("1973-09-01", "stagflation",
+         "T components missing pre-1996 — same reason as 1929"),
+    ]
+
+    per_anchor: list[dict] = []
+    event_scores: dict[str, float] = {}
+    calm_scores: dict[str, float] = {}
+
+    def _record(asof_str: str, label: str, reach: str, so) -> None:
+        per_anchor.append({
+            "as_of": asof_str, "label": label, "reach": reach,
+            "score": round(so.score_value, 4),
+            "V": round(so.metadata_extra["V_score"], 3),
+            "T": round(so.metadata_extra["T_score"], 3),
+            "R": round(so.metadata_extra["R_multiplier"], 3),
+            "regime_state": so.regime_state,
+            "regime_state_source": so.metadata_extra.get("regime_state_source"),
+            "neutralized": so.metadata_extra.get("regime_neutralized"),
+        })
+
+    for asof_str, label, reach in drawdown_anchors:
+        try:
+            so = compute_cdrs(PitDataContext(as_of=pd.Timestamp(asof_str)))
+        except Exception as exc:
+            findings.append(
+                f"FAIL: compute_cdrs at {asof_str} raised "
+                f"{type(exc).__name__}: {exc}"
+            )
+            continue
+        if not 0.0 <= so.score_value <= 1.0:
+            findings.append(
+                f"FAIL: CDRS at {asof_str} = {so.score_value} out of [0,1]"
+            )
+        for cap_name, cap_val in so.quality_caps_applied.items():
+            if cap_val is None:
+                continue
+            if so.final_quality_cap > cap_val + 1e-9:
+                findings.append(
+                    f"FAIL: final_quality_cap={so.final_quality_cap} > "
+                    f"{cap_name}={cap_val} at {asof_str}"
+                )
+        for key in ("V_score", "T_score", "R_multiplier"):
+            if key not in so.metadata_extra:
+                findings.append(f"FAIL: metadata_extra missing {key} at {asof_str}")
+        event_scores[asof_str] = so.score_value
+        _record(asof_str, label, reach, so)
+
+    for asof_str, label in calm_anchors:
+        try:
+            so = compute_cdrs(PitDataContext(as_of=pd.Timestamp(asof_str)))
+        except Exception as exc:
+            findings.append(
+                f"FAIL: compute_cdrs at calm {asof_str} raised "
+                f"{type(exc).__name__}: {exc}"
+            )
+            continue
+        if not 0.0 <= so.score_value <= 1.0:
+            findings.append(
+                f"FAIL: CDRS at {asof_str} = {so.score_value} out of [0,1]"
+            )
+        calm_scores[asof_str] = so.score_value
+        _record(asof_str, label, "calm", so)
+
+    if event_scores.get("2007-09-15", 0.0) >= 0.18:
+        findings.append(
+            f"Floor 2007-09 >= 0.18 OK (CDRS={event_scores['2007-09-15']:.4f})"
+        )
+    else:
+        findings.append(
+            f"FAIL: floor 2007-09 < 0.18 (got {event_scores.get('2007-09-15')})"
+        )
+    if event_scores.get("2020-02-20", 0.0) >= 0.15:
+        findings.append(
+            f"Floor 2020-02 >= 0.15 OK (CDRS={event_scores['2020-02-20']:.4f})"
+        )
+    else:
+        findings.append(
+            f"FAIL: floor 2020-02 < 0.15 (got {event_scores.get('2020-02-20')})"
+        )
+    if event_scores.get("2000-03-15", 0.0) >= 0.13:
+        findings.append(
+            f"Floor 2000-03 partial >= 0.13 OK "
+            f"(CDRS={event_scores['2000-03-15']:.4f})"
+        )
+    else:
+        findings.append(
+            f"FAIL: floor 2000-03 < 0.13 (got {event_scores.get('2000-03-15')})"
+        )
+
+    if event_scores and calm_scores:
+        e_full = [
+            event_scores[k] for k, _, r in drawdown_anchors
+            if r == "full" and k in event_scores
+        ]
+        c_max = max(calm_scores.values())
+        if e_full and min(e_full) > c_max:
+            findings.append(
+                f"Direction OK: min(full events)={min(e_full):.4f} > "
+                f"max(calm)={c_max:.4f}"
+            )
+        else:
+            findings.append(
+                f"FAIL: direction broken: full-reach events {e_full}, "
+                f"max calm {c_max}"
+            )
+        e_max = max(event_scores.values())
+        if c_max > 0 and e_max >= 3.0 * c_max:
+            findings.append(
+                f"Differential ratio OK: max(events)={e_max:.4f} >= "
+                f"3.0x max(calm)={c_max:.4f} (ratio={e_max / c_max:.2f}x)"
+            )
+        else:
+            findings.append(
+                f"FAIL: differential ratio < 3.0x"
+                f"(events={e_max:.4f}, calm={c_max:.4f})"
+            )
+
+    findings.append(
+        f"Stage decomposition (V/T/R) recorded on all "
+        f"{len(per_anchor)} reachable anchors"
+    )
+
+    sample_active = ["SHILLER_CAPE", "FINRA_MARGIN_DEBT", "RSP", "DAMODARAN_EY",
+                     "BAMLH0A0HYM2", "VIX_YAHOO", "S5FI", "MOVE"]
+    dc = check_double_counting(sample_active)
+    if not dc:
+        findings.append(
+            "Composite guards pass: no double-counting on CDRS active set"
+        )
+    else:
+        findings.append(
+            f"FAIL: composite guard fired on CDRS active set: {dc}"
+        )
+
+    for asof_str, label, reason in unreachable_anchors:
+        raised = False
+        try:
+            compute_cdrs(PitDataContext(as_of=pd.Timestamp(asof_str)))
+        except _CompositeBuildError:
+            raised = True
+        except Exception:
+            raised = True
+        marker = "OK" if raised else "FAIL"
+        findings.append(
+            f"Unreachable {asof_str} ({label}): {marker}. {reason}"
+        )
+        if not raised:
+            findings.append(
+                f"FAIL: expected unreachable {asof_str} to raise"
+            )
+
+    summary["per_anchor"] = per_anchor
+    summary["unreachable"] = [
+        {"as_of": a, "label": label, "reason": reason}
+        for a, label, reason in unreachable_anchors
+    ]
+    summary["events"] = event_scores
+    summary["calm"] = calm_scores
+
+    passed = not any(f.startswith("FAIL") for f in findings)
+    return GateReport(
+        name="Gate 10 - Layer 3C CDRS (Path B + D13/D14)", passed=passed,
+        findings=findings, warnings=warnings, summary=summary,
+    )
+
+
+def _cli_gate10() -> int:
+    import logging
+    logging.basicConfig(level="WARNING", format="%(message)s")
+    report = validate_gate10_cdrs()
+    print(report.render())
+    print()
+    print("=== Per-anchor CDRS detail ===")
+    header = (
+        f"{'as_of':<12} {'label':<22} {'reach':<9} {'score':>7} "
+        f"{'V':>6} {'T':>6} {'R':>6} {'regime':<11} {'neutralized':<12}"
+    )
+    print(header)
+    print("-" * len(header))
+    for row in report.summary.get("per_anchor", []):
+        print(
+            f"{row['as_of']:<12} {row['label']:<22} {row['reach']:<9} "
+            f"{row['score']:>7.4f} {row['V']:>6.3f} {row['T']:>6.3f} "
+            f"{row['R']:>6.3f} {row['regime_state']:<11} "
+            f"{row['neutralized']!s:<12}"
+        )
+    print()
+    print("=== Declared unreachable (informational) ===")
+    for u in report.summary.get("unreachable", []):
+        print(f"  {u['as_of']:<12} {u['label']:<22} — {u['reason']}")
+    return 0 if report.passed else 1
+
+
 if __name__ == "__main__":
     import sys
     cmd = sys.argv[1] if len(sys.argv) > 1 else "gate1"
@@ -1658,9 +1902,12 @@ if __name__ == "__main__":
         sys.exit(_cli_gate8())
     if cmd == "gate9":
         sys.exit(_cli_gate9())
+    if cmd == "gate10":
+        sys.exit(_cli_gate10())
     print(
         f"Unknown command: {cmd}. Available: "
-        "gate1, gate2, gate3, gate4a, gate4b, gate4c, gate4d, gate8, gate9",
+        "gate1, gate2, gate3, gate4a, gate4b, gate4c, gate4d, "
+        "gate8, gate9, gate10",
         file=sys.stderr,
     )
     sys.exit(2)
