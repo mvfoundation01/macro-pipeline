@@ -20,6 +20,27 @@ log = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
+# Stage 1.0 - Point-in-time visibility shift (Layer 1.5A.1)
+# ---------------------------------------------------------------------------
+def to_visibility_index(s: pd.Series, release_lag_days: int) -> pd.Series:
+    """Shift index from observation_date to visibility_date.
+
+    Used for PIT-safe alignment in ``access.PitSeriesReader``: a row whose
+    underlying observation is dated 2008-08-01 but is published with a
+    7-day lag was not visible until 2008-08-08, so we shift its index by
+    ``release_lag_days`` before truncating at ``as_of``.
+
+    For non-vintage series only. Vintage series carry their own
+    ``realtime_start`` per row and bypass this helper.
+    """
+    if release_lag_days == 0:
+        return s
+    out = s.copy()
+    out.index = out.index + pd.Timedelta(days=release_lag_days)
+    return out
+
+
+# ---------------------------------------------------------------------------
 # Stage 1.1 - Ingestion validation
 # ---------------------------------------------------------------------------
 class IngestionError(Exception):
@@ -237,23 +258,39 @@ def cache_series_to_parquet(
     file_stem: str,
     column_name: str | None = None,
     metadata: dict | None = None,
+    pipeline_processed: bool = True,
 ) -> None:
-    """Persist a series + sidecar metadata.
+    """Persist a series + sidecar metadata atomically (Layer 1.5A.5).
 
     ``file_stem`` is the filename (no extension) used for path discrimination
     across loaders, e.g. ``"fred_PAYEMS"`` or ``"tv_VIX"``.
     ``column_name`` is what the column is named *inside* the parquet — keep
     this as the bare indicator_id (no loader prefix) so Layer 3 derived
     series can join cleanly across sources.
+
+    Routes through ``cache.write_cache_atomic`` so the parquet is written
+    to a tmp file first, fsynced, then atomically renamed; the metadata is
+    enriched with ``data_sha256`` / ``schema_version`` / ``row_count`` /
+    ``cache_written_at`` and ``pipeline_processed`` so that
+    ``read_cache_validated`` can detect crash-corrupted or schema-stale
+    caches and ``run_universal_pipeline`` can short-circuit on cache hits
+    (Layer 1.5A.6).
     """
-    cache_dir.mkdir(parents=True, exist_ok=True)
     column_name = column_name or file_stem
     df = s.to_frame(column_name)
-    if metadata:
-        import json
-        sidecar = cache_dir / f"{file_stem}.meta.json"
-        sidecar.write_text(json.dumps(metadata, default=str, indent=2))
-    df.to_parquet(cache_dir / f"{file_stem}.parquet")
+
+    # Local import avoids a circular dependency: src.cache imports nothing
+    # else from src.preprocessing, but importing it at module load could
+    # invert the order during test collection.
+    from src.cache import write_cache_atomic
+
+    write_cache_atomic(
+        file_stem,
+        df,
+        metadata or {},
+        cache_dir,
+        pipeline_processed=pipeline_processed,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -278,13 +315,41 @@ def run_universal_pipeline(
     expected_max: float | None = None,
     align_to_master: bool = True,
     enforce_unit: bool = True,
+    fail_on_unit_error: bool = True,
     master_end: pd.Timestamp | None = None,
+    _processed: bool = False,
 ) -> PreprocessResult:
     """Stages 1.1 -> 1.6 wired together. Caller decides whether to persist.
 
     ``master_end`` caps the post-alignment master index (set this to the
     vintage date for PIT queries to prevent forward-padding into the future).
+
+    ``fail_on_unit_error`` (Layer 1.5A.3, Codex review HIGH #3): when True
+    (production default), an out-of-range unit assertion re-raises
+    ``UnitError`` so the pipeline cannot silently emit data with the wrong
+    units. Set to False only for inspection workflows where you want a
+    warning instead of an abort.
+
+    ``_processed`` (Layer 1.5A.6, Codex review #5): when True the series is
+    treated as already-pipeline-processed (e.g. read from a cache marked
+    ``pipeline_processed=true``) and stages 1.1-1.6 are skipped. The caller
+    still gets back a ``PreprocessResult`` so call sites stay uniform.
     """
+    if _processed:
+        log.debug("%s: cache hit, skip pipeline (already processed)", indicator_id)
+        s = raw.copy()
+        s.name = indicator_id
+        non_na = s.dropna()
+        first = non_na.index.min() if not non_na.empty else pd.NaT
+        last = non_na.index.max() if not non_na.empty else pd.NaT
+        return PreprocessResult(
+            series=s,
+            outlier_flags=pd.Series(False, index=s.index),
+            n_outliers=0,
+            raw_first_obs=first,
+            raw_last_obs=last,
+        )
+
     s = raw.copy()
     s.name = indicator_id
 
@@ -307,6 +372,8 @@ def run_universal_pipeline(
         try:
             assert_unit(s, unit, indicator_id)
         except UnitError as exc:
+            if fail_on_unit_error:
+                raise
             log.warning("%s", exc)
 
     return PreprocessResult(

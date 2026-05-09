@@ -135,10 +135,16 @@ def load_fred_series(
         and _is_cache_fresh(parquet, spec["freq"])
     )
 
+    cache_already_processed = False
     if use_cache:
         log.debug("FRED %s: cache hit (%s)", series_id, parquet.name)
-        raw_series, _meta = _read_cache(series_id)
+        raw_series, cached_meta = _read_cache(series_id)
+        cache_already_processed = bool(cached_meta.get("pipeline_processed", False))
     elif vintage_date is not None and spec.get("vintage", False):
+        # Codex review HIGH #4: groupby("date").last() must be made
+        # deterministic by sorting by (date, realtime_start) first so the
+        # last vintage row known on or before vintage_date wins
+        # reproducibly across pandas / fredapi versions.
         vintage_ts = pd.Timestamp(vintage_date)
         df = _fetch_vintage(fred, series_id)
         df = df[df["realtime_start"] <= vintage_ts]
@@ -146,6 +152,7 @@ def load_fred_series(
             raise ValueError(
                 f"{series_id}: no observations were known on or before {vintage_ts.date()}"
             )
+        df = df.sort_values(["date", "realtime_start"], kind="mergesort")
         raw_series = df.groupby("date").last()["value"].sort_index()
         raw_series.name = series_id
     else:
@@ -162,6 +169,7 @@ def load_fred_series(
             expected_min=spec.get("expected_min"),
             expected_max=spec.get("expected_max"),
             master_end=master_end,
+            _processed=cache_already_processed,
         )
         series = result.series
         first_obs, last_obs = result.raw_first_obs, result.raw_last_obs
