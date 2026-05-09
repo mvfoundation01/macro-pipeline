@@ -1248,6 +1248,200 @@ def _cli_gate4c() -> int:
     return 0 if report.passed else 1
 
 
+def validate_gate8_regime() -> GateReport:
+    """Gate 8 — Layer 3A regime classifier (NBER + Kindleberger + Dalio + HMM).
+
+    Per ``LAYER_3_BUILD_SPEC.md`` §4.5 we assert that:
+      1. ``RegimeContext`` can be produced for 8 anchor as_of dates.
+      2. NBER state matches ground truth at 8/8 of those dates (using
+         latest-knowledge mode for ground-truth assertions, since older
+         dates outrun the 180-day visibility lag of NBER_REC_LABEL).
+      3. Kindleberger phase ∈ valid phase set.
+      4. Dalio phase ∈ valid phase set (may legitimately be
+         ``indeterminate`` for pre-2011 as_of, since FRED ALFRED + HLW
+         vintage panels are insufficient).
+      5. When HMM data is available (as_of >= 1982-01), state
+         probabilities sum to 1.0 ± 0.001 and state ∈ {expansion,
+         late-cycle, recession}.
+      6. NBER labels are not ffilled past ``last_known_label_date`` —
+         enforced by ``extract_nber_state`` raising at the boundary.
+    """
+    from macro_pipeline.access import PitDataContext
+    from macro_pipeline.regime import (
+        HMM_TRAINING_START,
+        build_regime_context,
+        extract_nber_state,
+        last_known_label_date,
+    )
+    from macro_pipeline.regime.dalio_cycle import PHASES as DALIO_PHASES
+    from macro_pipeline.regime.kindleberger import PHASES as KIND_PHASES
+    from macro_pipeline.regime.nber_extract import NBER_PRIMARY_INDICATOR
+
+    findings: list[str] = []
+    warnings: list[str] = []
+    summary: dict = {}
+
+    # NBER convention: the published peak month is the LAST expansion
+    # month (e.g. Jan 1980 peak → recession label starts Feb 1980).
+    # We anchor a few months past each declared peak so the recession
+    # label is unambiguous regardless of intra-month timing.
+    anchors: list[tuple[str, str]] = [
+        ("1960-01-01", "expansion"),  # mid-cycle, well before 1960-04 peak
+        ("1974-06-01", "recession"),  # deeply inside 1973-11 → 1975-03
+        ("1980-04-01", "recession"),  # 1980-01 peak → 1980-07 trough
+        ("1990-09-01", "recession"),  # 1990-07 peak → 1991-03 trough
+        ("2001-04-01", "recession"),  # 2001-03 peak → 2001-11 trough
+        ("2008-09-01", "recession"),  # 2007-12 peak → 2009-06 trough
+        ("2020-04-01", "recession"),  # 2020-02 peak → 2020-04 trough
+        ("2025-06-01", "expansion"),
+    ]
+    nber_correct = 0
+    rc_built = 0
+    hmm_evaluated = 0
+    per_anchor: list[dict] = []
+
+    for asof_str, expected in anchors:
+        asof = pd.Timestamp(asof_str)
+        ctx = PitDataContext(as_of=asof)
+
+        # 1. Ground-truth NBER (latest knowledge)
+        try:
+            gt = extract_nber_state(asof)
+        except Exception as exc:
+            findings.append(
+                f"FAIL: ground-truth NBER lookup at {asof_str} raised "
+                f"{type(exc).__name__}: {exc}"
+            )
+            continue
+        if gt.state == expected:
+            nber_correct += 1
+        else:
+            findings.append(
+                f"FAIL: NBER ground truth mismatch at {asof_str}: "
+                f"got {gt.state}, expected {expected}"
+            )
+
+        # 2. RegimeContext production. HMM features start 1982-01;
+        # before that we ask the aggregator to skip HMM rather than
+        # raise.
+        skip_hmm = asof < HMM_TRAINING_START
+        try:
+            rc = build_regime_context(ctx, skip_hmm=skip_hmm)
+        except Exception as exc:
+            findings.append(
+                f"FAIL: build_regime_context at {asof_str} raised "
+                f"{type(exc).__name__}: {exc}"
+            )
+            continue
+        rc_built += 1
+
+        if rc.kindleberger.phase not in KIND_PHASES:
+            findings.append(
+                f"FAIL: Kindleberger phase {rc.kindleberger.phase!r} "
+                f"at {asof_str} not in valid set"
+            )
+        if rc.dalio.phase not in DALIO_PHASES:
+            findings.append(
+                f"FAIL: Dalio phase {rc.dalio.phase!r} at {asof_str} "
+                "not in valid set"
+            )
+        hmm_state = "skipped"
+        hmm_top_prob = float("nan")
+        if rc.hmm is not None:
+            hmm_evaluated += 1
+            psum = sum(rc.hmm.state_probabilities.values())
+            if abs(psum - 1.0) > 1e-3:
+                findings.append(
+                    f"FAIL: HMM probabilities sum to {psum:.4f} "
+                    f"(expected 1.0 ± 0.001) at {asof_str}"
+                )
+            if rc.hmm.state not in {"expansion", "late-cycle", "recession"}:
+                findings.append(
+                    f"FAIL: HMM state {rc.hmm.state!r} at {asof_str} "
+                    "not in valid label set"
+                )
+            hmm_state = rc.hmm.state
+            hmm_top_prob = max(rc.hmm.state_probabilities.values())
+
+        per_anchor.append({
+            "as_of": asof_str,
+            "expected_nber": expected,
+            "ground_truth_nber": gt.state,
+            "kindleberger": rc.kindleberger.phase,
+            "dalio": rc.dalio.phase,
+            "hmm_state": hmm_state,
+            "hmm_top_prob": round(hmm_top_prob, 4) if hmm_top_prob == hmm_top_prob else "n/a",
+        })
+
+    # 3. PIT no-ffill check: at as_of=2008-12-01, asking about 2008-09
+    #    must raise PitDataUnavailableError.
+    from macro_pipeline.regime.exceptions import PitDataUnavailableError
+    boundary_ctx = PitDataContext(as_of=pd.Timestamp("2008-12-01"))
+    boundary_visible = last_known_label_date(ctx=boundary_ctx)
+    raised = False
+    try:
+        extract_nber_state(pd.Timestamp("2008-09-01"), ctx=boundary_ctx)
+    except PitDataUnavailableError:
+        raised = True
+    if raised and boundary_visible <= pd.Timestamp("2008-06-30"):
+        findings.append(
+            "PIT no-ffill enforced: at as_of=2008-12-01, lookup of 2008-09 "
+            f"raises (last_known_label_date={boundary_visible.date()})"
+        )
+    else:
+        findings.append(
+            "FAIL: PIT no-ffill not enforced — "
+            f"raised={raised}, last_known_label_date={boundary_visible.date()}"
+        )
+
+    findings.append(
+        f"NBER ground truth: {nber_correct}/{len(anchors)} anchors correct"
+    )
+    findings.append(
+        f"RegimeContext built for {rc_built}/{len(anchors)} anchors"
+    )
+    findings.append(
+        f"HMM evaluated at {hmm_evaluated}/{len(anchors)} anchors "
+        "(skipped before 1982-01)"
+    )
+
+    summary["nber_correct"] = nber_correct
+    summary["nber_total"] = len(anchors)
+    summary["regime_contexts_built"] = rc_built
+    summary["hmm_evaluations"] = hmm_evaluated
+    summary["nber_indicator"] = NBER_PRIMARY_INDICATOR
+    summary["per_anchor"] = per_anchor
+
+    passed = not any(f.startswith("FAIL") for f in findings)
+    return GateReport(
+        name="Gate 8 - Layer 3A Regime Classifier",
+        passed=passed, findings=findings, warnings=warnings, summary=summary,
+    )
+
+
+def _cli_gate8() -> int:
+    import logging
+    logging.basicConfig(level="WARNING", format="%(message)s")
+    report = validate_gate8_regime()
+    print(report.render())
+    print()
+    print("=== Per-anchor regime detail ===")
+    header = (
+        f"{'as_of':<12} {'expected_nber':<14} {'gt_nber':<12} "
+        f"{'kindleberger':<14} {'dalio':<14} {'hmm':<14} {'hmm_p':>8}"
+    )
+    print(header)
+    print("-" * len(header))
+    for row in report.summary.get("per_anchor", []):
+        print(
+            f"{row['as_of']:<12} {row['expected_nber']:<14} "
+            f"{row['ground_truth_nber']:<12} {row['kindleberger']:<14} "
+            f"{row['dalio']:<14} {row['hmm_state']:<14} "
+            f"{row['hmm_top_prob']!s:>8}"
+        )
+    return 0 if report.passed else 1
+
+
 if __name__ == "__main__":
     import sys
     cmd = sys.argv[1] if len(sys.argv) > 1 else "gate1"
@@ -1265,8 +1459,13 @@ if __name__ == "__main__":
         sys.exit(_cli_gate4c())
     if cmd == "gate4d":
         sys.exit(_cli_gate4d())
-    print(f"Unknown command: {cmd}. Available: gate1, gate2, gate3, gate4a, gate4b, gate4c, gate4d",
-          file=sys.stderr)
+    if cmd == "gate8":
+        sys.exit(_cli_gate8())
+    print(
+        f"Unknown command: {cmd}. Available: "
+        "gate1, gate2, gate3, gate4a, gate4b, gate4c, gate4d, gate8",
+        file=sys.stderr,
+    )
     sys.exit(2)
 
 
