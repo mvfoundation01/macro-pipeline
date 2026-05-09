@@ -19,10 +19,10 @@ if not os.environ.get("FRED_API_KEY"):
         allow_module_level=True,
     )
 
-from src.loaders.aaii import load_aaii
-from src.loaders.atlanta_wage import load_atlanta_wage
-from src.loaders.cftc_tff_treasury import load_cftc_tff_treasury
-from src.validation import validate_gate4c
+from macro_pipeline.loaders.aaii import load_aaii
+from macro_pipeline.loaders.atlanta_wage import load_atlanta_wage
+from macro_pipeline.loaders.cftc_tff_treasury import load_cftc_tff_treasury
+from macro_pipeline.validation import validate_gate4c
 
 
 # ---------------------------------------------------------------------------
@@ -49,7 +49,7 @@ def test_aaii_bullish_in_pct_scale():
     """Source stores 0-1 share; loader multiplies by 100 for pct convention."""
     series, meta = load_aaii()
     s = series["AAII_BULLISH"].dropna()
-    assert 0 <= s.min() and s.max() <= 100
+    assert s.min() >= 0 and s.max() <= 100
     # If we forgot to multiply by 100, max would be < 1.
     assert s.max() > 5, "AAII_BULLISH appears not to have been rescaled to pct"
     assert meta["AAII_BULLISH"].unit == "pct"
@@ -76,13 +76,13 @@ def test_aaii_bull_bear_spread_signed():
     s = series["AAII_BULL_BEAR_SPREAD"].dropna()
     assert s.min() < 0
     assert s.max() > 0
-    assert -65 <= s.min() and s.max() <= 70
+    assert s.min() >= -65 and s.max() <= 70
 
 
 def test_aaii_8wma_in_range():
     series, _ = load_aaii()
     s = series["AAII_BULL_8WMA"].dropna()
-    assert 10 <= s.min() and s.max() <= 70
+    assert s.min() >= 10 and s.max() <= 70
 
 
 def test_aaii_metadata_storage_convention():
@@ -192,7 +192,7 @@ def test_cftc_tr_conviction_score_documented():
 # Cache + Gate 4C
 # ---------------------------------------------------------------------------
 def test_phase4c_cache_files_use_official_prefix():
-    from src.config import DATA_CACHE
+    from macro_pipeline.config import DATA_CACHE
     load_aaii()
     load_atlanta_wage()
     load_cftc_tff_treasury()
@@ -219,7 +219,7 @@ def test_gate4c_passes():
 # Item B: regression-config constants
 # ---------------------------------------------------------------------------
 def test_regression_config_constants():
-    from src.models.regression_config import (
+    from macro_pipeline.models.regression_config import (
         CROSS_VALIDATION_TARGET,
         FORWARD_HORIZONS_MONTHS,
         PRIMARY_REGRESSION_TARGET,
@@ -233,7 +233,7 @@ def test_regression_config_constants():
     assert FORWARD_HORIZONS_MONTHS == (12, 36, 60, 120)
     assert "forward_return_calc" in REGRESSION_TARGET_USE_FOR_TAGS
     # is_primary_regression_target works with metadata + dict + bare string-id
-    from src.loaders.shiller import load_shiller
+    from macro_pipeline.loaders.shiller import load_shiller
     _, meta = load_shiller()
     assert is_primary_regression_target(meta["SHILLER_TR_PRICE"]) is True
     assert is_primary_regression_target(meta["SHILLER_PRICE"]) is False

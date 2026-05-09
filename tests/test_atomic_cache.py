@@ -7,7 +7,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from src.cache import (
+from macro_pipeline.cache import (
     SCHEMA_VERSION,
     atomic_write_bytes,
     atomic_write_parquet,

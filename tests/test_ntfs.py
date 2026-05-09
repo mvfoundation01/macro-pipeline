@@ -4,9 +4,8 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from src.loaders.ntfs import (
+from macro_pipeline.loaders.ntfs import (
     GSW_LOCAL_PATH,
-    compute_forward_3m_18m_ahead,
     load_gsw_params,
     load_ntfs_daily_dashboard,
     load_ntfs_official_replication,

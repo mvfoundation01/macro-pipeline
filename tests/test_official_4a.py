@@ -19,11 +19,11 @@ if not os.environ.get("FRED_API_KEY"):
         allow_module_level=True,
     )
 
-from src.loaders.damodaran_erp import load_damodaran_erp
-from src.loaders.finra_margin import load_finra_margin
-from src.loaders.naaim import load_naaim
-from src.loaders.nyfed_recprob import load_nyfed_recprob
-from src.validation import validate_gate4a
+from macro_pipeline.loaders.damodaran_erp import load_damodaran_erp
+from macro_pipeline.loaders.finra_margin import load_finra_margin
+from macro_pipeline.loaders.naaim import load_naaim
+from macro_pipeline.loaders.nyfed_recprob import load_nyfed_recprob
+from macro_pipeline.validation import validate_gate4a
 
 
 # ---------------------------------------------------------------------------
@@ -193,7 +193,7 @@ def test_damodaran_history_starts_at_first_business_day_after_source():
 # ---------------------------------------------------------------------------
 def test_cache_files_use_official_prefix():
     """Each Phase 4A series caches as data/cache/official_<id>.parquet."""
-    from src.config import DATA_CACHE
+    from macro_pipeline.config import DATA_CACHE
     load_naaim()
     load_finra_margin()
     load_nyfed_recprob()
@@ -210,7 +210,7 @@ def test_cache_files_use_official_prefix():
 
 def test_cached_parquet_columns_are_bare_indicator_ids():
     """File names carry the official_ prefix; parquet columns are bare ids."""
-    from src.config import DATA_CACHE
+    from macro_pipeline.config import DATA_CACHE
     load_naaim()
     df = pd.read_parquet(DATA_CACHE / "official_NAAIM_NUMBER.parquet")
     assert df.columns.tolist() == ["NAAIM_NUMBER"]

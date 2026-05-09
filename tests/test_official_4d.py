@@ -15,13 +15,11 @@ if not os.environ.get("FRED_API_KEY"):
         allow_module_level=True,
     )
 
-from src.loaders.hlw_rstar import load_hlw_rstar
-from src.loaders.hlw_rstar_vintage import (
+from macro_pipeline.loaders.hlw_rstar import load_hlw_rstar
+from macro_pipeline.loaders.hlw_rstar_vintage import (
     COLUMN_LAYOUTS,
-    INDICATOR_GAP,
     INDICATOR_IDS,
     INDICATOR_RSTAR,
-    INDICATOR_TREND,
     build_cache,
     discover_vintages,
     get_pit_rstar,
@@ -60,7 +58,7 @@ def test_vintage_quarter_end():
 def test_known_layouts_cover_all_three_widths():
     """Vintage file ships THREE distinct schemas: 17, 21, 26 columns."""
     assert set(COLUMN_LAYOUTS.keys()) == {17, 21, 26}
-    for ncols, layout in COLUMN_LAYOUTS.items():
+    for _ncols, layout in COLUMN_LAYOUTS.items():
         assert set(layout.keys()) == set(INDICATOR_IDS)
 
 
@@ -224,7 +222,7 @@ def test_cache_metadata_records_all_publication_dates():
 
 
 def test_cache_file_exists():
-    from src.config import DATA_CACHE
+    from macro_pipeline.config import DATA_CACHE
     parquet = DATA_CACHE / "official_HLW_VINTAGE.parquet"
     sidecar = DATA_CACHE / "official_HLW_VINTAGE.meta.json"
     build_cache(force_refresh=False)
@@ -233,7 +231,7 @@ def test_cache_file_exists():
 
 
 def test_gate4d_passes():
-    from src.validation import validate_gate4d
+    from macro_pipeline.validation import validate_gate4d
     df, meta = build_cache(force_refresh=False)
     report = validate_gate4d(df, meta)
     assert report.passed, "Gate 4D must pass:\n" + report.render()
@@ -243,7 +241,7 @@ def test_gate4d_passes():
 # Item A: scoring-config constants
 # ---------------------------------------------------------------------------
 def test_scoring_config_positioning_zscore_list():
-    from src.models.scoring_config import (
+    from macro_pipeline.models.scoring_config import (
         CDRS_ALERT_THRESHOLDS,
         CRPS_ALERT_THRESHOLDS,
         POSITIONING_INDICATORS_REQUIRING_ZSCORE,

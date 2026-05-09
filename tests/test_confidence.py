@@ -5,7 +5,7 @@ import math
 
 import pytest
 
-from src.models.confidence import (
+from macro_pipeline.models.confidence import (
     CONFIDENCE_CAPS,
     N_TARGET_RECESSION_EVENTS,
     N_TARGET_REGRESSION_LONG_HORIZON,

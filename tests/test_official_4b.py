@@ -20,17 +20,17 @@ if not os.environ.get("FRED_API_KEY"):
         allow_module_level=True,
     )
 
-from src.loaders.acm_termpremium import load_acm_termpremium
-from src.loaders.fernald_tfp import load_fernald_tfp
-from src.loaders.hlw_rstar import load_hlw_rstar
-from src.loaders.imf_cofer import (
+from macro_pipeline.loaders.acm_termpremium import load_acm_termpremium
+from macro_pipeline.loaders.fernald_tfp import load_fernald_tfp
+from macro_pipeline.loaders.hlw_rstar import load_hlw_rstar
+from macro_pipeline.loaders.imf_cofer import (
     QUARTER_COL_RE,
     SERIES_CODE_RE,
     _quarter_label_to_ts,
     load_imf_cofer,
 )
-from src.loaders.shiller import _shiller_decimal_to_ts, load_shiller
-from src.validation import cross_validate_tr_sources, validate_gate4b
+from macro_pipeline.loaders.shiller import _shiller_decimal_to_ts, load_shiller
+from macro_pipeline.validation import cross_validate_tr_sources, validate_gate4b
 
 
 # ---------------------------------------------------------------------------
@@ -222,7 +222,7 @@ def test_imf_cny_starts_after_2016():
 # Cache + Gate 4B
 # ---------------------------------------------------------------------------
 def test_phase4b_cache_files_use_official_prefix():
-    from src.config import DATA_CACHE
+    from macro_pipeline.config import DATA_CACHE
     load_shiller()
     load_acm_termpremium()
     load_fernald_tfp()
@@ -255,7 +255,7 @@ def test_gate4b_passes():
 def test_cross_validation_yahoo_sp500tr_vs_shiller_tr():
     """Yahoo (nominal) and Shiller (real) TR series should track each other
     on annual growth, modulo CPI inflation gap (~2-3% per year)."""
-    from src.loaders.yahoo_loader import load_yahoo_series
+    from macro_pipeline.loaders.yahoo_loader import load_yahoo_series
 
     sh_series, _ = load_shiller()
     yh, _ = load_yahoo_series("SP500TR")

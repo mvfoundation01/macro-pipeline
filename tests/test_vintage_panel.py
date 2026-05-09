@@ -10,7 +10,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from src.loaders.fred_vintage_panel import (
+from macro_pipeline.loaders.fred_vintage_panel import (
     VINTAGE_PANEL_DIR,
     VINTAGE_REQUIRED_SERIES,
     get_pit_series,
@@ -51,7 +51,7 @@ def test_panel_is_sorted(payems_panel):
 def test_realtime_end_is_next_realtime_start_within_obs_date(payems_panel):
     """For each obs_date, all but the last vintage must have realtime_end
     set, and that value must equal the next vintage's realtime_start."""
-    for obs_date, rows in payems_panel.groupby("obs_date"):
+    for _obs_date, rows in payems_panel.groupby("obs_date"):
         if len(rows) <= 1:
             assert rows.iloc[0]["realtime_end"] is pd.NaT or pd.isna(
                 rows.iloc[0]["realtime_end"]

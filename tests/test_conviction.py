@@ -5,7 +5,7 @@ import math
 
 import pytest
 
-from src.models.conviction import (
+from macro_pipeline.models.conviction import (
     ConvictionProfile,
     compute_operational_reliability,
     compute_portfolio_actionability,

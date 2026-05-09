@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.models.signal_probability import (
+from macro_pipeline.models.signal_probability import (
     PriorStrength,
     SignalProbabilityProfile,
     beta_prior_params,

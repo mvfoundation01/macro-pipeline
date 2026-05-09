@@ -5,9 +5,9 @@ import logging
 
 import pytest
 
-from src.config import FRED_SERIES_API
-from src.loaders.fred_loader import load_fred_series
-from src.models.composite_guards import GuardViolation, check_double_counting
+from macro_pipeline.config import FRED_SERIES_API
+from macro_pipeline.loaders.fred_loader import load_fred_series
+from macro_pipeline.models.composite_guards import check_double_counting
 
 
 # ---------------------------------------------------------------------------
@@ -67,7 +67,7 @@ def test_double_counting_can_raise_on_violation():
 
 
 def test_double_counting_log_at_warning_level(caplog):
-    with caplog.at_level(logging.WARNING, logger="src.models.composite_guards"):
+    with caplog.at_level(logging.WARNING, logger="macro_pipeline.models.composite_guards"):
         check_double_counting(["PHILLY_LEI_PROXY", "T10Y3M"])
     assert any(
         "double_counting" in rec.message and "PHILLY_LEI_PROXY" in rec.message

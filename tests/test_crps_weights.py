@@ -5,7 +5,7 @@ import pandas as pd
 import pytest
 from scipy import stats
 
-from src.models.crps_weights import (
+from macro_pipeline.models.crps_weights import (
     EXPERT_COEFFICIENT_PRIORS,
     GaussianPrior,
     WeightEstimationResult,

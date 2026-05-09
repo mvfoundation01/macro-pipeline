@@ -4,14 +4,14 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from src.unit_conversion import (
+from macro_pipeline.preprocessing import UnitError
+from macro_pipeline.unit_conversion import (
     UnitsError,
     assert_same_unit,
     to_b_usd,
     to_m_usd,
     to_pct,
 )
-from src.preprocessing import UnitError
 
 
 # ---------------------------------------------------------------------------

@@ -4,7 +4,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from src.loaders.ebp import EBP_LOCAL_PATH, load_ebp
+from macro_pipeline.loaders.ebp import EBP_LOCAL_PATH, load_ebp
 
 
 def _ebp_available() -> bool:

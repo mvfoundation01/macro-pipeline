@@ -38,7 +38,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src"]
+packages = ["macro_pipeline"]
 
 [dependency-groups]
 dev = [
@@ -52,8 +52,30 @@ line-length = 100
 target-version = "py312"
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "N", "UP", "B"]
-ignore = ["E501"]
+select = ["E", "F", "W", "I", "N", "UP", "B", "SIM", "RUF"]
+# E501  formatter handles the line length, no need to fail-on-it.
+# RUF002/RUF003  intentional em-dashes / quotes in prose; not a bug.
+# RUF046 cosmetic (already suggests int(...)); minor.
+# RUF059 unused unpacked variable; tolerated where the variable name is
+#         documentation (e.g. ``_, meta = load_yahoo_series(...)``).
+ignore = ["E501", "RUF002", "RUF003", "RUF046", "RUF059"]
+
+[tool.ruff.lint.per-file-ignores]
+# Loaders that import lazily inside functions to dodge circular imports
+# (src.exceptions / src.cache <-> src.preprocessing / loader). The late
+# imports are intentional, not a style mistake.
+"macro_pipeline/loaders/*.py" = ["E402"]
+"macro_pipeline/access.py" = ["E402"]
+"macro_pipeline/preprocessing.py" = ["E402"]
+# signal_probability uses TP / FP / FN / TN / LR / P / N; conviction uses
+# weights tuple unpacking — both are math notation, not style bugs.
+"macro_pipeline/models/signal_probability.py" = ["N806", "N802", "N803", "N815"]
+"macro_pipeline/models/conviction.py" = ["N806"]
+# Tests routinely do top-of-test imports after pytest fixtures and
+# conditional imports; allow E402 there as well. test_signal_probability
+# uses S2/S4 in test names to mirror the PriorStrength enum aliases.
+"tests/*.py" = ["E402"]
+"tests/test_signal_probability.py" = ["E402", "N802", "N806"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

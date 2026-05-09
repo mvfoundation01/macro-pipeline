@@ -3,9 +3,9 @@ from __future__ import annotations
 
 import pytest
 
-from src.config import FRED_SERIES_API
-from src.loaders.fred_loader import load_fred_series
-from src.models.composite_guards import check_signal_type_compatibility
+from macro_pipeline.config import FRED_SERIES_API
+from macro_pipeline.loaders.fred_loader import load_fred_series
+from macro_pipeline.models.composite_guards import check_signal_type_compatibility
 
 
 # ---------------------------------------------------------------------------

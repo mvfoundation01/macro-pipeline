@@ -18,28 +18,27 @@ if not os.environ.get("FRED_API_KEY"):
     # config.py raises at import time without the key; skip the whole module.
     pytest.skip("FRED_API_KEY not set", allow_module_level=True)
 
-from src.config import FRED_SERIES_API
-from src.loaders.fred_loader import load_fred_all, load_fred_series
-from src.preprocessing import (
-    UnitError,
+from macro_pipeline.config import FRED_SERIES_API
+from macro_pipeline.loaders.fred_loader import load_fred_all, load_fred_series
+from macro_pipeline.preprocessing import (
     align_to_business_days,
     flag_outliers_iqr,
     validate_ingest,
 )
-from src.validation import validate_gate1_fred
+from macro_pipeline.validation import validate_gate1_fred
 
 
 # ---------------------------------------------------------------------------
 # Universal preprocessing primitives
 # ---------------------------------------------------------------------------
 def test_validate_ingest_rejects_empty():
-    from src.preprocessing import IngestionError
+    from macro_pipeline.preprocessing import IngestionError
     with pytest.raises(IngestionError):
         validate_ingest(pd.Series(dtype=float), "TEST")
 
 
 def test_validate_ingest_rejects_all_nan():
-    from src.preprocessing import IngestionError
+    from macro_pipeline.preprocessing import IngestionError
     s = pd.Series([float("nan")] * 5,
                   index=pd.date_range("2020-01-01", periods=5, freq="D"))
     with pytest.raises(IngestionError):
@@ -112,7 +111,7 @@ def test_each_series_within_unit_range(series_id):
     obs = s.dropna()
     if obs.empty:
         pytest.fail(f"{series_id}: no observations")
-    from src.config import UNIT_EXPECTED_RANGES
+    from macro_pipeline.config import UNIT_EXPECTED_RANGES
     lo, hi = UNIT_EXPECTED_RANGES[meta.unit]
     assert lo <= obs.min() <= obs.max() <= hi, (
         f"{series_id} range [{obs.min()}, {obs.max()}] "

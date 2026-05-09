@@ -9,7 +9,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from src.preprocessing import (
+from macro_pipeline.preprocessing import (
     UnitError,
     run_universal_pipeline,
     to_visibility_index,
@@ -70,7 +70,7 @@ def test_processed_short_circuit_emits_debug_log(caplog):
     """The 'cache hit, skip pipeline' log line is required by the
     proof-of-no-reprocess test in NEXT_STEPS."""
     s = pd.Series([1.0, 2.0], index=pd.date_range("2024-01-01", periods=2))
-    with caplog.at_level("DEBUG", logger="src.preprocessing"):
+    with caplog.at_level("DEBUG", logger="macro_pipeline.preprocessing"):
         run_universal_pipeline(
             s, indicator_id="ANY", unit="pct", native_freq="D",
             _processed=True,

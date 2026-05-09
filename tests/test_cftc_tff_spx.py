@@ -15,7 +15,7 @@ if not os.environ.get("FRED_API_KEY"):
         allow_module_level=True,
     )
 
-from src.loaders.cftc_tff_spx import (
+from macro_pipeline.loaders.cftc_tff_spx import (
     CFTC_FIELD_MAP,
     NET_CATEGORIES,
     load_cftc_tff_spx,
@@ -112,6 +112,6 @@ def test_cftc_metadata_tier_is_2c(cftc_payload):
 
 
 def test_cftc_cache_file_exists_after_load(cftc_payload):
-    from src.config import DATA_CACHE
+    from macro_pipeline.config import DATA_CACHE
     assert (DATA_CACHE / "cftc_tff_spx_13874A.parquet").exists()
     assert (DATA_CACHE / "cftc_tff_spx_13874A.meta.json").exists()

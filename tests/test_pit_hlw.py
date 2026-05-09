@@ -4,9 +4,8 @@ from __future__ import annotations
 import logging
 
 import pandas as pd
-import pytest
 
-from src.access import HLW_VINTAGE_INDICATORS, PitDataContext, load_series
+from macro_pipeline.access import HLW_VINTAGE_INDICATORS, load_series
 
 
 # ---------------------------------------------------------------------------
@@ -78,7 +77,7 @@ def test_hlw_rstar_pit_does_not_emit_fallback_warning(caplog):
     """Layer 1.5A logged 'no materialized FRED vintage panel; falling
     back to latest-cache truncation' for HLW. After B.5, that warning
     must NOT appear for HLW_RSTAR."""
-    with caplog.at_level(logging.WARNING, logger="src.access"):
+    with caplog.at_level(logging.WARNING, logger="macro_pipeline.access"):
         load_series("HLW_RSTAR", as_of=pd.Timestamp("2024-04-15"))
     msgs = [rec.message for rec in caplog.records]
     assert not any(

@@ -4,15 +4,15 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from src.access import (
+from macro_pipeline.access import (
     IndicatorBundle,
     LatestSeriesReader,
     PitDataContext,
     PitSeriesReader,
     load_series,
 )
-from src.loaders.fred_vintage_panel import panel_path
-from src.preprocessing import to_visibility_index
+from macro_pipeline.loaders.fred_vintage_panel import panel_path
+from macro_pipeline.preprocessing import to_visibility_index
 
 
 # ---------------------------------------------------------------------------
