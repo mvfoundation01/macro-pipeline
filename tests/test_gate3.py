@@ -14,9 +14,9 @@ if not os.environ.get("FRED_API_KEY"):
         allow_module_level=True,
     )
 
-from src.loaders.cftc_tff_spx import load_cftc_tff_spx
-from src.loaders.yahoo_loader import load_yahoo_all
-from src.validation import validate_gate3
+from macro_pipeline.loaders.cftc_tff_spx import load_cftc_tff_spx
+from macro_pipeline.loaders.yahoo_loader import load_yahoo_all
+from macro_pipeline.validation import validate_gate3
 
 
 def test_gate3_passes():

@@ -19,14 +19,13 @@ if not os.environ.get("FRED_API_KEY"):
         allow_module_level=True,
     )
 
-from src.loaders.tv_csv_loader import (
+from macro_pipeline.loaders.tv_csv_loader import (
     TV_FILES_REGISTRY,
-    TV_RAW_DIR,
     discover_tv_files,
     load_tv_all,
     load_tv_file,
 )
-from src.validation import validate_gate2_tv
+from macro_pipeline.validation import validate_gate2_tv
 
 
 # ---------------------------------------------------------------------------
@@ -195,7 +194,7 @@ def test_rut_spx_is_already_a_ratio_not_two_columns():
 def test_cached_parquet_column_is_bare_indicator_id():
     """Item A consistency - parquet column name = indicator_id, file = tv_<id>."""
     load_tv_file("FRED_BAMLH0A0HYM2_1D.csv")  # ensure cached
-    from src.config import DATA_CACHE
+    from macro_pipeline.config import DATA_CACHE
     df = pd.read_parquet(DATA_CACHE / "tv_BAMLH0A0HYM2.parquet")
     assert df.columns.tolist() == ["BAMLH0A0HYM2"]
 
@@ -215,7 +214,7 @@ def test_us10y_master_index_extends_to_1912():
 
 def test_wtregen_data_quality_suspect_period_tagged():
     """WTREGEN pre-2002 period must be tagged as suspect (Phase 3 Item A)."""
-    from src.preprocessing import is_quality_suspect
+    from macro_pipeline.preprocessing import is_quality_suspect
 
     _, meta = load_tv_file("FRED_WTREGEN_1D.csv")
     periods = meta.data_quality_suspect_periods

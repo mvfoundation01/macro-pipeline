@@ -21,7 +21,7 @@ if not os.environ.get("FRED_API_KEY"):
         allow_module_level=True,
     )
 
-from src.loaders.yahoo_loader import (
+from macro_pipeline.loaders.yahoo_loader import (
     YAHOO_REGISTRY,
     load_yahoo_all,
     load_yahoo_series,
@@ -157,7 +157,7 @@ def test_load_spx_price_and_tr_both_load_with_distinct_metadata():
 def test_load_all_returns_26_columns():
     df, meta = load_yahoo_all()
     assert df.shape[1] == 26, f"expected 26 columns, got {df.shape[1]}"
-    for sid, m in meta.items():
+    for _sid, m in meta.items():
         assert m.source == "YAHOO_FINANCE"
         assert m.extra.get("tier") == 3
 
@@ -270,7 +270,7 @@ def test_move_fallback_uses_stale_cache_on_failure():
     assert meta_first.indicator_id == "MOVE"
 
     with patch(
-        "src.loaders.yahoo_loader._fetch_yahoo_one",
+        "macro_pipeline.loaders.yahoo_loader._fetch_yahoo_one",
         side_effect=ConnectionError("simulated yfinance failure"),
     ):
         s, meta = load_yahoo_series("MOVE", force_refresh=True)
@@ -280,13 +280,19 @@ def test_move_fallback_uses_stale_cache_on_failure():
 
 
 def test_non_unofficial_ticker_does_not_silently_fall_back():
-    """A regular ticker (not ^MOVE) must propagate the failure."""
+    """A regular ticker (not ^MOVE) must propagate the failure as a
+    typed IndicatorNetworkError (Layer 1.5D.1)."""
+    from macro_pipeline.exceptions import IndicatorNetworkError
     with patch(
-        "src.loaders.yahoo_loader._fetch_yahoo_one",
+        "macro_pipeline.loaders.yahoo_loader._fetch_yahoo_one",
         side_effect=ConnectionError("simulated"),
-    ):
-        with pytest.raises(ConnectionError):
-            load_yahoo_series("SPX_TR", force_refresh=True)
+    ), pytest.raises(IndicatorNetworkError) as exc_info:
+        load_yahoo_series("SPX_TR", force_refresh=True)
+    err = exc_info.value
+    assert err.source == "YAHOO_FINANCE"
+    assert err.indicator_id == "SPX_TR"
+    assert err.recoverable is True
+    assert isinstance(err.original_exception, ConnectionError)
 
 
 # ---------------------------------------------------------------------------
@@ -294,6 +300,6 @@ def test_non_unofficial_ticker_does_not_silently_fall_back():
 # ---------------------------------------------------------------------------
 def test_yahoo_cached_parquet_column_is_bare_indicator_id():
     load_yahoo_series("SPX_TR")
-    from src.config import DATA_CACHE
+    from macro_pipeline.config import DATA_CACHE
     df = pd.read_parquet(DATA_CACHE / "yahoo_SPX_TR.parquet")
     assert df.columns.tolist() == ["SPX_TR"]
