@@ -88,6 +88,12 @@ ignore = ["E501", "RUF002", "RUF003", "RUF046", "RUF059"]
 # ``test_hmm_missing_artifact_raises_HmmArtifactMissingError``).
 # Math-notation-style: not a real lint violation.
 "tests/test_regime_hmm_frozen.py" = ["E402", "N802"]
+# L3.5B PIT enforcement tests: same naming pattern (test names embed
+# exception class names + sub-phase tag).
+"tests/test_pit_enforcement.py" = ["E402", "N802"]
+# pit_audit dataclass field name mirrors the module-level constant
+# ``VINTAGE_REQUIRED_SERIES`` for clarity (uppercase preserves the link).
+"macro_pipeline/utils/pit_audit.py" = ["N815"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

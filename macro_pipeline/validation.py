@@ -2264,6 +2264,131 @@ def validate_gate12_hmm_frozen() -> GateReport:
     )
 
 
+def validate_gate13_pit_contracts() -> GateReport:
+    """Gate 13 — Layer 3.5B PIT contract integrity (Option Z + fail-closed).
+
+    Per ``LAYER_3_5_BUILD_SPEC.md`` §4.6:
+
+      1. ``audit_pit_contracts()`` returns 0 mismatches.
+      2. SAHMREALTIME has ``pit_safe_by_construction=True``,
+         non-empty rationale, ``derived_confidence_cap=0.70``.
+      3. Removing the flag from SAHMREALTIME (in-memory mutation in
+         a test) deterministically fails Gate 13 — verified at runtime
+         by reading ``FRED_SERIES_API`` live (not a frozen snapshot).
+      4. CRPS confidence at the 4 spec anchor dates respects the cap
+         (1998-08-01 / 2001-04-01 / 2008-09-15 / 2020-04-01).
+    """
+    import pandas as pd
+
+    from macro_pipeline.config import FRED_SERIES_API
+    from macro_pipeline.utils.pit_audit import audit_pit_contracts
+
+    findings: list[str] = []
+    warnings: list[str] = []
+    summary: dict = {}
+
+    # 1. Audit returns 0 mismatches (live config read)
+    report = audit_pit_contracts()
+    summary["audit_total_violations"] = report.total_violations
+    summary["option_z_series"] = list(
+        report.series_with_pit_safe_by_construction_true
+    )
+    if report.total_violations == 0:
+        findings.append(
+            f"audit_pit_contracts: 0 mismatches "
+            f"({len(report.series_with_needs_vintage_true)} vintage=True, "
+            f"{len(report.series_in_VINTAGE_REQUIRED_SERIES)} in panel, "
+            f"{len(report.series_with_pit_safe_by_construction_true)} "
+            "Option Z)"
+        )
+    else:
+        findings.append(
+            f"FAIL: audit returned {report.total_violations} mismatches"
+        )
+        for m in report.mismatches:
+            findings.append(f"  - {m.series_id}: {m.reason}")
+
+    # 2. SAHMREALTIME spec checks (live config read)
+    sahm = FRED_SERIES_API.get("SAHMREALTIME", {})
+    if not sahm.get("pit_safe_by_construction"):
+        findings.append(
+            "FAIL: SAHMREALTIME pit_safe_by_construction must be True"
+        )
+    else:
+        findings.append("SAHMREALTIME pit_safe_by_construction=True OK")
+
+    rationale = sahm.get("pit_construction_rationale", "")
+    summary["sahm_rationale_chars"] = len(rationale or "")
+    if not rationale or len(rationale) < 100:
+        findings.append(
+            f"FAIL: SAHMREALTIME rationale must be ≥100 chars "
+            f"(got {len(rationale or '')})"
+        )
+    else:
+        findings.append(
+            f"SAHMREALTIME rationale OK ({len(rationale)} chars)"
+        )
+
+    cap = sahm.get("derived_confidence_cap")
+    summary["sahm_derived_confidence_cap"] = cap
+    if cap != 0.70:
+        findings.append(
+            f"FAIL: SAHMREALTIME derived_confidence_cap={cap!r} "
+            "(expected 0.70)"
+        )
+    else:
+        findings.append("SAHMREALTIME derived_confidence_cap=0.70 OK")
+
+    # 3. CRPS confidence at 4 anchor dates respects cap
+    from macro_pipeline.access import PitDataContext
+    from macro_pipeline.scoring.crps import compute_crps
+
+    anchor_dates = ["1998-08-01", "2001-04-01", "2008-09-15", "2020-04-01"]
+    anchor_results: list[dict] = []
+    cap_70 = 0.70
+    all_ok = True
+    for asof in anchor_dates:
+        ctx = PitDataContext(as_of=pd.Timestamp(asof))
+        try:
+            obs = compute_crps(ctx)
+        except Exception as exc:
+            findings.append(
+                f"FAIL: compute_crps at {asof} raised "
+                f"{type(exc).__name__}: {exc}"
+            )
+            all_ok = False
+            continue
+        conf01 = float(obs.confidence) / 100.0
+        respected = conf01 <= cap_70 + 1e-9
+        anchor_results.append(
+            {"as_of": asof, "score": round(obs.score_value, 4),
+             "confidence_01": round(conf01, 6),
+             "final_quality_cap": round(obs.final_quality_cap, 4),
+             "respects_cap": respected}
+        )
+        if not respected:
+            all_ok = False
+    summary["anchor_results"] = anchor_results
+    if all_ok and len(anchor_results) == 4:
+        findings.append(
+            "CRPS confidence respects 0.70 cap at all 4 anchors "
+            f"(1998-08-01: {anchor_results[0]['confidence_01']}, "
+            f"2001-04-01: {anchor_results[1]['confidence_01']}, "
+            f"2008-09-15: {anchor_results[2]['confidence_01']}, "
+            f"2020-04-01: {anchor_results[3]['confidence_01']})"
+        )
+    elif not all_ok:
+        findings.append(
+            "FAIL: at least one anchor's CRPS confidence exceeds 0.70 cap"
+        )
+
+    passed = not any(f.startswith("FAIL") for f in findings)
+    return GateReport(
+        name="Gate 13 - Layer 3.5B PIT Contract (Option Z)",
+        passed=passed, findings=findings, warnings=warnings, summary=summary,
+    )
+
+
 def _cli_gate11() -> int:
     import logging
     logging.basicConfig(level="WARNING", format="%(message)s")
@@ -2276,6 +2401,14 @@ def _cli_gate12() -> int:
     import logging
     logging.basicConfig(level="WARNING", format="%(message)s")
     report = validate_gate12_hmm_frozen()
+    print(report.render())
+    return 0 if report.passed else 1
+
+
+def _cli_gate13() -> int:
+    import logging
+    logging.basicConfig(level="WARNING", format="%(message)s")
+    report = validate_gate13_pit_contracts()
     print(report.render())
     return 0 if report.passed else 1
 
@@ -2334,10 +2467,12 @@ if __name__ == "__main__":
         sys.exit(_cli_gate11())
     if cmd == "gate12":
         sys.exit(_cli_gate12())
+    if cmd == "gate13":
+        sys.exit(_cli_gate13())
     print(
         f"Unknown command: {cmd}. Available: "
         "gate1, gate2, gate3, gate4a, gate4b, gate4c, gate4d, "
-        "gate8, gate9, gate10, gate11, gate12",
+        "gate8, gate9, gate10, gate11, gate12, gate13",
         file=sys.stderr,
     )
     sys.exit(2)

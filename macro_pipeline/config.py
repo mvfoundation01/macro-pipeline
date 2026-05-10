@@ -131,10 +131,35 @@ FRED_SERIES_API: dict[str, dict] = {
             "12M_recession_probability_composite",
             "12M_leading_indicator",
         ],
+        # Layer 3.5B Option Z (per LAYER_3_5_BUILD_SPEC.md §4.3-2; D21):
+        # FRED's SAHMREALTIME series is constructed from only the
+        # unemployment data available at each point in time per the Sahm
+        # Rule definition (Atlanta Fed methodology). Since the
+        # construction itself is real-time, we treat the latest cache as
+        # PIT-safe by construction — but cap downstream confidence at
+        # 0.70 to defend against (a) seasonal-factor revisions to recent
+        # values (BLS routinely revises the seasonally-adjusted UNRATE
+        # back ~5 years each annual benchmark) and (b) the residual
+        # methodology-vs-vintage gap. The cap propagates through
+        # ``compute_final_confidence_cap`` into CRPS/CDRS aggregates.
+        # Removing this flag (in-memory mutation in tests) deterministically
+        # fails Gate 13.
+        "pit_safe_by_construction": True,
+        "pit_construction_rationale": (
+            "FRED publishes SAHMREALTIME as a real-time series constructed "
+            "using only the unemployment data available at each point in "
+            "time per the Sahm Rule definition (Atlanta Fed methodology). "
+            "Caveat: seasonal factor revisions can affect recent values "
+            "after annual BLS benchmark refreshes. See scoring/README.md §D20 "
+            "for the full Option Z rationale."
+        ),
+        "derived_confidence_cap": 0.70,
         "description": (
             "Sahm Rule real-time recession indicator. COINCIDENT signal "
             "(detects recession start, not 12M ahead). Use for "
-            "recession_start_detection only — see 1.5C.4."
+            "recession_start_detection only — see 1.5C.4. PIT-safe by "
+            "construction per Layer 3.5B Option Z; downstream confidence "
+            "capped at 0.70."
         ),
     },
     # --- Philly Fed STATE Leading Index (NOT Conference Board LEI) ---
@@ -328,3 +353,50 @@ CDRS_BUCKET_WEIGHTS: dict[str, float] = {
 }
 
 FORWARD_HORIZONS_MONTHS: list[int] = [12, 36, 60, 120]
+
+
+# ---------------------------------------------------------------------------
+# Layer 3.5B — PIT-safe-by-construction (Option Z) validation.
+# Runs at module import time. Surfaces config bugs (e.g. flag set without
+# a non-empty rationale, cap out of (0, 1]) immediately rather than at
+# inference time. Spec: LAYER_3_5_BUILD_SPEC.md §4.3-1 + §4.4-D3.
+# ---------------------------------------------------------------------------
+def _validate_pit_construction_consistency() -> None:
+    """Validate every series flagged ``pit_safe_by_construction=True`` has
+    a non-empty rationale and a cap in ``(0, 1]``.
+
+    Raises ``ValueError`` (NOT a typed loader exception, since this is
+    a *config* bug surfaced before any loader runs).
+    """
+    for sid, spec in FRED_SERIES_API.items():
+        if not spec.get("pit_safe_by_construction", False):
+            continue
+        rationale = spec.get("pit_construction_rationale")
+        if not isinstance(rationale, str) or not rationale.strip():
+            raise ValueError(
+                f"Config bug: {sid} has pit_safe_by_construction=True "
+                "but missing/empty pit_construction_rationale. "
+                "Per spec §4.4-D3 the rationale field is mandatory."
+            )
+        cap = spec.get("derived_confidence_cap")
+        if cap is None:
+            raise ValueError(
+                f"Config bug: {sid} has pit_safe_by_construction=True "
+                "but missing derived_confidence_cap. Spec mandates a "
+                "numeric cap in (0, 1]."
+            )
+        try:
+            cap_f = float(cap)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                f"Config bug: {sid} derived_confidence_cap={cap!r} is "
+                "not numeric."
+            ) from exc
+        if not (0.0 < cap_f <= 1.0):
+            raise ValueError(
+                f"Config bug: {sid} derived_confidence_cap={cap_f} must "
+                "be in (0, 1]."
+            )
+
+
+_validate_pit_construction_consistency()

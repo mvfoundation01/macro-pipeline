@@ -267,7 +267,11 @@ def _load_component(
 
 
 def _compute_quality_cap(loads: list[_ComponentLoad], ctx: PitDataContext) -> tuple[float, dict[str, float | None]]:
-    """Aggregate per-component quality caps and the 1Y horizon cap."""
+    """Aggregate per-component quality caps and the 1Y horizon cap.
+
+    Layer 3.5B: include ``derived_confidence_cap`` from any Option Z
+    component (e.g. SAHMREALTIME at 0.70) in the MIN aggregation.
+    """
     per_component: list[AppliedCaps] = []
     for cl in loads:
         per_component.append(
@@ -280,18 +284,21 @@ def _compute_quality_cap(loads: list[_ComponentLoad], ctx: PitDataContext) -> tu
     source_cap_min = min(c.source_cap for c in per_component)
     vintage_caps = [c.vintage_confidence_cap for c in per_component if c.vintage_confidence_cap is not None]
     staleness_caps = [c.vintage_staleness_cap for c in per_component if c.vintage_staleness_cap is not None]
+    derived_caps = [c.derived_confidence_cap for c in per_component if c.derived_confidence_cap is not None]
 
     horizon_cap = CONFIDENCE_CAPS["1Y"]  # 0.85
     final = aggregate_caps(
         source_cap_min,
         min(vintage_caps) if vintage_caps else None,
         min(staleness_caps) if staleness_caps else None,
+        min(derived_caps) if derived_caps else None,
         horizon_cap,
     )
     return final, {
         "source_cap_min":      source_cap_min,
         "vintage_cap_min":     min(vintage_caps) if vintage_caps else None,
         "staleness_cap_min":   min(staleness_caps) if staleness_caps else None,
+        "derived_cap_min":     min(derived_caps) if derived_caps else None,
         "horizon_cap_1Y":      horizon_cap,
     }
 
@@ -405,6 +412,13 @@ def compute_crps(
         "revision_penalty": 0.0,
     }
     confidence = confidence_score_v2(**confidence_inputs, horizon="1Y")
+    # Layer 3.5B: clamp by ``final_cap`` (which now includes Option Z
+    # ``derived_confidence_cap`` via MIN aggregation). Confidence in
+    # [0, 100] respects MIN(source_cap, vintage_cap, staleness_cap,
+    # derived_cap, horizon_cap). Pre-3.5B this clamp was only via
+    # the horizon cap inside ``confidence_score_v2``; now the full
+    # source-quality + Option Z chain binds.
+    confidence = min(confidence, final_cap * 100.0)
 
     # 5. Conviction split (§5.4.4)
     conv_stat, conv_op, conv_act = _conviction_from_components(
@@ -451,6 +465,21 @@ def compute_crps(
                 [cl.indicator_id for cl in loads],
                 strict=True,
             )),
+            # Layer 3.5B Option Z lineage (per AM12 cross-phase note;
+            # 3.5D will migrate these into ScoredObservation.notes when
+            # the field is added).
+            "pit_safe_basis_per_component": {
+                cl.name: getattr(cl.bundle, "pit_safe_basis", "n/a")
+                for cl in loads
+            },
+            "derived_confidence_cap_applied": (
+                caps_breakdown.get("derived_cap_min")
+            ),
+            "pit_construction_notes": [
+                note
+                for cl in loads
+                for note in getattr(cl.bundle, "notes", [])
+            ],
         },
     )
 

@@ -169,6 +169,13 @@ def compute_cdrs(ctx: PitDataContext) -> ScoredObservation:
         "revision_penalty": 0.0,
     }
     confidence = confidence_score_v2(**confidence_inputs, horizon="1Y")
+    # Layer 3.5B: clamp by ``final_cap`` (now includes Option Z
+    # ``derived_confidence_cap`` via MIN aggregation). CDRS does not
+    # currently load any Option-Z-flagged series, so this clamp is
+    # a no-op vs the existing source/horizon chain — but it makes the
+    # contract uniform with CRPS and forward-compatible with future
+    # Option Z indicators.
+    confidence = min(confidence, final_cap * 100.0)
 
     # ---- Conviction split ----
     conv_stat, conv_op, conv_act = _conviction_from_components(
@@ -240,6 +247,13 @@ def compute_cdrs(ctx: PitDataContext) -> ScoredObservation:
             "t_method": t_result.method,
             "v_notes": list(v_result.notes),
             "t_notes": list(t_result.notes),
+            # Layer 3.5B Option Z lineage (3.5D will migrate to .notes).
+            # CDRS does not currently load any Option-Z-flagged series
+            # (SAHM is CRPS-only), so derived_confidence_cap_applied will
+            # typically be None; this field exists for forward
+            # compatibility once additional Option Z candidates land.
+            "derived_confidence_cap_applied": None,
+            "pit_construction_notes": [],
         },
     )
 

@@ -159,6 +159,41 @@ def from_request_exception(
     )
 
 
+# ---------------------------------------------------------------------------
+# Layer 3.5B — PIT contract enforcement (cross-cutting, not regime-scoped).
+# ---------------------------------------------------------------------------
+@dataclass
+class PitContractViolationError(Exception):
+    """Raised when a series with ``vintage=True`` (or its successor flag)
+    is requested in PIT mode but is neither (a) materialised in
+    ``VINTAGE_REQUIRED_SERIES`` nor (b) flagged
+    ``pit_safe_by_construction=True`` in ``FRED_SERIES_API``.
+
+    Layer 3.5B closes the prior silent fallback path that returned a
+    latest-cache slice with ``pit_safe=True``. After 3.5B every series
+    that can reach the PIT reader has an explicit disposition; an
+    unflagged vintage series is a configuration bug and must fail closed.
+
+    Per Codex finding B + ChatGPT Dim 1 + cross-reviewer aggregation
+    finding #2 (look-ahead bias in walk-forward CV).
+    """
+
+    indicator_id: str
+    reason: str = ""
+    context: dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        super().__init__(str(self))
+
+    def __str__(self) -> str:  # pragma: no cover - cosmetic
+        parts = [f"[PIT/{self.indicator_id}]"]
+        if self.reason:
+            parts.append(self.reason)
+        if self.context:
+            parts.append(f"context={self.context}")
+        return " ".join(parts)
+
+
 __all__ = [
     "IndicatorAuthError",
     "IndicatorLoadError",
@@ -166,5 +201,6 @@ __all__ = [
     "IndicatorNotFoundError",
     "IndicatorParseError",
     "IndicatorRateLimitError",
+    "PitContractViolationError",
     "from_request_exception",
 ]

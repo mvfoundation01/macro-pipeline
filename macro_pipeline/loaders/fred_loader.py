@@ -240,6 +240,12 @@ def load_fred_series(
     for key in (
         "signal_type", "valid_uses", "INVALID_uses",
         "double_counting_risk", "overlap_components",
+        # Layer 3.5B Option Z: surface PIT-by-construction lineage to
+        # the cache sidecar so the PIT reader can branch on it without
+        # re-reading config.py.
+        "pit_safe_by_construction",
+        "pit_construction_rationale",
+        "derived_confidence_cap",
     ):
         if key in spec:
             extra[key] = spec[key]

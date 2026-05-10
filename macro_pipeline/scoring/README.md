@@ -228,3 +228,100 @@ Empirical Path B anchors (smoke + Gate 10):
 | `v_method` | `"vulnerability_v1"` |
 | `t_method` | `"trigger_v1"` |
 | `v_notes` / `t_notes` | data-availability notes from each stage |
+
+
+---
+
+# §D20. Layer 3.5B Option Z — `pit_safe_by_construction` for SAHMREALTIME
+
+**Spec ref**: `LAYER_3_5_BUILD_SPEC.md` §4 (3.5B). **D21** filed for the
+config-pattern deferral (full `SeriesConfig` dataclass migration deferred
+to L5-12; Option C+ used here — extend dict pattern with the three new keys).
+
+## §D20.1 — Why Option Z exists
+
+`SAHMREALTIME` is a real-time recession indicator constructed by FRED
+from only the unemployment data available at each point in time per the
+Sahm Rule definition (Atlanta Fed methodology). Loading SAHMREALTIME
+in PIT mode currently presents two unsatisfying options:
+
+1. **Materialise an ALFRED vintage panel** for SAHMREALTIME. ALFRED has
+   real-time vintages only from 2011-05-23 forward; for any backtest
+   ``as_of < 2011-05-23`` (every recession before 2020), a vintage panel
+   is empty.
+2. **Drop SAHMREALTIME** from CRPS/CDRS. SAHMREALTIME is 28.57% of the
+   Path B CRPS weight; dropping it materially weakens the recession
+   composite.
+
+Option Z is the third path: treat the latest cache as PIT-safe **by
+construction** of the source series, but cap downstream confidence at a
+defensible upper bound to defend against (a) seasonal-factor revisions
+to recent values (BLS routinely revises seasonally-adjusted UNRATE back
+~5 years each annual benchmark) and (b) the residual methodology-vs-
+vintage gap.
+
+Option Z is a **methodology choice, not a workaround**. The cap (0.70)
+is derived from L1.5 confidence-cap discipline:
+- Source quality `free_api` baseline = 1.00
+- Derived cap for constructed real-time series = **0.70** (binds tighter
+  than the source baseline)
+- Aggregation = MIN with all other caps (vintage / staleness / horizon).
+
+## §D20.2 — Configuration
+
+In `macro_pipeline/config.py`, the `SAHMREALTIME` entry carries three
+new keys atop the existing dict pattern:
+
+```python
+"pit_safe_by_construction": True,
+"pit_construction_rationale": "FRED publishes SAHMREALTIME as a real-time series ...",
+"derived_confidence_cap": 0.70,
+```
+
+Validation runs at module import time
+(`_validate_pit_construction_consistency`) and raises `ValueError` if
+the flag is set without a non-empty rationale OR with a cap outside
+`(0, 1]`.
+
+## §D20.3 — Runtime branching
+
+`macro_pipeline/access.py::PitSeriesReader._load_via_visibility_shift`
+now has explicit 3-way branching for any series that reaches it:
+
+| Case | Branch | Returns |
+|---|---|---|
+| `vintage=True` AND `pit_safe_by_construction=True` | Option Z | latest cache truncated at `as_of`, `pit_safe=True`, `pit_safe_basis="by_construction"`, `derived_confidence_cap` propagated |
+| `vintage=True` AND not in `VINTAGE_REQUIRED_SERIES` AND not Option Z | RAISE | `PitContractViolationError` (no silent fallback) |
+| `vintage=False` | standard | release-lag visibility shift OR as-of truncation |
+
+The previous silent fallback path (Codex finding B) is gone.
+
+## §D20.4 — Cap propagation
+
+`models/quality_caps.py::AppliedCaps` carries `derived_confidence_cap`
+as a new field; `compute_final_confidence_cap` populates it from the
+indicator metadata; `aggregate_caps` includes it in the MIN.
+
+In `scoring/crps.py::compute_crps` and `scoring/cdrs.py::compute_cdrs`,
+the headline `confidence` is clamped by `final_quality_cap × 100`
+post-`confidence_score_v2`. With SAHM contributing to CRPS at 28.57%
+weight, every CRPS observation now respects the 0.70 cap (verified at
+4 anchor dates: 1998-08-01, 2001-04-01, 2008-09-15, 2020-04-01 — all
+clamp to confidence 70.00 / 0.70).
+
+## §D20.5 — Forward path (L5)
+
+L5-RM-2 (Layer 5 backlog item, see `BACKLOG_LAYER_5_v1.md`) covers the
+Ridge-fit refinement that may further tune the cap empirically.
+L5-12 (NEW) covers the full `SeriesConfig` dataclass migration deferred
+from 3.5B per D21.
+
+## §D20.6 — Auditability
+
+`python -m macro_pipeline.utils.pit_audit` walks `FRED_SERIES_API` and
+reports any series that would currently raise
+`PitContractViolationError` if loaded in PIT mode. As of L3.5B close
+the audit returns 0 mismatches. Gate 13
+(`validate_gate13_pit_contracts`) re-runs this audit + the 4-anchor
+smoke-test on every gate execution.
+
