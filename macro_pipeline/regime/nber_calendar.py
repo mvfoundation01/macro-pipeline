@@ -232,9 +232,23 @@ class NberCalendarLoader:
             )
         relevant.sort(key=lambda x: x[0])
         tp_period, kind, announce = relevant[-1]
-        regime: Literal["expansion", "recession"] = (
-            "recession" if kind == "peak" else "expansion"
-        )
+        # Layer 3.5b-W (D-none, surgical bug fix): NBER convention is that
+        # the peak month is the LAST expansion month (recession starts the
+        # following month) and the trough month is the LAST recession month
+        # (expansion starts the following month). FRED USREC encodes this
+        # convention exactly (peak month = 0/expansion; trough month =
+        # 1/recession). Pre-3.5b-W the boundary month was treated as
+        # "post-turning-point" — diverging from USREC across all 6 cycles
+        # (12/24 boundary cases). Post-3.5b-W: distinguish AT the turning
+        # point from STRICTLY AFTER.
+        regime: Literal["expansion", "recession"]
+        if tp_period == query_period:
+            # AT the turning point: regime is the type the cycle is ENDING.
+            regime = "expansion" if kind == "peak" else "recession"
+        else:
+            # STRICTLY AFTER the turning point: regime is the new type that
+            # started.
+            regime = "recession" if kind == "peak" else "expansion"
         return LastKnownLabel(
             regime=regime,
             turning_point_date=tp_period,
