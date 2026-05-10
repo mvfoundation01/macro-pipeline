@@ -137,9 +137,42 @@ def _find_cache_stem(indicator_id: str) -> str:
 
 
 def _read_cached_series_and_meta(stem: str, indicator_id: str) -> tuple[pd.Series, dict]:
+    """Read a cached single-series parquet through the validated cache helper.
+
+    Layer 3.5b-T (closes Codex finding T): the prior implementation
+    called ``pd.read_parquet`` directly and ignored the sidecar
+    entirely — a tampered parquet, a stale ``data_sha256``, or a
+    schema_version drift would all silently feed downstream scoring
+    with corrupt or wrong-version data. Production reads now route
+    through ``cache.read_cache_validated`` which validates
+    schema_version + sha256 + row_count + mandatory ``data_sha256``
+    field. Any cache-integrity failure raises
+    ``CacheValidationError`` — there is no silent fallback at the
+    production boundary.
+
+    Loaders that own a rebuild flow continue to call
+    ``read_cache_validated`` directly and treat ``None`` as the
+    rebuild signal; this access-layer wrapper has no rebuild flow,
+    so ``None`` from the helper (schema mismatch, missing files,
+    sha mismatch, row_count mismatch) is converted to a raise.
+    """
+    from macro_pipeline.cache import read_cache_validated
+    from macro_pipeline.exceptions import CacheValidationError
+
     parquet_path = DATA_CACHE / f"{stem}.parquet"
-    meta_path = DATA_CACHE / f"{stem}.meta.json"
-    df = pd.read_parquet(parquet_path)
+    result = read_cache_validated(stem, DATA_CACHE)
+    if result is None:
+        raise CacheValidationError(
+            path=str(parquet_path),
+            reason=(
+                "cache validation failed for production read "
+                "(schema_version mismatch, missing files, sha256 "
+                "mismatch, or row_count mismatch); rebuild via the "
+                "appropriate loader"
+            ),
+            context={"stem": stem, "indicator_id": indicator_id},
+        )
+    df, meta = result
     if df.shape[1] == 0:
         raise ValueError(f"{indicator_id}: empty parquet at {parquet_path}")
     # The convention is "column name = bare indicator_id", but legacy
@@ -147,7 +180,6 @@ def _read_cached_series_and_meta(stem: str, indicator_id: str) -> tuple[pd.Serie
     # matches indicator_id, else the first column.
     s = (df[indicator_id] if indicator_id in df.columns else df.iloc[:, 0]).copy()
     s.name = indicator_id
-    meta = json.loads(meta_path.read_bytes()) if meta_path.exists() else {}
     return s, meta
 
 
@@ -323,14 +355,18 @@ class PitSeriesReader:
         """
         stem = _find_cache_stem(indicator_id)
         s, meta = _read_cached_series_and_meta(stem, indicator_id)
-        lag = int(meta.get("release_lag_days", 0))
         needs_vintage = bool(meta.get("needs_vintage", False))
 
-        # Pull Option Z flags from live config (source of truth) with
-        # cache-meta fallback (so tests that mock meta with these keys
-        # work without re-importing config).
+        # Pull config from live source of truth (FRED_SERIES_API) with
+        # cache-meta fallback. Config is authoritative because the cache
+        # sidecar may have been written before a config update (e.g.,
+        # Layer 3.5b-U recalibrated SAHMREALTIME release_lag_days 7→30
+        # but the sidecar still records 7 until the next loader rewrite).
+        # Test fixtures that mock meta directly continue to work via the
+        # fallback.
         from macro_pipeline.config import FRED_SERIES_API
         spec = FRED_SERIES_API.get(indicator_id, {})
+        lag = int(spec.get("release_lag_days", meta.get("release_lag_days", 0)))
         pit_safe_by_construction = bool(
             spec.get("pit_safe_by_construction",
                      meta.get("pit_safe_by_construction", False))
@@ -343,22 +379,42 @@ class PitSeriesReader:
             meta.get("pit_construction_rationale"),
         )
 
-        # ---- Branch 1: Option Z ----
+        # ---- Branch 1: Option Z (Layer 3.5b-U closes Codex finding U) ----
         if needs_vintage and pit_safe_by_construction:
-            out = s[s.index <= as_of].copy()
-            out.name = indicator_id
+            # Pre-3.5b-U the truncation was a bare ``s[s.index <= as_of]``
+            # that ignored ``release_lag_days`` while metadata claimed
+            # ``applied_release_lag_days=lag`` — Codex finding U flagged this
+            # as a look-ahead-bias source for observation-month-indexed
+            # series like SAHMREALTIME. Apply the same visibility-shift
+            # discipline as Branch 3 below: shift the index by the
+            # configured release lag, truncate at as_of, restore the
+            # observation-date index. With SAHM's calibrated lag=30 (D29)
+            # this excludes the current observation month before its
+            # publication date.
+            if lag > 0:
+                shifted = to_visibility_index(s, lag)
+                visible = shifted[shifted.index <= as_of]
+                obs_idx = visible.index - pd.Timedelta(days=lag)
+                out = pd.Series(visible.values, index=obs_idx, name=indicator_id)
+            else:
+                out = s[s.index <= as_of].copy()
+                out.name = indicator_id
             note = (
                 f"{indicator_id}: pit_safe_by_construction=True; "
-                f"derived_confidence_cap={derived_cap}. "
+                f"derived_confidence_cap={derived_cap}; "
+                f"applied_release_lag_days={lag}. "
                 f"Rationale: {construction_rationale}"
             )
-            log.info("%s: PIT-safe by construction; cap=%s", indicator_id, derived_cap)
+            log.info(
+                "%s: PIT-safe by construction; cap=%s; lag=%dd applied",
+                indicator_id, derived_cap, lag,
+            )
             return IndicatorBundle(
                 indicator_id=indicator_id,
                 data=out,
                 metadata={
                     **meta,
-                    "pit_source": "by_construction_latest",
+                    "pit_source": "by_construction_visibility_shift" if lag > 0 else "by_construction_asof",
                     "pit_safe_by_construction": True,
                     "derived_confidence_cap": derived_cap,
                     "applied_release_lag_days": lag,

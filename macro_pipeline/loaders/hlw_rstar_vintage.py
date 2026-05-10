@@ -230,7 +230,16 @@ def get_pit_rstar(
             f"(published {pub_dates[vintages[0]].date()})"
         )
         if raise_on_no_vintage:
-            raise ValueError(msg)
+            # Layer 3.5b-V (D30): use PitDataUnavailableError instead of
+            # ValueError so the broader AP-6 narrowing helper tuple
+            # (legitimate_missing_data_exceptions) catches it as the
+            # "data missing PIT-wise" semantic it actually is. The
+            # caller (dalio_cycle._compute_metrics::HLW_RSTAR site)
+            # used to silently swallow the bare ValueError under the
+            # pre-3.5b-V broad except; post-narrowing the typed
+            # exception is the fail-graceful contract.
+            from macro_pipeline.regime.exceptions import PitDataUnavailableError
+            raise PitDataUnavailableError(msg)
         log.warning("%s", msg)
         return None
     selected = candidates[-1]

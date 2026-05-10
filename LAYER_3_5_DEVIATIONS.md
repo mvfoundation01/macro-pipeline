@@ -20,10 +20,55 @@ Layer 5 backlog reference (if any).
 | D25 | 2026-05-10 | 3.5E | HLW vintage atomic-write granularity = single concatenated write (AM26) | ACCEPT | Spec §7.3-3 + §7.4-D2 assume per-vintage atomic writes ("atomic per-vintage to minimize blast radius if mid-loop failure"). Empirical reading of `loaders/hlw_rstar_vintage.py:build_cache` shows actual code does ONE concatenated `long.to_parquet(parquet)` after building MultiIndex(vintage, date) — no per-vintage parquets are written. The "per-vintage atomic" decision is structurally inapplicable. Disposition: route the single concatenated write through `cache.write_cache_atomic`. Atomic semantics: full-vintage-set commit OR rollback (not partial). Spec intent (atomic-write-discipline) preserved; spec literal (per-vintage loop) deviated. Standard 3.5A AM4 / 3.5B AM10 / 3.5D AM21 spec-literal-vs-intent precedent. Test #7 rephrased from `test_hlw_atomic_write_per_vintage` to `test_hlw_atomic_write_concatenated_or_rollback` covering the single-write rollback contract. | none |
 | D26 | 2026-05-10 | 3.5E | Extracted `_write_atomic_subdir` from `analysis/r_squared_panel.py` to public `cache.write_cache_atomic_subdir` (AM28) | ACCEPT | Spec §7.3-1 introduced `read_cache_validated_subdir` as a new public helper. Symmetric `write_cache_atomic_subdir` was implicit in spec but not explicit. The previous private `_write_atomic_subdir` in `r_squared_panel.py` mirrored the parquet-+-sidecar atomic-write contract; making the read public while leaving the write private is asymmetric. Disposition: extract to `cache.py` as `write_cache_atomic_subdir(subdir, filename, df, meta, *, cache_root=None)`; rewire `r_squared_panel.write_panel_atomic` as a thin wrapper. Behaviour preserved (same target path, same sidecar fields); `pipeline_processed=True` migrated into the meta dict passed to the helper. | none |
 | D27 | 2026-05-10 | 3.5E | AP-6 swallow at `regime_context.py:295` exposed env-hygiene gap (filelock declared in `pyproject.toml`/`uv.lock` but missing from master `.venv`); reframed from initial "Gate 15 anchor refactor due to FRED data revision" hypothesis | ACCEPT | Strategic Claude REVISE-WITH-NOTES on 3.5E pre-flight prescribed Option C HYBRID: diagnose Gate 15 drift root cause first; refactor anchor IFF FRED data revision confirmed. Build agent's STEP 0 diagnosis (1.0h) falsified the FRED-revision hypothesis with hard evidence: (1) HMM pickle sha256 matches sidecar `data_sha256=aa813d16...` exactly (3.5A frozen contract intact); (2) `predict_state` at as_of=2025-06-01 returns `recession` with posterior 1.000 — matches 3.5D verification baseline. Root cause: the broad `except Exception:` at `regime/regime_context.py:295` (AP-6) silently swallowed a `RegimeClassifierError("filelock not installed")` raised when `python -m macro_pipeline.validation` ran without `.local-deps` on `sys.path` (`tests/conftest.py:38-42` auto-prepends `.local-deps` for pytest, but the validation CLI doesn't). Surgical fix (two layers): (1) `pip install "filelock>=3.13"` into master `D:/macro_pipeline/.venv` aligns the env with the declared dep; (2) `regime_context.py:295` narrowed to `(HmmArtifactMissingError, HmmArtifactCorruptError, HmmMetadataIncompatibleError)` per refined §12.4 sub-option (a) — `HmmConcurrencyError` and `RegimeClassifierError` now propagate, so env/config issues fail loudly rather than silently swallow into wrong-state ('expansion' instead of 'indeterminate'). NEG test #9 (`test_narrow_exception_in_regime_context_propagates_unexpected`) asserts both `MemoryError` and `RegimeClassifierError` propagate correctly. **NO Gate 15 anchor refactor needed** — the 2025-06 anchor is empirically revision-stable. | **L7-CI-1** (NEW) |
+| D28 | 2026-05-10 | 3.5b-T | Spec D4 transitional migration scaffold (DeprecationWarning + auto-recompute → enforce strictly) deferred; strict-only enforcement implemented (AM-3.5b-T-1=A) | ACCEPT | L3.5b spec §3.3-D4 prescribed a 3-state migration ladder for `data_sha256` mandatory enforcement: (1) emit DeprecationWarning on first read; (2) auto-recompute + write sidecar; (3) enforce strictly. Empirical state at 138/138 caches post-3.5E STEP 0 (CFTC + HLW sidecar fixup) makes scaffold dormant — every cache already carries `data_sha256`. Per V/Strategic-approved 4-rationale case (empirical 138/138 + bug repro; spec-literal-vs-intent precedent 3.5A AM4 / 3.5B AM10 / 3.5D AM21 / 3.5E D27; Codex finding T scope; YAGNI), implementation went straight to strict enforcement. Discrete migration sprint deferred to **L7-MIGRATE-1** if/when legacy cache state surfaces (e.g., future fresh deployment). Codex finding T closure verified empirically: pre-3.5b-T `load_series('PAYEMS')` with tampered sidecar returned a valid bundle (silent pass); post-3.5b-T raises `CacheValidationError`. Both `access.py:142` (direct `pd.read_parquet`) and `cache.py:378` (truthy-guard short-circuit) paths fixed. Grep audit (per new "Empirical claim verification" Standing Order): zero functional `pd.read_parquet` in `access.py` (sole match is docstring describing prior behavior); 5 loader-internal cache-fresh-check paths remain in `loaders/` but are out of Codex T scope (loader rebuild flows, not production scoring). | **L7-MIGRATE-1** (NEW) |
+| D29 | 2026-05-10 | 3.5b-U | `release_lag_days` for SAHMREALTIME calibrated 7 → 30 + apply visibility-shift inside Option Z by-construction branch (AM-3.5b-U-2=(b)) | ACCEPT | L3.5b spec §4.3 Path A item 1 prescribed `release_lag_days=30 (or empirically determined value)`. Pre-flight empirical exam: SAHMREALTIME index is observation-month (value-change spacing 29-31 days; changes at first business day of month). Bug reproduction at canonical 2025-06-15 anchor: pre-fix `load_series('SAHMREALTIME', as_of=2025-06-15)` returned June 2025 SAHM (0.17, published ~2025-07-04) — **3-week look-ahead leak**. With prior config `release_lag_days=7` and visibility-shift applied, leak persists (latest visible 2025-06-13). Empirical band 14 ≤ lag ≤ 45 days; calibrated to 30 (spec literal + ~3-day safety margin matching actual SAHM publication on first Friday of M+1, ~30-37 days post observation-month index). Per V/Strategic-approved 5-rationale case (empirical bug repro; Codex finding U scope; empirical calibration; spec support; **Strategic self-correction** — 3.5B AM10 disposition was approved without empirical verification, the new "Empirical claim verification" Standing Order was added precisely because of this gap, and 3.5b-U is the first sub-phase to use the new Standing Order to CORRECT an earlier Strategic Claude approval — a healthy pattern). Implementation: (1) `config.SAHMREALTIME.release_lag_days` 7→30 + rationale extended; (2) `access._load_via_visibility_shift::Branch 1` now applies `to_visibility_index(s, lag)` mirroring Branch 3, with `pit_source = "by_construction_visibility_shift"` distinguishing from prior `"by_construction_latest"`; (3) `lag` now read from **live config first** (with cache-meta fallback), preventing config-vs-cache drift silently using stale sidecar values; (4) `pit_audit` validator extended to flag any Option Z series with `release_lag_days > 0` whose rationale lacks "release_lag" mention. Empirical post-fix at 2025-06-15: latest visible = May 2025 SAHM (0.27, published ~2025-06-06), June 2025 obs correctly excluded. Gate 13 anchors stable; Gate 10/Gate 13/Gate 16 still PASS. | none |
+| D30 | 2026-05-10 | 3.5b-V | Comprehensive AP-6 narrowing sweep within Codex-flagged files (21 sites total) + `legitimate_missing_data_exceptions()` shared helper + side-fix to `get_pit_rstar` exception type (AM-3.5b-V-1=Comprehensive) | ACCEPT | L3.5b spec §5 D2 listed 4 sites (one per file). AST-walk audit per new "Empirical claim verification" Standing Order revealed each Codex-flagged file has 4-6 sibling broad-except blocks following the identical pattern: 5 in `cdrs_vulnerability.py` (V1-V5), 5 in `cdrs_trigger.py` (T1-T5), 6 in `kindleberger.py`, 4 in `dalio_cycle.py` — total 20 sibling sites + 1 D27 consolidation = **21 sites in scope**. Codex finding text "broader scoring/regime tree still has AP-6 style broad catches" supports comprehensive intent. Per V/Strategic-approved 6-rationale case (empirical AST-walk; Codex text; architectural consistency; precedent 3.5A AM4 / 3.5B AM10 / 3.5D AM21 / 3.5E D27 / 3.5b-T D28 / 3.5b-U D29; effort within budget; Strategic self-critique that spec D2 "4 sites" was authoring shortcut without AST-walk). All 21 sites use shared helper `legitimate_missing_data_exceptions()` returning `(HmmArtifactMissingError, HmmArtifactCorruptError, HmmMetadataIncompatibleError, PitDataUnavailableError)`. Helper PROPAGATES `PitContractViolationError`, `RegimeClassifierError`, `HmmConcurrencyError`, `CacheValidationError`, `IndicatorLoadError`, `KeyError`, `ValueError`, `FileNotFoundError`. **Side-fix** (regression remediation, in-scope architectural improvement): `loaders/hlw_rstar_vintage.py::get_pit_rstar` raised bare `ValueError("No HLW vintage available...")` for pre-2015Q4 PIT lookups — semantically a "PIT data missing" case but typed as generic ValueError. Changed to raise `PitDataUnavailableError` matching NBER extract's pre-1978 pattern. One existing test updated (`test_official_4d.py::test_pit_pre_2015_raises` ValueError → PitDataUnavailableError). **D27 consolidation contract expansion**: helper adds `PitDataUnavailableError` to D27's original 3-type tuple (informational; empirical impact = zero since `predict_state` doesn't raise this type); D27 empirical case (RegimeClassifierError for filelock-missing) preserved (verified by POS regression test #5). **16 out-of-scope broad-except sites** identified in AST-walk (loaders rebuild flows, validation framework, math fallbacks) tracked for L5-14 hygiene backlog. Gate 16 sub-criterion 4 updated to accept helper pattern OR original inline-tuple form (backward-compatible). | **L5-14** (NEW) |
 
 ---
 
-## L5 backlog additions (deferrals from L3.5)
+## L5 backlog additions (deferrals from L3.5 + L3.5b)
+
+### L5-13 — CDRS notes migration symmetry with CRPS
+
+**Status**: pending (deferred from 3.5b per Codex 5.5 review finding X,
+severity LOW).
+**Effort**: 1–2h.
+**Triggered by**: Codex L3.5 review finding X.
+**Priority**: Tier 3 (low / nice-to-have).
+**Description**: Codex L3.5 review finding X (LOW): CRPS notes
+migration is clean (3.5D AM25 migrated `metadata_extra` → `notes`);
+CDRS mostly leaves V/T notes in `metadata_extra` and does not yet
+propagate NBER pre-1978 training caveats into `ScoredObservation.notes`.
+Not currently biting because CDRS does not use Option Z components and
+pre-1978 is unreachable, but the symmetry claim made in 3.5D
+verification is ahead of implementation. Migrate CDRS notes propagation
+to use the same `_format_pit_lineage_notes()` helper as CRPS; add NBER
+pre-1978 caveat propagation when `pre_1978_training_only` flag is
+True. Touches `scoring/cdrs.py` + tests. Right-sized scope when L5
+walk-forward CV begins exercising training-mode code paths.
+
+### L5-14 — Comprehensive AP-6 hygiene sweep across out-of-scope categories
+
+**Status**: pending (deferred from 3.5b-V per D30 + V/Strategic
+approval).
+**Effort**: 3–5h.
+**Triggered by**: D30 + 3.5b-V AST-walk audit identifying 16 broad
+`except Exception:` blocks in loaders rebuild flows, validation
+framework error reporting, and math fallbacks that are out of Codex
+finding V scope but follow related anti-patterns.
+**Priority**: Tier 3 (low / nice-to-have).
+
+**Description**: 16 sites identified in `LAYER_3_5b_V_PREFLIGHT.md`
+§2.1 out-of-scope table:
+- math fallbacks (`analysis/newey_west_hac.py:77`, `analysis/r_squared_panel.py:167`) — 2 sites; legitimate numerical edge cases but could be narrowed to specific math types
+- tmp-cleanup (`cache.py:50, 65`) — 2 sites; legitimate (rethrows original); narrow to expected I/O types if possible
+- loader rebuild flows (`loaders/atlanta_wage.py:52`, `loaders/fred_vintage_panel.py:248`, `loaders/hlw_rstar.py:65`, `loaders/shiller.py:102`, `loaders/yahoo_loader.py:363, 474`) — 6 sites; idiomatic rebuild-on-failure pattern but could be narrowed to specific I/O / parse / network types
+- validation gate framework error reporting (`validation.py:1310, 1330, 1518, 1736, 1763, 1853, 2277, 2376, 2450`) — 9 sites; framework-level (gates collect errors into findings); could be narrowed to specific gate-runtime types
+
+Each category has different idioms; sweep would need per-category analysis.
+Out of scope for L3.5b which targeted Codex finding V scoring/regime tree.
+Right-sized for L4/L5 hygiene window when broader codebase reviews are
+on the table.
 
 ### L5-12 — Full `SeriesConfig` dataclass migration
 
@@ -43,7 +88,23 @@ existing tests that read the dict.
 
 ---
 
-## L7 backlog additions (deferrals from L3.5)
+## L7 backlog additions (deferrals from L3.5 + L3.5b)
+
+### L7-MIGRATE-1 — Discrete migration sprint for legacy caches without `data_sha256`
+
+**Status**: pending (deferred from 3.5b-T per D28).
+**Effort**: 1–2h.
+**Triggered by**: D28 (AM-3.5b-T-1=A — strict-only enforcement; transitional scaffold deferred).
+**Priority**: Tier 4 (cold / contingent).
+**Description**: If a future fresh deployment of the pipeline (e.g.,
+new clone + first-time loader population in a clean environment)
+surfaces legacy caches without `data_sha256`, run a discrete migration
+sprint: walk `data/cache/`, read each parquet, compute sha256, rewrite
+sidecar via `cache.atomic_write_bytes` with `data_sha256` populated.
+Same one-shot pattern applied at 3.5E STEP 0 for the 5 stale CFTC + HLW
+sidecars. After migration completes, `python -m macro_pipeline.utils.cache_audit`
+should report 0 issues. Only triggered when legacy cache state is
+empirically observed; not a forward-prevention task.
 
 ### L7-CI-1 — CI-level env-hygiene check (declared deps == installed)
 

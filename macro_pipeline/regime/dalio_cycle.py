@@ -27,6 +27,7 @@ import numpy as np
 import pandas as pd
 
 from macro_pipeline.access import PitDataContext, load_series
+from macro_pipeline.exceptions import legitimate_missing_data_exceptions
 
 PHASES = ("early", "mid", "late", "deleveraging", "indeterminate")
 
@@ -78,7 +79,7 @@ def _real_rate_now(ctx: PitDataContext) -> float | None:
     try:
         gs10 = _pit_series("SHILLER_GS10", ctx)
         cpi = _pit_series("SHILLER_CPI", ctx)
-    except Exception:
+    except legitimate_missing_data_exceptions():
         return None
     if gs10.empty or cpi.empty:
         return None
@@ -106,7 +107,7 @@ def _compute_metrics(ctx: PitDataContext) -> tuple[dict[str, float], list[str]]:
             window = d[d.index >= cutoff]
             if not window.empty:
                 m["debt_gdp_5y_avg"] = float(window.mean())
-    except Exception as exc:
+    except legitimate_missing_data_exceptions() as exc:
         notes.append(f"debt/GDP: {type(exc).__name__}: {exc}")
 
     # ---- Interest expense ratio (E) — A091.../FGRECPT × 100 ----
@@ -129,7 +130,7 @@ def _compute_metrics(ctx: PitDataContext) -> tuple[dict[str, float], list[str]]:
                 ratio_5y = (i5.loc[common_idx] / r5.loc[common_idx] * 100.0).dropna()
                 if not ratio_5y.empty:
                     m["interest_pct_revenue_5y_avg"] = float(ratio_5y.mean())
-    except Exception as exc:
+    except legitimate_missing_data_exceptions() as exc:
         notes.append(f"interest/receipts: {type(exc).__name__}: {exc}")
 
     # ---- R-star (HLW vintage panel) ----
@@ -139,7 +140,7 @@ def _compute_metrics(ctx: PitDataContext) -> tuple[dict[str, float], list[str]]:
             m["r_star_pct"] = float(rstar.iloc[-1])
         else:
             notes.append("HLW_RSTAR: empty in PIT view")
-    except Exception as exc:
+    except legitimate_missing_data_exceptions() as exc:
         notes.append(f"HLW_RSTAR: {type(exc).__name__}: {exc}")
 
     # ---- Real 10Y rate ----

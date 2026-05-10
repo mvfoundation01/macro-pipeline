@@ -31,9 +31,6 @@ import pandas as pd
 from macro_pipeline.access import PitDataContext
 from macro_pipeline.regime.dalio_cycle import DalioResult, classify_dalio
 from macro_pipeline.regime.exceptions import (
-    HmmArtifactCorruptError,
-    HmmArtifactMissingError,
-    HmmMetadataIncompatibleError,
     PitDataUnavailableError,
     RegimeContextError,
 )
@@ -293,25 +290,22 @@ def build_regime_context(
         hmm_result = None
         notes.append("hmm: skipped (skip_hmm=True)")
     else:
-        # Layer 3.5E (D27 — refined §12.4 sub-option a): catch ONLY
-        # the three HMM-artifact-data error types where "log + continue
-        # without HMM" is a legitimate degradation path. Let
-        # ``HmmConcurrencyError`` (lock-acquisition timeout — transient
-        # infra), ``RegimeClassifierError`` (env / config issue, e.g.
-        # missing filelock), and any other unexpected exception
-        # propagate so they fail loudly. The previous broad
-        # ``except Exception`` was AP-6 and was empirically shown to
-        # mask environment-hygiene gaps as silent regime-state shifts
-        # (filelock-missing → hmm=None → derive returns 'expansion'
-        # instead of 'indeterminate'); see LAYER_3_5_3.5E_PREFLIGHT.md
-        # §12 for the diagnostic trail.
+        # Layer 3.5E D27 (refined §12.4 sub-option a) introduced the
+        # narrow inline tuple. Layer 3.5b-V D30 consolidates that
+        # tuple into the shared ``legitimate_missing_data_exceptions``
+        # helper used across the scoring/regime tree (V1-V5, T1-T5,
+        # kindleberger, dalio_cycle, and this site). The helper adds
+        # ``PitDataUnavailableError`` to the caught types — empirically
+        # zero impact at this site (``predict_state`` doesn't raise
+        # that type in current paths; only ``regime/nber_extract.py``
+        # raises it). The D27 empirical case
+        # (``RegimeClassifierError`` for filelock-missing) stays out
+        # of the helper → propagates correctly. ``HmmConcurrencyError``
+        # also propagates (transient infra; should fail loudly).
+        from macro_pipeline.exceptions import legitimate_missing_data_exceptions
         try:
             hmm_result = predict_state(ctx)
-        except (
-            HmmArtifactMissingError,
-            HmmArtifactCorruptError,
-            HmmMetadataIncompatibleError,
-        ) as exc:
+        except legitimate_missing_data_exceptions() as exc:
             hmm_result = None
             notes.append(f"hmm: {type(exc).__name__}: {exc}")
 

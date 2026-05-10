@@ -30,6 +30,7 @@ import numpy as np
 import pandas as pd
 
 from macro_pipeline.access import PitDataContext, load_series
+from macro_pipeline.exceptions import legitimate_missing_data_exceptions
 
 PHASES = ("displacement", "boom", "euphoria", "distress", "revulsion", "indeterminate")
 
@@ -84,7 +85,7 @@ def _compute_metrics(ctx: PitDataContext) -> tuple[dict[str, float], list[str]]:
             cape_now = float(cape.iloc[-1])
             m["cape_value"] = cape_now
             m["cape_rank_full"] = _percentile_rank(cape, cape_now)
-    except Exception as exc:
+    except legitimate_missing_data_exceptions() as exc:
         notes.append(f"CAPE: {type(exc).__name__}: {exc}")
 
     # ---- Margin debt: FINRA z-score (24M rolling) + YoY growth ----
@@ -101,7 +102,7 @@ def _compute_metrics(ctx: PitDataContext) -> tuple[dict[str, float], list[str]]:
                 m["margin_yoy_pct"] = (margin_now / float(margin_y_ago.iloc[-1]) - 1.0) * 100.0
         else:
             notes.append("FINRA margin debt: insufficient history (needs 24+ months)")
-    except Exception as exc:
+    except legitimate_missing_data_exceptions() as exc:
         notes.append(f"FINRA: {type(exc).__name__}: {exc}")
 
     # ---- HY OAS: 30-day change + LT median + current ----
@@ -117,7 +118,7 @@ def _compute_metrics(ctx: PitDataContext) -> tuple[dict[str, float], list[str]]:
                 m["hy_oas_30d_delta_bps"] = (float(hy.iloc[-1]) - float(past.iloc[-1])) * 100.0
         else:
             notes.append("HY OAS: empty in PIT view (BAMLH0A0HYM2 starts 1996-12)")
-    except Exception as exc:
+    except legitimate_missing_data_exceptions() as exc:
         notes.append(f"HY OAS: {type(exc).__name__}: {exc}")
 
     # ---- VIX: 12M rolling z-score ----
@@ -133,7 +134,7 @@ def _compute_metrics(ctx: PitDataContext) -> tuple[dict[str, float], list[str]]:
                 m["vix_z_12m"] = (vix_now - mu) / sigma
         else:
             notes.append("VIX: insufficient history (needs 60+ days)")
-    except Exception as exc:
+    except legitimate_missing_data_exceptions() as exc:
         notes.append(f"VIX: {type(exc).__name__}: {exc}")
 
     # ---- Equity drawdown vs 52W high (use SHILLER_REAL_PRICE for long history) ----
@@ -148,7 +149,7 @@ def _compute_metrics(ctx: PitDataContext) -> tuple[dict[str, float], list[str]]:
                 m["equity_drawdown_pct"] = (cur / peak - 1.0) * 100.0  # negative when below peak
         else:
             notes.append("SHILLER_REAL_PRICE: empty in PIT view")
-    except Exception as exc:
+    except legitimate_missing_data_exceptions() as exc:
         notes.append(f"SHILLER_REAL_PRICE: {type(exc).__name__}: {exc}")
 
     # ---- AAII bull % rank (sentiment) ----
@@ -159,7 +160,7 @@ def _compute_metrics(ctx: PitDataContext) -> tuple[dict[str, float], list[str]]:
             m["aaii_bull_rank_full"] = _percentile_rank(aaii, float(aaii.iloc[-1]))
         else:
             notes.append("AAII_BULL_8WMA: empty in PIT view")
-    except Exception as exc:
+    except legitimate_missing_data_exceptions() as exc:
         notes.append(f"AAII: {type(exc).__name__}: {exc}")
 
     return m, notes
