@@ -118,7 +118,7 @@ FRED_SERIES_API: dict[str, dict] = {
     # --- Sahm rule / labor market ---
     "SAHMREALTIME": {
         "freq": "M", "vintage": True, "unit": "pct",
-        "expected_min": -1.0, "expected_max": 10.0, "release_lag_days": 7,
+        "expected_min": -1.0, "expected_max": 10.0, "release_lag_days": 30,
         # Layer 1.5C.4 re-classification (ChatGPT review):
         # Sahm is COINCIDENT, not 12M-leading. CRPS/CDRS builders that
         # ask for a 12M_leading_composite must reject this indicator.
@@ -151,7 +151,19 @@ FRED_SERIES_API: dict[str, dict] = {
             "time per the Sahm Rule definition (Atlanta Fed methodology). "
             "Caveat: seasonal factor revisions can affect recent values "
             "after annual BLS benchmark refreshes. See scoring/README.md §D20 "
-            "for the full Option Z rationale."
+            "for the full Option Z rationale. "
+            "Layer 3.5b-U release_lag application (D29): the FRED index is "
+            "first day of the observation month; the underlying Sahm value "
+            "for month M is computable when UNRATE M is released — i.e. on "
+            "the first Friday of month M+1 (~30-37 days after the index "
+            "date). The Option Z by-construction branch applies "
+            "release_lag_days=30 via to_visibility_index so PIT queries "
+            "do not leak unpublished current-month observations. Empirical "
+            "verification at as_of=2025-06-15: returns May 2025 obs (visible "
+            "since publication ~2025-06-06), excludes June 2025 obs "
+            "(published ~2025-07-04). See LAYER_3_5b_U_PREFLIGHT.md §2.3 "
+            "for the bug-reproduction trail and §2.4 for the calibration "
+            "band derivation."
         ),
         "derived_confidence_cap": 0.70,
         "description": (

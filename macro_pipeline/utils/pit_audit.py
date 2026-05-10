@@ -80,6 +80,33 @@ def audit_pit_contracts() -> PitAuditReport:
                 )
             )
 
+        # Layer 3.5b-U (D29): Option Z series with non-zero release_lag_days
+        # MUST document the lag application in their construction rationale.
+        # Codex finding U surfaced silent metadata-vs-behavior drift; the
+        # rationale is now the contract that says "yes, this lag is applied
+        # by ``_load_via_visibility_shift::Branch 1``".
+        if is_construction:
+            lag = int(spec.get("release_lag_days", 0))
+            rationale = spec.get("pit_construction_rationale", "") or ""
+            if lag > 0 and "release_lag" not in rationale.lower():
+                report.mismatches.append(
+                    PitAuditMismatch(
+                        series_id=sid,
+                        vintage_in_config=is_vintage,
+                        in_vintage_required=in_panel,
+                        pit_safe_by_construction=is_construction,
+                        reason=(
+                            f"pit_safe_by_construction=True with "
+                            f"release_lag_days={lag}, but rationale does "
+                            "not mention 'release_lag' application. Add a "
+                            "sentence to pit_construction_rationale "
+                            "documenting that the by-construction branch "
+                            "applies to_visibility_index(..., release_lag_days)"
+                            " — Layer 3.5b-U D29 closure of Codex finding U."
+                        ),
+                    )
+                )
+
     return report
 
 

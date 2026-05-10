@@ -355,14 +355,18 @@ class PitSeriesReader:
         """
         stem = _find_cache_stem(indicator_id)
         s, meta = _read_cached_series_and_meta(stem, indicator_id)
-        lag = int(meta.get("release_lag_days", 0))
         needs_vintage = bool(meta.get("needs_vintage", False))
 
-        # Pull Option Z flags from live config (source of truth) with
-        # cache-meta fallback (so tests that mock meta with these keys
-        # work without re-importing config).
+        # Pull config from live source of truth (FRED_SERIES_API) with
+        # cache-meta fallback. Config is authoritative because the cache
+        # sidecar may have been written before a config update (e.g.,
+        # Layer 3.5b-U recalibrated SAHMREALTIME release_lag_days 7→30
+        # but the sidecar still records 7 until the next loader rewrite).
+        # Test fixtures that mock meta directly continue to work via the
+        # fallback.
         from macro_pipeline.config import FRED_SERIES_API
         spec = FRED_SERIES_API.get(indicator_id, {})
+        lag = int(spec.get("release_lag_days", meta.get("release_lag_days", 0)))
         pit_safe_by_construction = bool(
             spec.get("pit_safe_by_construction",
                      meta.get("pit_safe_by_construction", False))
@@ -375,22 +379,42 @@ class PitSeriesReader:
             meta.get("pit_construction_rationale"),
         )
 
-        # ---- Branch 1: Option Z ----
+        # ---- Branch 1: Option Z (Layer 3.5b-U closes Codex finding U) ----
         if needs_vintage and pit_safe_by_construction:
-            out = s[s.index <= as_of].copy()
-            out.name = indicator_id
+            # Pre-3.5b-U the truncation was a bare ``s[s.index <= as_of]``
+            # that ignored ``release_lag_days`` while metadata claimed
+            # ``applied_release_lag_days=lag`` — Codex finding U flagged this
+            # as a look-ahead-bias source for observation-month-indexed
+            # series like SAHMREALTIME. Apply the same visibility-shift
+            # discipline as Branch 3 below: shift the index by the
+            # configured release lag, truncate at as_of, restore the
+            # observation-date index. With SAHM's calibrated lag=30 (D29)
+            # this excludes the current observation month before its
+            # publication date.
+            if lag > 0:
+                shifted = to_visibility_index(s, lag)
+                visible = shifted[shifted.index <= as_of]
+                obs_idx = visible.index - pd.Timedelta(days=lag)
+                out = pd.Series(visible.values, index=obs_idx, name=indicator_id)
+            else:
+                out = s[s.index <= as_of].copy()
+                out.name = indicator_id
             note = (
                 f"{indicator_id}: pit_safe_by_construction=True; "
-                f"derived_confidence_cap={derived_cap}. "
+                f"derived_confidence_cap={derived_cap}; "
+                f"applied_release_lag_days={lag}. "
                 f"Rationale: {construction_rationale}"
             )
-            log.info("%s: PIT-safe by construction; cap=%s", indicator_id, derived_cap)
+            log.info(
+                "%s: PIT-safe by construction; cap=%s; lag=%dd applied",
+                indicator_id, derived_cap, lag,
+            )
             return IndicatorBundle(
                 indicator_id=indicator_id,
                 data=out,
                 metadata={
                     **meta,
-                    "pit_source": "by_construction_latest",
+                    "pit_source": "by_construction_visibility_shift" if lag > 0 else "by_construction_asof",
                     "pit_safe_by_construction": True,
                     "derived_confidence_cap": derived_cap,
                     "applied_release_lag_days": lag,
