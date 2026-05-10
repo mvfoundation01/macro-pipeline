@@ -34,13 +34,13 @@ Frequency: weekly (Tuesday positions, Friday release). Tier: 2A.
 """
 from __future__ import annotations
 
-import json
 import logging
 import os
 from datetime import UTC, datetime
 
 import pandas as pd
 
+from macro_pipeline.cache import write_cache_atomic
 from macro_pipeline.config import DATA_CACHE, DATA_RAW
 from macro_pipeline.loaders.base import IndicatorMetadata, Loader
 
@@ -142,11 +142,15 @@ def load_cftc_tff_treasury(
         meta_out[indicator_id] = meta
 
         # Cache as a single-column parquet (consistent with other loaders).
-        DATA_CACHE.mkdir(parents=True, exist_ok=True)
-        parquet = DATA_CACHE / f"official_{indicator_id}.parquet"
-        sidecar = DATA_CACHE / f"official_{indicator_id}.meta.json"
-        net.to_frame(indicator_id).to_parquet(parquet)
-        sidecar.write_text(json.dumps(meta.to_dict(), default=str, indent=2))
+        # Layer 3.5E: route through ``write_cache_atomic`` so parquet +
+        # sidecar are committed atomically with sha256/schema_version/
+        # row_count/cache_written_at fields populated.
+        write_cache_atomic(
+            stem=f"official_{indicator_id}",
+            df=net.to_frame(indicator_id),
+            meta=meta.to_dict(),
+            cache_dir=DATA_CACHE,
+        )
 
     return series_out, meta_out
 

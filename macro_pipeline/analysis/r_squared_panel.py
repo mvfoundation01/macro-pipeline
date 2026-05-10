@@ -285,89 +285,80 @@ def write_panel_atomic(
     *,
     pickle_path: Path | str | None = None,
 ) -> tuple[Path, dict]:
-    """Atomic-write the panel parquet + sidecar (Layer 1.5A.5)."""
+    """Atomic-write the panel parquet + sidecar.
+
+    Layer 1.5A.5 for the original implementation; refactored at L3.5E
+    (D26) to route through the public ``cache.write_cache_atomic_subdir``
+    helper rather than the previously-private ``_write_atomic_subdir``.
+    The user-visible contract is unchanged: same target path, same
+    sidecar fields.
+    """
+    from macro_pipeline.cache import write_cache_atomic_subdir
+
     pickle_path = Path(pickle_path) if pickle_path is not None else PANEL_CACHE_PATH
-    pickle_path.parent.mkdir(parents=True, exist_ok=True)
-    # Note: cache.write_cache_atomic writes to <DATA_CACHE>/<stem>.parquet,
-    # but we want the file inside data/cache/analysis/. Use the local
-    # _write_atomic_subdir helper instead.
+    cache_root = pickle_path.parent.parent
+    subdir = pickle_path.parent.name
+    filename = pickle_path.name
     meta = {
-        "indicator_id":   "r_squared_panel",
-        "schema_version": PANEL_SCHEMA_VERSION,
-        "source":         "LAYER_3D_R_SQUARED_PANEL",
-        "frequency":      "panel",
-        "unit":           "regression_stats",
-        "row_count":      int(panel.shape[0]),
+        "indicator_id":      "r_squared_panel",
+        "schema_version":    PANEL_SCHEMA_VERSION,
+        "source":            "LAYER_3D_R_SQUARED_PANEL",
+        "frequency":         "panel",
+        "unit":              "regression_stats",
+        "pipeline_processed": True,
     }
-    return _write_atomic_subdir(panel, pickle_path, meta)
-
-
-def _write_atomic_subdir(
-    df: pd.DataFrame, target_path: Path, meta: dict,
-) -> tuple[Path, dict]:
-    """Mirror ``write_cache_atomic`` but allow a non-default subdir."""
-    import hashlib
-    import json
-    import os
-    import tempfile
-
-    parent = target_path.parent
-    parent.mkdir(parents=True, exist_ok=True)
-    sidecar = target_path.with_suffix(".meta.json")
-
-    # Write parquet to a temp file in the same directory then rename.
-    fd, tmp_parquet = tempfile.mkstemp(
-        prefix="_writing_", suffix=".parquet", dir=str(parent),
+    return write_cache_atomic_subdir(
+        subdir=subdir,
+        filename=filename,
+        df=panel,
+        meta=meta,
+        cache_root=cache_root,
     )
-    os.close(fd)
-    try:
-        df.to_parquet(tmp_parquet, index=False)
-        with open(tmp_parquet, "rb") as fh:
-            data_sha = hashlib.sha256(fh.read()).hexdigest()
-        meta_full = {
-            **meta,
-            "data_sha256": data_sha,
-            "row_count":   int(df.shape[0]),
-            "pipeline_processed": True,
-        }
-        # rename parquet
-        os.replace(tmp_parquet, target_path)
-    finally:
-        if os.path.exists(tmp_parquet):
-            os.remove(tmp_parquet)
-
-    # Atomic sidecar write
-    fd, tmp_sidecar = tempfile.mkstemp(
-        prefix="_writing_", suffix=".meta.json", dir=str(parent),
-    )
-    os.close(fd)
-    try:
-        with open(tmp_sidecar, "w", encoding="utf-8") as fh:
-            json.dump(meta_full, fh, indent=2, default=str)
-        os.replace(tmp_sidecar, sidecar)
-    finally:
-        if os.path.exists(tmp_sidecar):
-            os.remove(tmp_sidecar)
-
-    return target_path, meta_full
 
 
 def load_panel(pickle_path: Path | str | None = None) -> pd.DataFrame:
-    """Load the cached R^2 panel parquet."""
+    """Load the cached R^2 panel parquet with sha256 + sidecar validation.
+
+    Layer 3.5E (Codex review N): the previous implementation called
+    ``pd.read_parquet`` directly on path-existence; that path is now
+    routed through ``cache.read_cache_validated_subdir`` so any sidecar
+    drift / sha256 mismatch / schema_version mismatch fails closed
+    rather than silently returning a stale or corrupted panel.
+    """
+    from macro_pipeline.cache import read_cache_validated_subdir
+
     pickle_path = Path(pickle_path) if pickle_path is not None else PANEL_CACHE_PATH
-    if not pickle_path.exists():
-        raise FileNotFoundError(
-            f"R^2 panel not built: {pickle_path}. Run build_panel + "
-            "write_panel_atomic first."
-        )
-    return pd.read_parquet(pickle_path)
+    cache_root = pickle_path.parent.parent
+    subdir = pickle_path.parent.name
+    filename = pickle_path.name
+    df, _meta = read_cache_validated_subdir(
+        subdir=subdir,
+        filename=filename,
+        expected_schema_version=PANEL_SCHEMA_VERSION,
+        cache_root=cache_root,
+    )
+    return df
 
 
 def build_and_cache(force: bool = False) -> tuple[pd.DataFrame, Path]:
     """Convenience: build then atomic-write. If a cache already exists
-    and ``force=False``, skip the rebuild and return the cached panel."""
+    and ``force=False``, skip the rebuild and return the cached panel.
+
+    Layer 3.5E (Codex review N): when reusing the cache (``force=False``
+    + path exists), validate the sidecar via ``load_panel`` so a
+    corrupted or schema-mismatched cache forces a rebuild rather than
+    silently returning stale data.
+    """
+    from macro_pipeline.exceptions import CacheValidationError
+
     if not force and PANEL_CACHE_PATH.exists():
-        return load_panel(PANEL_CACHE_PATH), PANEL_CACHE_PATH
+        try:
+            return load_panel(PANEL_CACHE_PATH), PANEL_CACHE_PATH
+        except (FileNotFoundError, CacheValidationError) as exc:
+            log.warning(
+                "R^2 panel cache invalid (%s: %s); rebuilding.",
+                type(exc).__name__, exc,
+            )
     panel = build_panel()
     path, _ = write_panel_atomic(panel)
     return panel, path

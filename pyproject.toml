@@ -95,6 +95,9 @@ ignore = ["E501", "RUF002", "RUF003", "RUF046", "RUF059"]
 # sub-phase tags (3_5B / 3_5D), and class-style identifiers.
 "tests/test_regime_dissent.py" = ["E402", "N802"]
 "tests/test_scored_observation_rename.py" = ["E402", "N802"]
+# L3.5E cache-validation tests: test names embed CacheValidationError +
+# FileNotFoundError class names for grep-ability.
+"tests/test_cache_validation.py" = ["E402", "N802"]
 # L3.5D RegimeState(str, Enum) is the spec-literal form (§6.3-1). Python
 # 3.11+ offers StrEnum but spec compatibility takes precedence.
 "macro_pipeline/regime/regime_context.py" = ["UP042"]

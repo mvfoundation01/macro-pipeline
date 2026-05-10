@@ -196,9 +196,24 @@ def compute_cdrs(ctx: PitDataContext) -> ScoredObservation:
     indicator_ids = _collect_indicator_ids(v_result, t_result)
     for indicator_id in indicator_ids:
         from macro_pipeline.access import load_series
+        from macro_pipeline.exceptions import (
+            IndicatorLoadError,
+            PitContractViolationError,
+        )
+        # Layer 3.5E (D27 — refined §12.4 sub-option a): narrow to the
+        # concrete exception types ``load_series`` can raise. Anything
+        # else (MemoryError, KeyboardInterrupt, …) propagates so we
+        # don't silently mis-aggregate caps when something unexpected
+        # breaks.
         try:
             bundle = load_series(indicator_id, as_of=ctx.as_of)
-        except Exception:
+        except (
+            FileNotFoundError,
+            ValueError,
+            KeyError,
+            PitContractViolationError,
+            IndicatorLoadError,
+        ):
             continue
         applied = compute_final_confidence_cap(
             bundle.metadata, as_of=ctx.as_of, horizon_months=12,
@@ -382,11 +397,24 @@ def _component_sources(v_active: list[str], t_active: list[str]) -> dict[str, st
 def _aggregate_pit_source(indicator_ids: list[str], ctx: PitDataContext) -> str:
     """Aggregated PIT source label across components."""
     from macro_pipeline.access import load_series
+    from macro_pipeline.exceptions import (
+        IndicatorLoadError,
+        PitContractViolationError,
+    )
     sources: set[str] = set()
     for ind in indicator_ids:
+        # Layer 3.5E (D27 — refined §12.4 sub-option a): narrow to
+        # known ``load_series`` raise tuple. Unknown exceptions
+        # propagate.
         try:
             bundle = load_series(ind, as_of=ctx.as_of)
-        except Exception:
+        except (
+            FileNotFoundError,
+            ValueError,
+            KeyError,
+            PitContractViolationError,
+            IndicatorLoadError,
+        ):
             continue
         sources.add(bundle.metadata.get("pit_source", "unknown"))
     if not sources:

@@ -31,6 +31,9 @@ import pandas as pd
 from macro_pipeline.access import PitDataContext
 from macro_pipeline.regime.dalio_cycle import DalioResult, classify_dalio
 from macro_pipeline.regime.exceptions import (
+    HmmArtifactCorruptError,
+    HmmArtifactMissingError,
+    HmmMetadataIncompatibleError,
     PitDataUnavailableError,
     RegimeContextError,
 )
@@ -290,9 +293,25 @@ def build_regime_context(
         hmm_result = None
         notes.append("hmm: skipped (skip_hmm=True)")
     else:
+        # Layer 3.5E (D27 — refined §12.4 sub-option a): catch ONLY
+        # the three HMM-artifact-data error types where "log + continue
+        # without HMM" is a legitimate degradation path. Let
+        # ``HmmConcurrencyError`` (lock-acquisition timeout — transient
+        # infra), ``RegimeClassifierError`` (env / config issue, e.g.
+        # missing filelock), and any other unexpected exception
+        # propagate so they fail loudly. The previous broad
+        # ``except Exception`` was AP-6 and was empirically shown to
+        # mask environment-hygiene gaps as silent regime-state shifts
+        # (filelock-missing → hmm=None → derive returns 'expansion'
+        # instead of 'indeterminate'); see LAYER_3_5_3.5E_PREFLIGHT.md
+        # §12 for the diagnostic trail.
         try:
             hmm_result = predict_state(ctx)
-        except Exception as exc:
+        except (
+            HmmArtifactMissingError,
+            HmmArtifactCorruptError,
+            HmmMetadataIncompatibleError,
+        ) as exc:
             hmm_result = None
             notes.append(f"hmm: {type(exc).__name__}: {exc}")
 

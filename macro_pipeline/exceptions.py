@@ -194,7 +194,45 @@ class PitContractViolationError(Exception):
         return " ".join(parts)
 
 
+# ---------------------------------------------------------------------------
+# Layer 3.5E — cache validation (parquet + sidecar sha256 / schema / row_count).
+# ---------------------------------------------------------------------------
+@dataclass
+class CacheValidationError(Exception):
+    """Raised by ``cache.read_cache_validated_subdir`` when a parquet
+    file fails to validate against its sidecar (sha256 mismatch,
+    schema_version mismatch, row_count mismatch, or missing fields).
+
+    Distinct from the existing top-level ``cache.read_cache_validated``
+    helper, which **returns ``None``** on any validation failure (silent
+    fallback). The L3.5E subdir variant **raises** instead, so callers
+    that route through the new helper get a hard fail-closed contract;
+    Codex review C/N/Q + ChatGPT Dim 12 (atomicity portion).
+
+    This is intentionally outside the ``IndicatorLoadError`` hierarchy
+    (those exceptions describe loader-level network / auth / parse
+    failures); a cache validation failure is a *post-write integrity*
+    issue and is independent of the original loader.
+    """
+
+    path: str
+    reason: str = ""
+    context: dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        super().__init__(str(self))
+
+    def __str__(self) -> str:  # pragma: no cover - cosmetic
+        parts = [f"[CACHE/{self.path}]"]
+        if self.reason:
+            parts.append(self.reason)
+        if self.context:
+            parts.append(f"context={self.context}")
+        return " ".join(parts)
+
+
 __all__ = [
+    "CacheValidationError",
     "IndicatorAuthError",
     "IndicatorLoadError",
     "IndicatorNetworkError",

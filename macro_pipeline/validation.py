@@ -2003,7 +2003,12 @@ def validate_gate11_r_squared_panel() -> GateReport:
                 f"beta={cape_beta:.4f}, p_NW={cape_p:.4g}"
             )
 
-    # 6. Atomic cache sidecar
+    # 6. Atomic cache sidecar — Layer 3.5E (Gate 11 tightening): RECOMPUTE
+    # the parquet's sha256 from disk and require a match with the
+    # sidecar's ``data_sha256``. The previous implementation accepted any
+    # 64-char hash; that was a length check that would silently pass if
+    # a parquet was tampered with after the cache was written.
+    import hashlib
     import json
     parquet_path = pd_resolve_panel_path(PANEL_CACHE_PATH)
     sidecar_path = parquet_path.with_suffix(".meta.json")
@@ -2016,13 +2021,32 @@ def validate_gate11_r_squared_panel() -> GateReport:
         sha = md.get("data_sha256")
         sv = md.get("schema_version")
         rc = md.get("row_count")
+        # Recompute sha256 of the parquet bytes and compare.
+        h = hashlib.sha256()
+        with parquet_path.open("rb") as fh:
+            for chunk in iter(lambda: fh.read(1 << 20), b""):
+                h.update(chunk)
+        actual_sha = h.hexdigest()
         summary["panel_parquet"] = str(parquet_path)
         summary["panel_sha256"] = sha
+        summary["panel_sha256_recomputed"] = actual_sha
         summary["panel_schema_version"] = sv
         summary["panel_row_count"] = rc
-        if sha and len(sha) == 64 and sv == PANEL_SCHEMA_VERSION and rc == total:
+        if (
+            sha
+            and sha == actual_sha
+            and sv == PANEL_SCHEMA_VERSION
+            and rc == total
+        ):
             findings.append(
-                f"Atomic cache OK: sha256[:8]={sha[:8]}, schema={sv}, rows={rc}"
+                f"Atomic cache OK (sha-recomputed): sha256[:8]={sha[:8]}, "
+                f"schema={sv}, rows={rc}"
+            )
+        elif sha and sha != actual_sha:
+            findings.append(
+                f"FAIL: atomic cache sha256 mismatch — sidecar={sha[:16]}..., "
+                f"recomputed={actual_sha[:16]}... (parquet has been modified "
+                "post-cache)"
             )
         else:
             findings.append(
@@ -2844,6 +2868,178 @@ def _cli_gate15() -> int:
     return 0 if report.passed else 1
 
 
+# ---------------------------------------------------------------------------
+# Gate 16 — Layer 3.5E cache integrity
+# ---------------------------------------------------------------------------
+def validate_gate16_cache_integrity() -> GateReport:
+    """Gate 16 — Layer 3.5E cache integrity.
+
+    Sub-criteria (per ``LAYER_3_5_BUILD_SPEC.md`` §7.6):
+
+    1. ``cache.read_cache_validated_subdir`` exists and is reachable
+       from ``analysis.load_panel`` (i.e. ``load_panel`` no longer
+       calls ``pd.read_parquet`` directly on the panel path).
+    2. Zero direct ``df.to_parquet(...)`` calls in
+       ``macro_pipeline/loaders/`` (excluding the wrapper
+       ``cache_series_to_parquet`` and ``cache.write_cache_atomic``).
+    3. Gate 11 recomputes sha256 (not length-checked) — verified by
+       the new ``panel_sha256_recomputed`` summary key in Gate 11's
+       output schema.
+    4. The three flagged ``except Exception:`` blocks at
+       ``regime/regime_context.py`` (HMM-predict catch),
+       ``scoring/cdrs.py`` (quality-cap loop) and ``scoring/cdrs.py``
+       (PIT-source aggregation loop) have been narrowed.
+    5. ``validate_cache_integrity()`` reports zero issues against the
+       current cache.
+    6. The new ``CacheValidationError`` class is exported from
+       ``macro_pipeline.exceptions``.
+    """
+    from pathlib import Path
+
+    from macro_pipeline.cache import (
+        read_cache_validated_subdir,
+        write_cache_atomic_subdir,
+    )
+    from macro_pipeline.exceptions import CacheValidationError
+    from macro_pipeline.utils.cache_audit import validate_cache_integrity
+
+    findings: list[str] = []
+    warnings_list: list[str] = []
+    summary: dict = {}
+
+    pkg_root = Path(__file__).parent
+
+    # 1. read_cache_validated_subdir is importable and load_panel uses it.
+    if callable(read_cache_validated_subdir) and callable(write_cache_atomic_subdir):
+        findings.append(
+            "cache.read_cache_validated_subdir + write_cache_atomic_subdir present"
+        )
+    else:
+        findings.append(
+            "FAIL: cache subdir helpers missing or not callable"
+        )
+    panel_src = (pkg_root / "analysis" / "r_squared_panel.py").read_text(encoding="utf-8")
+    if (
+        "read_cache_validated_subdir" in panel_src
+        and "pd.read_parquet(pickle_path)" not in panel_src
+    ):
+        findings.append(
+            "analysis.load_panel routed through validated subdir read"
+        )
+    else:
+        findings.append(
+            "FAIL: analysis.load_panel still uses unvalidated pd.read_parquet"
+        )
+
+    # 2. Zero direct to_parquet in loaders/ (allow only the cache helper
+    #    + write_cache_atomic indirection).
+    bad_to_parquet: list[str] = []
+    for path in sorted((pkg_root / "loaders").glob("*.py")):
+        for line_no, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            if ".to_parquet(" not in line:
+                continue
+            if "cache_series_to_parquet" in line:
+                continue
+            bad_to_parquet.append(f"{path.name}:{line_no}: {line.strip()}")
+    summary["loader_to_parquet_residual"] = bad_to_parquet
+    if not bad_to_parquet:
+        findings.append(
+            "Zero direct to_parquet() calls in loaders/ (atomic-write contract)"
+        )
+    else:
+        findings.append(
+            f"FAIL: {len(bad_to_parquet)} direct to_parquet() in loaders/: "
+            f"{bad_to_parquet[:5]}"
+        )
+
+    # 3. Gate 11 sha-recompute marker present.
+    val_src = (pkg_root / "validation.py").read_text(encoding="utf-8")
+    if "panel_sha256_recomputed" in val_src and "actual_sha = h.hexdigest()" in val_src:
+        findings.append("Gate 11 recomputes sha256 (not length-checked)")
+    else:
+        findings.append("FAIL: Gate 11 still length-checks sha256")
+
+    # 4. Three narrowed exception sites have specific exception tuples.
+    rc_src = (pkg_root / "regime" / "regime_context.py").read_text(encoding="utf-8")
+    cdrs_src = (pkg_root / "scoring" / "cdrs.py").read_text(encoding="utf-8")
+    rc_narrow_ok = (
+        "HmmArtifactMissingError" in rc_src
+        and "HmmArtifactCorruptError" in rc_src
+        and "HmmMetadataIncompatibleError" in rc_src
+        and "except Exception" not in _around_predict_state(rc_src)
+    )
+    cdrs_narrow_count = cdrs_src.count("PitContractViolationError")
+    cdrs_narrow_ok = cdrs_narrow_count >= 2 and cdrs_src.count(
+        "except Exception"
+    ) == 0
+    summary["cdrs_narrow_count"] = cdrs_narrow_count
+    if rc_narrow_ok and cdrs_narrow_ok:
+        findings.append(
+            "Three flagged except-Exception blocks narrowed "
+            "(regime_context HMM-catch + 2 cdrs.load_series catches)"
+        )
+    else:
+        findings.append(
+            f"FAIL: exception narrowing incomplete: "
+            f"regime_context_ok={rc_narrow_ok}, cdrs_ok={cdrs_narrow_ok}"
+        )
+
+    # 5. validate_cache_integrity reports zero issues on current cache.
+    report = validate_cache_integrity()
+    summary["cache_audit_files_checked"] = report.files_checked
+    summary["cache_audit_files_ok"] = report.files_ok
+    summary["cache_audit_issues"] = [
+        {"path": str(i.path), "kind": i.kind, "detail": i.detail}
+        for i in report.issues
+    ]
+    if not report.has_issues:
+        findings.append(
+            f"validate_cache_integrity OK: "
+            f"{report.files_ok}/{report.files_checked} entries valid"
+        )
+    else:
+        findings.append(
+            f"FAIL: validate_cache_integrity reports "
+            f"{len(report.issues)} issue(s)"
+        )
+
+    # 6. CacheValidationError exported from macro_pipeline.exceptions.
+    try:
+        assert CacheValidationError is not None
+        findings.append("CacheValidationError exported from exceptions.py")
+    except (NameError, AssertionError):
+        findings.append("FAIL: CacheValidationError not importable")
+
+    passed = not any(f.startswith("FAIL") for f in findings)
+    return GateReport(
+        name="Gate 16 - Layer 3.5E Cache Integrity",
+        passed=passed, findings=findings, warnings=warnings_list,
+        summary=summary,
+    )
+
+
+def _around_predict_state(source: str) -> str:
+    """Return the lines surrounding the ``predict_state`` call. Used by
+    Gate 16 sub-criterion 4 to verify the broad ``except Exception`` is
+    no longer present at that specific site (other broad ``except`` blocks
+    elsewhere are out of 3.5E scope)."""
+    lines = source.splitlines()
+    snippet: list[str] = []
+    for i, line in enumerate(lines):
+        if "predict_state(ctx)" in line:
+            snippet = lines[max(0, i - 2) : min(len(lines), i + 6)]
+            break
+    return "\n".join(snippet)
+
+
+def _cli_gate16() -> int:
+    import logging
+    logging.basicConfig(level="WARNING", format="%(message)s")
+    report = validate_gate16_cache_integrity()
+    print(report.render())
+    return 0 if report.passed else 1
+
+
 def _cli_gate10() -> int:
     import logging
     logging.basicConfig(level="WARNING", format="%(message)s")
@@ -2904,10 +3100,12 @@ if __name__ == "__main__":
         sys.exit(_cli_gate14())
     if cmd == "gate15":
         sys.exit(_cli_gate15())
+    if cmd == "gate16":
+        sys.exit(_cli_gate16())
     print(
         f"Unknown command: {cmd}. Available: "
         "gate1, gate2, gate3, gate4a, gate4b, gate4c, gate4d, "
-        "gate8, gate9, gate10, gate11, gate12, gate13, gate14, gate15",
+        "gate8, gate9, gate10, gate11, gate12, gate13, gate14, gate15, gate16",
         file=sys.stderr,
     )
     sys.exit(2)

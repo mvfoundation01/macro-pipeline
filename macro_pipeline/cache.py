@@ -162,6 +162,185 @@ def write_pickle_atomic_with_meta(
     return pickle_path, meta_path
 
 
+def write_cache_atomic_subdir(
+    subdir: str,
+    filename: str,
+    df: pd.DataFrame,
+    meta: dict,
+    *,
+    cache_root: Path | None = None,
+) -> tuple[Path, Path]:
+    """Atomic write of ``<cache_root>/<subdir>/<filename>`` + sidecar.
+
+    Layer 3.5E-AM28 (D26): symmetric public counterpart to
+    ``read_cache_validated_subdir``. Mirrors ``write_cache_atomic`` but
+    writes to an arbitrary subdirectory under ``DATA_CACHE`` (or the
+    ``cache_root`` override) instead of using a flat ``stem`` at the
+    top level. Used by ``analysis.r_squared_panel`` and any future
+    consumer that needs subdir-organised caches with sidecar metadata.
+
+    The sidecar lives next to the parquet at ``<filename>.meta.json``
+    (with the ``.parquet`` suffix replaced by ``.meta.json``), rather
+    than ``<stem>.meta.json`` at the parent's top level.
+
+    Order of operations matches ``write_cache_atomic``:
+
+      1. Write parquet to a tmp file in the same directory then rename.
+      2. Compute the parquet's sha256 from disk.
+      3. Stamp ``data_sha256`` / ``schema_version`` / ``row_count`` /
+         ``cache_written_at`` onto the meta dict.
+      4. Atomically write meta JSON.
+
+    Returns ``(parquet_path, meta_path)``.
+    """
+    from macro_pipeline.config import DATA_CACHE
+
+    base = Path(cache_root) if cache_root is not None else DATA_CACHE
+    target_dir = base / subdir
+    target_dir.mkdir(parents=True, exist_ok=True)
+
+    # Filename is supplied with extension (e.g. ``r_squared_panel.parquet``);
+    # sidecar swaps the suffix.
+    filename = str(filename)
+    parquet_path = target_dir / filename
+    if parquet_path.suffix != ".parquet":
+        raise ValueError(
+            f"write_cache_atomic_subdir: filename must end in .parquet "
+            f"(got {filename!r})"
+        )
+    meta_path = parquet_path.with_suffix(".meta.json")
+
+    atomic_write_parquet(parquet_path, df)
+    data_sha256 = _sha256_file(parquet_path)
+
+    meta_full = dict(meta)
+    meta_full["data_sha256"] = data_sha256
+    meta_full.setdefault("schema_version", SCHEMA_VERSION)
+    meta_full["row_count"] = int(df.shape[0])
+    meta_full.setdefault("cache_written_at", pd.Timestamp.now().isoformat())
+
+    payload = json.dumps(meta_full, default=str, indent=2).encode("utf-8")
+    atomic_write_bytes(meta_path, payload)
+    return parquet_path, meta_path
+
+
+def read_cache_validated_subdir(
+    subdir: str,
+    filename: str,
+    *,
+    expected_schema_version: str | None = None,
+    expected_min_row_count: int | None = None,
+    cache_root: Path | None = None,
+) -> tuple[pd.DataFrame, dict]:
+    """Read parquet from ``<cache_root>/<subdir>/<filename>`` with full
+    sidecar validation. **Raises** on any mismatch (vs. the legacy
+    top-level ``read_cache_validated`` which returns ``None``).
+
+    Layer 3.5E (Codex review C/N/Q + ChatGPT Dim 12 atomicity portion).
+
+    Validations:
+      1. Parquet file exists.
+      2. Sidecar (``<filename>.meta.json``) exists.
+      3. Sidecar JSON parses.
+      4. ``schema_version`` matches ``expected_schema_version`` (if
+         supplied) or the module-level ``SCHEMA_VERSION`` (default).
+      5. Recomputed parquet sha256 == sidecar ``data_sha256``.
+      6. Actual row_count == sidecar ``row_count`` (if recorded).
+      7. Actual row_count >= ``expected_min_row_count`` (if supplied).
+
+    Raises:
+        FileNotFoundError       parquet OR sidecar missing.
+        CacheValidationError    any other validation failure (sha
+                                mismatch, schema mismatch, row_count
+                                mismatch, sidecar JSON invalid, etc.).
+
+    Returns ``(df, meta_dict)`` on success.
+    """
+    from macro_pipeline.config import DATA_CACHE
+    from macro_pipeline.exceptions import CacheValidationError
+
+    base = Path(cache_root) if cache_root is not None else DATA_CACHE
+    parquet_path = base / subdir / filename
+    if parquet_path.suffix != ".parquet":
+        raise ValueError(
+            f"read_cache_validated_subdir: filename must end in .parquet "
+            f"(got {filename!r})"
+        )
+    meta_path = parquet_path.with_suffix(".meta.json")
+
+    if not parquet_path.exists():
+        raise FileNotFoundError(
+            f"Cache parquet not found: {parquet_path}. "
+            "Run the producer (e.g. analysis.build_and_cache) first."
+        )
+    if not meta_path.exists():
+        raise FileNotFoundError(
+            f"Cache sidecar not found: {meta_path}. "
+            "Parquet exists but sidecar is missing — re-run the producer."
+        )
+
+    try:
+        meta = json.loads(meta_path.read_bytes())
+    except json.JSONDecodeError as exc:
+        raise CacheValidationError(
+            path=str(parquet_path),
+            reason=f"sidecar JSON parse error: {exc}",
+            context={"meta_path": str(meta_path)},
+        ) from exc
+
+    expected_schema = expected_schema_version or SCHEMA_VERSION
+    if meta.get("schema_version") != expected_schema:
+        raise CacheValidationError(
+            path=str(parquet_path),
+            reason=(
+                f"schema_version mismatch: sidecar="
+                f"{meta.get('schema_version')!r}, expected={expected_schema!r}"
+            ),
+            context={"meta_path": str(meta_path)},
+        )
+
+    expected_hash = meta.get("data_sha256")
+    actual_hash = _sha256_file(parquet_path)
+    if not expected_hash:
+        raise CacheValidationError(
+            path=str(parquet_path),
+            reason="sidecar missing data_sha256 field",
+            context={"meta_path": str(meta_path)},
+        )
+    if actual_hash != expected_hash:
+        raise CacheValidationError(
+            path=str(parquet_path),
+            reason="sha256 mismatch (parquet has been modified post-cache)",
+            context={
+                "expected_sha256": expected_hash,
+                "actual_sha256": actual_hash,
+            },
+        )
+
+    df = pd.read_parquet(parquet_path)
+
+    expected_rows = meta.get("row_count")
+    if expected_rows is not None and len(df) != int(expected_rows):
+        raise CacheValidationError(
+            path=str(parquet_path),
+            reason=(
+                f"row_count mismatch: sidecar={expected_rows}, "
+                f"actual={len(df)}"
+            ),
+        )
+
+    if expected_min_row_count is not None and len(df) < int(expected_min_row_count):
+        raise CacheValidationError(
+            path=str(parquet_path),
+            reason=(
+                f"row_count below expected minimum: actual={len(df)}, "
+                f"expected_min={expected_min_row_count}"
+            ),
+        )
+
+    return df, meta
+
+
 def read_cache_validated(
     stem: str,
     cache_dir: Path,
@@ -216,6 +395,8 @@ __all__ = [
     "atomic_write_bytes",
     "atomic_write_parquet",
     "read_cache_validated",
+    "read_cache_validated_subdir",
     "write_cache_atomic",
+    "write_cache_atomic_subdir",
     "write_pickle_atomic_with_meta",
 ]
