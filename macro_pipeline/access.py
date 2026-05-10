@@ -459,8 +459,17 @@ class PitDataContext:
     Layer 5 should require ``PitDataContext`` as the only data-access
     argument so backtest code cannot accidentally pass a latest-view
     bundle. ``as_of=None`` raises immediately at construction time.
+
+    Layer 3.5C: ``is_real_time`` (default ``True``) governs the NBER
+    pre-1978 policy. Real-time callers (default) refuse to label
+    pre-1978 dates because the announcement chronology is inconsistent
+    before that boundary; training-mode callers (``is_real_time=False``)
+    explicitly opt in to latest-knowledge labels for historical
+    calibration / fitting workflows. See ``NBER_PRE_1978_POLICY`` in
+    ``config.py``.
     """
     as_of: pd.Timestamp = field(default=None)  # type: ignore[assignment]
+    is_real_time: bool = True
 
     def __post_init__(self) -> None:
         if self.as_of is None:

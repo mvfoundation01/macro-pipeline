@@ -25,13 +25,27 @@ def test_regime_context_full_aggregation_modern_as_of() -> None:
 
 
 def test_regime_context_partial_at_2008_09() -> None:
-    """At as_of=2008-09-15, NBER refuses to label (announcement delay)
-    and the FRED + HLW vintage panels are unusable, so dalio is
-    indeterminate. HMM and Kindleberger should still work."""
+    """At as_of=2008-09-15 (Layer 3.5C semantic update — D22):
+    pre-3.5C, NBER refused to label because the 180-day approximation
+    masked any obs after 2008-03. Post-3.5C the announcement calendar
+    shows the most recent visible turning point at 2008-09-15 is the
+    2001-11 trough (announced 2003-07-17), so NBER labels the as_of as
+    "expansion" cleanly. The 2007-12 peak was not announced until
+    2008-12-01 — exactly the look-ahead-bias defense the calendar
+    enforces. FRED + HLW vintage panels are still unusable for Dalio,
+    so dalio.phase remains indeterminate. HMM and Kindleberger work as
+    before. See LAYER_3_5_DEVIATIONS.md D22.
+    """
     ctx = PitDataContext(as_of=pd.Timestamp("2008-09-15"))
     rc = build_regime_context(ctx)
-    assert rc.nber is None
-    assert any("NBER" in n for n in rc.notes)
+    # Post-3.5C: NBER is available; calendar reports 2001-11 trough
+    # → expansion since 2001-12.
+    assert rc.nber is not None
+    assert rc.nber.state == "expansion"
+    assert rc.nber.source == "calendar"
+    # The state_date should be the 2001-11 trough month (the last
+    # firm-determined turning point at this as_of).
+    assert rc.nber.state_date == pd.Timestamp("2001-11-01")
     assert rc.kindleberger is not None
     assert rc.dalio.phase == "indeterminate"
     assert rc.hmm is not None

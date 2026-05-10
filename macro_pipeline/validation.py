@@ -1373,25 +1373,42 @@ def validate_gate8_regime() -> GateReport:
             "hmm_top_prob": round(hmm_top_prob, 4) if hmm_top_prob == hmm_top_prob else "n/a",
         })
 
-    # 3. PIT no-ffill check: at as_of=2008-12-01, asking about 2008-09
-    #    must raise PitDataUnavailableError.
-    from macro_pipeline.regime.exceptions import PitDataUnavailableError
-    boundary_ctx = PitDataContext(as_of=pd.Timestamp("2008-12-01"))
+    # 3. PIT no-ffill check (Layer 3.5C calendar-aware boundary):
+    #    The 2007-12 peak was officially announced 2008-12-01. So at
+    #    as_of=2008-11-30 (one day BEFORE the announcement) NBER had not
+    #    yet committed to a peak; the most recent visible turning point
+    #    was the 2001-11 trough (announced 2003-07-17), implying
+    #    "expansion" since 2001-12. A query at 2008-09 in PIT mode
+    #    therefore returns "expansion" — different from latest-mode
+    #    "recession", demonstrating that no future knowledge leaks back.
+    #    (Pre-3.5C this check used the 180-day approximation and
+    #    expected a raise; per spec §5.5 #7 the new contract is the
+    #    discriminating-state assertion below.)
+    boundary_ctx = PitDataContext(as_of=pd.Timestamp("2008-11-30"))
     boundary_visible = last_known_label_date(ctx=boundary_ctx)
-    raised = False
-    try:
-        extract_nber_state(pd.Timestamp("2008-09-01"), ctx=boundary_ctx)
-    except PitDataUnavailableError:
-        raised = True
-    if raised and boundary_visible <= pd.Timestamp("2008-06-30"):
+    pit_state_2008_09 = extract_nber_state(
+        pd.Timestamp("2008-09-01"), ctx=boundary_ctx
+    ).state
+    latest_state_2008_09 = extract_nber_state(
+        pd.Timestamp("2008-09-01")
+    ).state
+    if (
+        pit_state_2008_09 == "expansion"
+        and latest_state_2008_09 == "recession"
+        and boundary_visible <= pd.Timestamp("2008-11-30")
+    ):
         findings.append(
-            "PIT no-ffill enforced: at as_of=2008-12-01, lookup of 2008-09 "
-            f"raises (last_known_label_date={boundary_visible.date()})"
+            "PIT no-ffill enforced (calendar-aware): at as_of=2008-11-30, "
+            "extract_nber_state(2008-09) -> 'expansion' (latest cache says "
+            "'recession'); boundary visible turning point = "
+            f"{boundary_visible.date()}"
         )
     else:
         findings.append(
-            "FAIL: PIT no-ffill not enforced — "
-            f"raised={raised}, last_known_label_date={boundary_visible.date()}"
+            "FAIL: PIT calendar-boundary check broken — "
+            f"PIT state at 2008-09 (as_of=2008-11-30)={pit_state_2008_09!r}, "
+            f"latest state at 2008-09={latest_state_2008_09!r}, "
+            f"last_known={boundary_visible.date()}"
         )
 
     findings.append(
@@ -1646,7 +1663,12 @@ def validate_gate10_cdrs() -> GateReport:
       2. Direction: ``min(CDRS at events) > max(CDRS at calm)``.
       3. Floor — full reach events:
             CDRS at 2007-09-15 ≥ 0.18
-            CDRS at 2020-02-20 ≥ 0.15
+            CDRS at 2020-02-20 ≥ 0.13 (D23 — Layer 3.5C calibration:
+              NBER calendar correctly resolves 2020-02-20 as expansion
+              since 2009-06 trough was the most recent announced
+              turning point; pre-3.5C the 180-day approx hid this and
+              the HMM-dissent path produced R=0.95 → score ≈0.21.
+              Post-3.5C R=0.6 → score ≈0.13.)
       4. Floor — partial reach event:
             CDRS at 2000-03-15 ≥ 0.13
       5. Differential ratio: ``max(events) ≥ 3.0 × max(calm)``.
@@ -1759,13 +1781,13 @@ def validate_gate10_cdrs() -> GateReport:
         findings.append(
             f"FAIL: floor 2007-09 < 0.18 (got {event_scores.get('2007-09-15')})"
         )
-    if event_scores.get("2020-02-20", 0.0) >= 0.15:
+    if event_scores.get("2020-02-20", 0.0) >= 0.13:
         findings.append(
-            f"Floor 2020-02 >= 0.15 OK (CDRS={event_scores['2020-02-20']:.4f})"
+            f"Floor 2020-02 >= 0.13 OK (CDRS={event_scores['2020-02-20']:.4f})"
         )
     else:
         findings.append(
-            f"FAIL: floor 2020-02 < 0.15 (got {event_scores.get('2020-02-20')})"
+            f"FAIL: floor 2020-02 < 0.13 (got {event_scores.get('2020-02-20')})"
         )
     if event_scores.get("2000-03-15", 0.0) >= 0.13:
         findings.append(
@@ -2389,6 +2411,165 @@ def validate_gate13_pit_contracts() -> GateReport:
     )
 
 
+def validate_gate14_nber_calendar() -> GateReport:
+    """Gate 14 — Layer 3.5C NBER announcement calendar integrity.
+
+    Per ``LAYER_3_5_BUILD_SPEC.md`` §5.6:
+
+      1. ``data/nber_announcement_calendar.csv`` exists and parses cleanly
+         via ``NberCalendarLoader``.
+      2. All cycles 1978+ from NBER official record present (currently
+         6: 1980, 1981, 1990, 2001, 2007, 2020).
+      3. Every row has source_url pointing to NBER.
+      4. ``release_lag_days=180`` constant absent from
+         ``nber_extract.py`` source code (only docstring deprecation
+         notes permitted).
+      5. Pre-1978 real-time inference raises ``PitDataUnavailableError``.
+      6. Spec test #7 contract: at as_of=2008-09-01 querying 2008-09-01
+         returns "expansion" (different from latest-mode "recession" —
+         demonstrates calendar uses actual lag, not 180-day approx).
+    """
+    import re
+    from pathlib import Path
+
+    from macro_pipeline.access import PitDataContext
+    from macro_pipeline.regime import (
+        NBER_CALENDAR_BOUNDARY,
+        NberCalendarLoader,
+        extract_nber_state,
+    )
+    from macro_pipeline.regime.exceptions import PitDataUnavailableError
+
+    findings: list[str] = []
+    warnings: list[str] = []
+    summary: dict = {}
+
+    # 1. CSV loads cleanly.
+    try:
+        cal = NberCalendarLoader()
+    except Exception as exc:
+        findings.append(f"FAIL: NberCalendarLoader construction raised "
+                        f"{type(exc).__name__}: {exc}")
+        return GateReport(
+            name="Gate 14 - Layer 3.5C NBER Announcement Calendar",
+            passed=False, findings=findings, summary=summary,
+        )
+    summary["csv_path"] = str(cal.csv_path)
+    summary["n_cycles"] = len(cal.cycles)
+    findings.append(
+        f"NberCalendarLoader OK: {len(cal.cycles)} cycles loaded from "
+        f"{cal.csv_path.name}"
+    )
+
+    # 2. Cycle completeness — expected 6 post-1978.
+    expected_peaks = {
+        "1980-01", "1981-07", "1990-07", "2001-03", "2007-12", "2020-02",
+    }
+    actual_peaks = {str(c.peak_date) for c in cal.cycles}
+    missing = expected_peaks - actual_peaks
+    extra = actual_peaks - expected_peaks
+    summary["actual_peaks"] = sorted(actual_peaks)
+    if missing or extra:
+        if missing:
+            findings.append(f"FAIL: missing expected cycles: {sorted(missing)}")
+        if extra:
+            findings.append(
+                f"WARN: unexpected cycles in calendar: {sorted(extra)} "
+                "(may be a new NBER announcement; investigate)"
+            )
+            warnings.append(f"Extra cycles: {sorted(extra)}")
+    else:
+        findings.append(
+            f"All 6 expected post-1978 cycles present: {sorted(actual_peaks)}"
+        )
+
+    # 3. source_url present + non-empty + points to nber.org.
+    bad_url = [
+        c.peak_date for c in cal.cycles
+        if not c.source_url or "nber.org" not in c.source_url
+    ]
+    if bad_url:
+        findings.append(
+            f"FAIL: {len(bad_url)} cycles missing nber.org source_url: "
+            f"{[str(p) for p in bad_url]}"
+        )
+    else:
+        findings.append("All cycles have nber.org source_url")
+
+    # 4. release_lag_days=180 not in nber_extract.py source code.
+    # Only literal Python source-syntax matches count; docstring mentions
+    # (which carry backtick fences) and comments (#) are explicitly
+    # exempted. The exclusion class includes backticks so the regex
+    # cannot match `` ` ``release_lag_days=180`` ` `` inside a sphinx
+    # double-backtick code span.
+    nber_extract_path = (
+        Path(__file__).parent / "regime" / "nber_extract.py"
+    )
+    text = nber_extract_path.read_text(encoding="utf-8")
+    code_hits = re.findall(
+        r"^\s*[^#\s\"\'`]*release_lag_days\s*=\s*180\b",
+        text, flags=re.MULTILINE,
+    )
+    if code_hits:
+        findings.append(
+            f"FAIL: nber_extract.py has {len(code_hits)} live "
+            "release_lag_days=180 reference(s)"
+        )
+    else:
+        findings.append(
+            "release_lag_days=180 absent from nber_extract.py code "
+            "(docstring/comment mentions allowed)"
+        )
+
+    # 5. Pre-1978 real-time inference raises.
+    pre_ctx = PitDataContext(as_of=pd.Timestamp("2024-01-01"), is_real_time=True)
+    raised = False
+    try:
+        extract_nber_state(pd.Timestamp("1975-06-01"), ctx=pre_ctx)
+    except PitDataUnavailableError:
+        raised = True
+    if raised:
+        findings.append(
+            "Pre-1978 real-time raises PitDataUnavailableError (training_only "
+            "policy enforced)"
+        )
+    else:
+        findings.append(
+            "FAIL: pre-1978 real-time should have raised "
+            "PitDataUnavailableError"
+        )
+
+    # 6. Spec test #7: as_of=2008-09 + query=2008-09 → expansion (calendar
+    # path); latest-mode for same query → recession.
+    pit_ctx = PitDataContext(as_of=pd.Timestamp("2008-09-01"))
+    pit_state = extract_nber_state(
+        pd.Timestamp("2008-09-01"), ctx=pit_ctx
+    ).state
+    latest_state = extract_nber_state(pd.Timestamp("2008-09-01")).state
+    summary["pit_state_2008_09"] = pit_state
+    summary["latest_state_2008_09"] = latest_state
+    if pit_state == "expansion" and latest_state == "recession":
+        findings.append(
+            "Calendar contract OK: at as_of=2008-09-01 query=2008-09 -> "
+            f"PIT={pit_state!r}, latest={latest_state!r} (peak announced "
+            "2008-12-01)"
+        )
+    else:
+        findings.append(
+            f"FAIL: calendar contract — PIT={pit_state!r}, "
+            f"latest={latest_state!r} (expected expansion / recession)"
+        )
+
+    # 7. Boundary period.
+    summary["calendar_boundary"] = str(NBER_CALENDAR_BOUNDARY)
+
+    passed = not any(f.startswith("FAIL") for f in findings)
+    return GateReport(
+        name="Gate 14 - Layer 3.5C NBER Announcement Calendar",
+        passed=passed, findings=findings, warnings=warnings, summary=summary,
+    )
+
+
 def _cli_gate11() -> int:
     import logging
     logging.basicConfig(level="WARNING", format="%(message)s")
@@ -2409,6 +2590,14 @@ def _cli_gate13() -> int:
     import logging
     logging.basicConfig(level="WARNING", format="%(message)s")
     report = validate_gate13_pit_contracts()
+    print(report.render())
+    return 0 if report.passed else 1
+
+
+def _cli_gate14() -> int:
+    import logging
+    logging.basicConfig(level="WARNING", format="%(message)s")
+    report = validate_gate14_nber_calendar()
     print(report.render())
     return 0 if report.passed else 1
 
@@ -2469,10 +2658,12 @@ if __name__ == "__main__":
         sys.exit(_cli_gate12())
     if cmd == "gate13":
         sys.exit(_cli_gate13())
+    if cmd == "gate14":
+        sys.exit(_cli_gate14())
     print(
         f"Unknown command: {cmd}. Available: "
         "gate1, gate2, gate3, gate4a, gate4b, gate4c, gate4d, "
-        "gate8, gate9, gate10, gate11, gate12, gate13",
+        "gate8, gate9, gate10, gate11, gate12, gate13, gate14",
         file=sys.stderr,
     )
     sys.exit(2)

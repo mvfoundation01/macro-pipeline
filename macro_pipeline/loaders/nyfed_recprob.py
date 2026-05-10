@@ -144,7 +144,15 @@ def load_nyfed_recprob(
         last_update=pd.Timestamp(datetime.now(UTC).replace(tzinfo=None)),
         needs_vintage=False,
         unit="binary",
-        release_lag_days=180,  # NBER typically declares 6-18 months after the fact
+        # Layer 3.5C (D22 / AM16=(a)): the 180-day approximation here is
+        # SUPERSEDED for regime extraction. ``regime/extract_nber_state``
+        # now uses ``regime/nber_calendar.NberCalendarLoader`` (committee
+        # announcement dates from data/nber_announcement_calendar.csv).
+        # The constant remains in the IndicatorMetadata for backward
+        # compatibility with any direct PIT loaders that might consume
+        # NBER_REC_LABEL outside the regime extraction path; see
+        # LAYER_3_5_DEVIATIONS.md D22.
+        release_lag_days=180,
         description=(
             "NBER recession indicator (1 = peak-to-trough). THIS IS THE "
             "TRAINING LABEL for the walk-forward CRPS backtest. Trailing "

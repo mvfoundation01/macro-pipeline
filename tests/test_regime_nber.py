@@ -38,25 +38,38 @@ def test_nber_known_expansion_latest_mode(query_date: str) -> None:
 
 # --- PIT discipline -------------------------------------------------------
 
-def test_nber_pit_raises_when_label_unannounced() -> None:
-    """At as_of=2008-12-01, NBER had not yet announced the 2007-12 peak.
+def test_nber_pit_returns_pre_announcement_state_at_2008_11_30() -> None:
+    """Layer 3.5C semantic update (D22): the original test asserted
+    that a PIT query of 2008-09 at as_of=2008-12-01 raises (because
+    the 180-day visibility shift filtered 2008-09 obs out). After
+    3.5C the calendar shows the 2007-12 peak was announced 2008-12-01,
+    so at as_of=2008-12-01 the lookup resolves to "recession" cleanly.
 
-    Our visibility-shifted view (release_lag_days=180 on NBER_REC_LABEL)
-    has labels only up to ~2008-06-04, so any query past that date
-    must raise PitDataUnavailableError.
+    The new contract: at as_of=2008-11-30 (one day BEFORE the peak
+    announcement) querying 2008-09 returns "expansion" (the most
+    recent visible turning point was the 2001-11 trough). This
+    exercises the same look-ahead-bias defense as before but uses the
+    calendar-aware mechanism.
+
+    See LAYER_3_5_DEVIATIONS.md D22.
     """
-    ctx = PitDataContext(as_of=pd.Timestamp("2008-12-01"))
-    with pytest.raises(PitDataUnavailableError) as exc_info:
-        extract_nber_state(pd.Timestamp("2008-09-01"), ctx=ctx)
-    msg = str(exc_info.value).lower()
-    assert "last_known_label_date" in msg
-    assert "2008" in msg
+    ctx = PitDataContext(as_of=pd.Timestamp("2008-11-30"))
+    r = extract_nber_state(pd.Timestamp("2008-09-01"), ctx=ctx)
+    assert r.state == "expansion"
+    assert r.source == "calendar"
+    # Latest mode would have returned "recession" — divergence is the
+    # discriminating evidence of PIT discipline.
+    latest = extract_nber_state(pd.Timestamp("2008-09-01"))
+    assert latest.state == "recession"
 
 
 def test_last_known_label_date_pit_mode() -> None:
-    """PIT view at 2008-12-01 has labels strictly before the 6-month buffer."""
+    """PIT view at 2008-12-01 reports the most recent announced
+    turning point: the 2007-12 peak (announced 2008-12-01)."""
     ctx = PitDataContext(as_of=pd.Timestamp("2008-12-01"))
     boundary = last_known_label_date(ctx=ctx)
+    # Most recent firm-determined turning point at as_of=2008-12-01
+    # is the 2007-12 peak (announced same day).
     assert boundary <= pd.Timestamp("2008-06-30")
     assert boundary >= pd.Timestamp("2007-12-01")
 

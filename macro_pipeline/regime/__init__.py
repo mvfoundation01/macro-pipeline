@@ -29,6 +29,8 @@ from macro_pipeline.regime.exceptions import (
     HmmArtifactMissingError,
     HmmConcurrencyError,
     HmmMetadataIncompatibleError,
+    NberCalendarLoadError,
+    NberCycleNotFoundError,
     PitDataUnavailableError,
     RegimeClassifierError,
     RegimeContextError,
@@ -50,6 +52,12 @@ from macro_pipeline.regime.hmm_states import (
     predict_state,
 )
 from macro_pipeline.regime.kindleberger import KindlebergerResult, classify_kindleberger
+from macro_pipeline.regime.nber_calendar import (
+    NBER_CALENDAR_BOUNDARY,
+    LastKnownLabel,
+    NberCalendarLoader,
+    NberCycle,
+)
 from macro_pipeline.regime.nber_extract import (
     NBER_FALLBACK_INDICATOR,
     NBER_PRIMARY_INDICATOR,
@@ -66,6 +74,7 @@ __all__ = [
     "HMM_TRAINING_END",
     "HMM_TRAINING_START",
     "HMM_VERSION",
+    "NBER_CALENDAR_BOUNDARY",
     "NBER_FALLBACK_INDICATOR",
     "NBER_PRIMARY_INDICATOR",
     "SIDECAR_MODEL_VERSION",
@@ -79,6 +88,11 @@ __all__ = [
     "HmmMetadataIncompatibleError",
     "HmmStateResult",
     "KindlebergerResult",
+    "LastKnownLabel",
+    "NberCalendarLoadError",
+    "NberCalendarLoader",
+    "NberCycle",
+    "NberCycleNotFoundError",
     "NberStateResult",
     "PitDataUnavailableError",
     "RegimeClassifierError",

@@ -356,6 +356,20 @@ FORWARD_HORIZONS_MONTHS: list[int] = [12, 36, 60, 120]
 
 
 # ---------------------------------------------------------------------------
+# Layer 3.5C — NBER pre-1978 policy
+# ---------------------------------------------------------------------------
+# Pre-1978 NBER cycles were retroactively dated and announcement timing was
+# inconsistent. Per Decision Lock 3.5C-D1 (and ChatGPT Dim 1 finding), we
+# treat pre-1978 as "training_only": real-time inference for as_of < 1978-01
+# raises ``PitDataUnavailableError``; training-mode (``is_real_time=False``)
+# returns the latest-knowledge label with ``is_pre_1978_training_only=True``.
+NBER_PRE_1978_POLICY: str = "training_only"
+# Default location of the NBER announcement calendar CSV (Layer 3.5C).
+# Path is relative to the project root (parent of macro_pipeline/).
+DEFAULT_NBER_CALENDAR_PATH: Path = ROOT / "data" / "nber_announcement_calendar.csv"
+
+
+# ---------------------------------------------------------------------------
 # Layer 3.5B — PIT-safe-by-construction (Option Z) validation.
 # Runs at module import time. Surfaces config bugs (e.g. flag set without
 # a non-empty rationale, cap out of (0, 1]) immediately rather than at

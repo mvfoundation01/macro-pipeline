@@ -66,9 +66,21 @@ def test_cdrs_2007_09_event_floor():
 
 
 def test_cdrs_2020_02_event_floor():
-    """Floor — full reach event 2020-02 ≥ 0.15 (Gate 10 #3)."""
+    """Floor — full reach event 2020-02 ≥ 0.13 (Gate 10 #3 / D23).
+
+    Layer 3.5C: pre-3.5C the 180-day NBER approximation made the
+    2020-02 anchor fall through to HMM-dissent neutralization with
+    R=0.95 (raw ~0.213 → floor 0.15). Post-3.5C the NBER calendar
+    correctly resolves "expansion" at 2020-02-20 (peak 2020-02 was
+    not announced until 2020-06-08; most recent visible turning point
+    was the 2009-06 trough), so derive_regime_state takes Path 3
+    (NBER expansion authoritative) and R=0.6 → CDRS ~0.134. The new
+    floor 0.13 reflects the corrected baseline. Layer 5 backlog L5-6
+    (V/T weight refit) may restore higher event scores.
+    See LAYER_3_5_DEVIATIONS.md D23.
+    """
     so = compute_cdrs(PitDataContext(as_of=pd.Timestamp("2020-02-20")))
-    assert so.score_value >= 0.15
+    assert so.score_value >= 0.13
 
 
 def test_cdrs_2000_03_partial_floor():
@@ -170,15 +182,32 @@ def test_cdrs_2025_06_full_reach_all_10_components_active():
     assert so.metadata_extra["cdrs_inactive_components"] == []
 
 
-def test_cdrs_2020_02_regime_neutralized_path():
-    """At 2020-02-20, NBER PIT-raises and HMM dissents from Kindleberger
-    (HMM=recession in our trained pickle, Kindleberger non-stress);
-    derive_regime_state returns ('late-cycle', 'hmm_dissent_neutralized',
-    0.20). Result: R = 1.0 × 0.95 = 0.95 and regime_neutralized=True."""
+def test_cdrs_2020_02_nber_takes_priority_over_hmm_dissent():
+    """Layer 3.5C semantic update (D23 / extension of D22).
+
+    Pre-3.5C the 180-day NBER approximation made the 2020-02 anchor
+    fall through to ``derive_regime_state`` Path 4 (NBER unavailable
+    → HMM corroboration check → HMM dissents from Kindleberger →
+    "late-cycle" with neutralization, R=0.95).
+
+    Post-3.5C the NBER announcement calendar correctly resolves the
+    state at 2020-02-20: most recent visible turning point is the
+    2009-06 trough (announced 2010-09-20), so NBER says "expansion"
+    cleanly (peak 2020-02 was not announced until 2020-06-08).
+    ``derive_regime_state`` takes Path 3 (NBER expansion authoritative,
+    Kindleberger non-stress) → ("expansion", "nber", 0.0). R=0.6
+    (expansion multiplier), regime_neutralized=False.
+
+    The HMM-dissent-neutralization path is now structurally
+    unreachable in real-time mode for any post-1978 date because the
+    NBER calendar always provides an authoritative answer. Layer 3.5D
+    introduces ``RegimeState.INDETERMINATE`` as the new home for the
+    HMM-dissent semantics. See LAYER_3_5_DEVIATIONS.md D23.
+    """
     so = compute_cdrs(PitDataContext(as_of=pd.Timestamp("2020-02-20")))
-    assert so.metadata_extra["regime_neutralized"] is True
-    assert so.metadata_extra["regime_state_source"] == "hmm_dissent_neutralized"
-    assert so.metadata_extra["R_multiplier"] == pytest.approx(0.95)
+    assert so.metadata_extra["regime_neutralized"] is False
+    assert so.metadata_extra["regime_state_source"] == "nber"
+    assert so.metadata_extra["R_multiplier"] == pytest.approx(0.6)
 
 
 def test_cdrs_clipped_to_unit_interval():

@@ -97,11 +97,29 @@ class HmmConcurrencyError(RuntimeError):
     inference process or a stale lock from a crashed admin script."""
 
 
+# ---------------------------------------------------------------------------
+# Layer 3.5C — NBER calendar exceptions
+# ---------------------------------------------------------------------------
+class NberCycleNotFoundError(RuntimeError):
+    """Raised when a turning point lookup against the NBER calendar fails
+    (no matching cycle for the requested date / kind). Layer 3.5C: caller
+    should either fall back to training-mode or accept the failure as a
+    pre-1978 / unannounced-region condition."""
+
+
+class NberCalendarLoadError(RuntimeError):
+    """Raised when the NBER calendar CSV is unreadable, malformed, or
+    missing required columns. Configuration-time failure (surfaces at
+    NberCalendarLoader construction)."""
+
+
 __all__ = [
     "HmmArtifactCorruptError",
     "HmmArtifactMissingError",
     "HmmConcurrencyError",
     "HmmMetadataIncompatibleError",
+    "NberCalendarLoadError",
+    "NberCycleNotFoundError",
     "PitDataUnavailableError",
     "RegimeClassifierError",
     "RegimeContextError",

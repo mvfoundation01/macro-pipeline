@@ -1,26 +1,31 @@
-"""NBER recession-state extraction with strict PIT discipline (Layer 3A).
+"""NBER recession-state extraction with strict PIT discipline.
 
-Spec: ``LAYER_3_BUILD_SPEC.md`` §4.3.1.
+Layer 3A established the original ``extract_nber_state`` using a fixed
+180-day approximation of the NBER announcement lag (via
+``release_lag_days=180`` on ``NBER_REC_LABEL`` in ``nyfed_recprob.py``).
+Layer 3.5C replaces that approximation with an authoritative
+announcement calendar (see ``nber_calendar.py``):
 
-NBER announces recession peak/trough dates with a 6-18 month delay; FRED's
-USREC and the NY Fed ``allmonth.xls`` ``NBER_REC_LABEL`` series are then
-back-filled retroactively. A naive ``USREC[t]`` lookup at a historical
-``as_of`` therefore leaks future knowledge (the 2007-12 peak was only
-announced 2008-12-01, but USREC[2008-09]=1 in today's cache).
+1. ``extract_nber_state`` consults ``NberCalendarLoader.state_at`` for
+   1978+ queries. The calendar carries the actual NBER committee
+   announcement dates for every cycle since 1980.
 
-We mitigate this in two ways:
+2. Pre-1978 + real-time mode → raises
+   ``PitDataUnavailableError`` (``NBER_PRE_1978_POLICY="training_only"``).
 
-1. ``NBER_REC_LABEL`` is the primary source — its loader masks all values
-   past ``last_known_label_date`` to NaN, so ``ffill`` cannot manufacture
-   a "future" label. With ``release_lag_days=180`` this approximates the
-   6-month minimum NBER announcement delay.
+3. Pre-1978 + training mode (``ctx.is_real_time=False``) → returns the
+   latest-knowledge label with ``is_pre_1978_training_only=True`` set
+   on the result so downstream consumers can surface the caveat.
 
-2. ``extract_nber_state`` enforces ``query_date <= last_known_label_date``
-   in the PIT view at ``ctx.as_of``. If the ground-truth label for
-   ``query_date`` is not yet known at ``as_of`` we raise
-   ``PitDataUnavailableError`` rather than guess.
+4. Latest mode (``ctx=None``) is unchanged from L3A — useful for
+   post-hoc inspection / ground-truth assertion in tests / Gate 8.
 
-The function NEVER ffills past ``last_known_label_date``.
+5. Loader-level ``release_lag_days=180`` in ``nyfed_recprob.py:147``
+   is **left in place** per Decision Lock 3.5C-AM16=(a). The calendar
+   takes precedence in ``extract_nber_state``; the loader-level lag is
+   still applied if NBER_REC_LABEL is loaded directly via
+   ``load_series(..., as_of=...)`` for diagnostic / audit purposes
+   (which has no caller in the inference path post-3.5C).
 """
 from __future__ import annotations
 
@@ -29,7 +34,15 @@ from dataclasses import dataclass
 import pandas as pd
 
 from macro_pipeline.access import IndicatorBundle, PitDataContext, load_series
-from macro_pipeline.regime.exceptions import PitDataUnavailableError
+from macro_pipeline.config import NBER_PRE_1978_POLICY
+from macro_pipeline.regime.exceptions import (
+    NberCycleNotFoundError,
+    PitDataUnavailableError,
+)
+from macro_pipeline.regime.nber_calendar import (
+    NBER_CALENDAR_BOUNDARY,
+    NberCalendarLoader,
+)
 
 NBER_PRIMARY_INDICATOR = "NBER_REC_LABEL"
 NBER_FALLBACK_INDICATOR = "USREC"
@@ -37,24 +50,27 @@ NBER_FALLBACK_INDICATOR = "USREC"
 
 @dataclass(frozen=True)
 class NberStateResult:
-    """Result of a PIT-aware NBER state lookup."""
+    """Result of a PIT-aware NBER state lookup.
+
+    Layer 3.5C: ``announcement_date`` and ``is_pre_1978_training_only``
+    are NEW fields. ``is_pre_1978_training_only=True`` flags results
+    where NBER_PRE_1978_POLICY="training_only" allowed us to return a
+    label despite the calendar boundary; downstream scoring should
+    surface this caveat (analog to 3.5B Option Z's
+    ``derived_confidence_cap`` propagation per AM12).
+    """
 
     state: str                              # "expansion" | "recession"
     state_date: pd.Timestamp                # the NBER observation_date used
-    last_known_label_date: pd.Timestamp     # last non-null label visible at as_of
+    last_known_label_date: pd.Timestamp     # last firm-determined date visible at as_of
     as_of: pd.Timestamp | None              # query as_of (None for full-knowledge mode)
-    source: str                             # "NBER_REC_LABEL" | "USREC"
+    source: str                             # "NBER_REC_LABEL" | "USREC" | "calendar"
+    announcement_date: pd.Timestamp | None = None
+    is_pre_1978_training_only: bool = False
 
 
-def _last_known_label_date(bundle: IndicatorBundle) -> pd.Timestamp:
-    """Most recent observation_date with a non-null label in this bundle.
-
-    For ``NBER_REC_LABEL`` this is the date NBER had last confirmed a
-    state; values past this date are NaN by construction (see
-    ``loaders/nyfed_recprob.py``). For ``USREC`` (which has no NaN
-    masking) this is just the last observation in the visibility-shifted
-    PIT view, which is a coarser approximation.
-    """
+def _last_known_label_date_from_bundle(bundle: IndicatorBundle) -> pd.Timestamp:
+    """Most recent observation_date with a non-null label in this bundle."""
     s = bundle.data.dropna()
     if s.empty:
         raise PitDataUnavailableError(
@@ -65,21 +81,12 @@ def _last_known_label_date(bundle: IndicatorBundle) -> pd.Timestamp:
     return pd.Timestamp(s.index.max())
 
 
-def _state_at(bundle: IndicatorBundle, query_date: pd.Timestamp) -> tuple[str, pd.Timestamp]:
-    """Return (state, observation_date) for the most recent label in the
-    calendar month of ``query_date`` or earlier.
-
-    Both the FRED ``USREC`` series and NY Fed's NBER label are nominally
-    monthly, but the underlying date conventions vary (1959-02-02 first
-    obs vs 2026-04-30 last obs). To avoid false-negatives when
-    ``query_date`` falls a few days before the actual stamp (e.g.
-    ``1973-12-01`` query vs ``1973-12-02`` obs), we treat any
-    observation within the same calendar month as visible.
-
-    The caller is responsible for asserting ``query_date <= last_known_label_date``
-    BEFORE calling this. We do NOT ffill past the last non-null label —
-    if there's no observation at or before ``query_date`` we raise.
-    """
+def _state_at_from_bundle(
+    bundle: IndicatorBundle, query_date: pd.Timestamp,
+) -> tuple[str, pd.Timestamp]:
+    """Return (state, observation_date) at-or-before ``query_date`` from
+    the underlying NBER_REC_LABEL series. Used for latest-mode lookups
+    and pre-1978 training-mode fallback."""
     s = bundle.data.dropna()
     if s.empty:
         raise PitDataUnavailableError(
@@ -107,51 +114,143 @@ def extract_nber_state(
     *,
     ctx: PitDataContext | None = None,
     indicator_id: str = NBER_PRIMARY_INDICATOR,
+    calendar: NberCalendarLoader | None = None,
 ) -> NberStateResult:
     """Return the NBER state at ``query_date``, with optional PIT enforcement.
+
+    Layer 3.5C: when ``ctx`` is provided AND ``query_date >= 1978-01``,
+    the lookup uses ``NberCalendarLoader`` (announcement-date-aware).
+    Pre-1978 queries follow ``NBER_PRE_1978_POLICY``: real-time mode
+    raises ``PitDataUnavailableError``; training mode returns the
+    latest-knowledge label with the caveat flag set.
+
+    Latest-knowledge mode (``ctx=None``) is unchanged from Layer 3A.
 
     Parameters
     ----------
     query_date
-        Date to look up. May be ANY timestamp; we resolve to the most
-        recent NBER observation at or before it.
+        Date to look up.
     ctx
-        - ``None``  → full-knowledge / latest-cache mode (post-hoc
-          inspection only — never use for backtest).
-        - ``PitDataContext(as_of=...)`` → PIT-safe view; we load the
-          NBER series as known at ``as_of`` and refuse to return a state
-          for any ``query_date > last_known_label_date(as_of)``.
+        ``None``  → latest-knowledge / post-hoc inspection mode.
+        ``PitDataContext(as_of=...)`` → calendar-aware PIT view.
     indicator_id
-        ``"NBER_REC_LABEL"`` (default; NaN-masked past last determination)
-        or ``"USREC"`` (no masking; coarser PIT). Use the default unless
-        you specifically need USREC for cross-validation.
+        ``NBER_REC_LABEL`` (default; primary FRED+NBER source) or
+        ``USREC``.
+    calendar
+        Optional pre-loaded ``NberCalendarLoader``. Default: lazily
+        constructed once per call. Passing your own loader is useful in
+        tests or when the canonical CSV path has been overridden.
 
     Raises
     ------
     PitDataUnavailableError
-        If the ground-truth label for ``query_date`` is not yet known at
-        ``ctx.as_of`` (i.e. NBER had not yet announced).
+        If the calendar cannot resolve a state at ``query_date`` from
+        ``ctx.as_of`` (e.g., pre-1978 in real-time mode, OR query_date
+        is before any announced turning point at ``as_of``).
     """
     qd = pd.Timestamp(query_date)
-    bundle = load_series(indicator_id, as_of=ctx.as_of) if ctx is not None else load_series(indicator_id)
-    last_known = _last_known_label_date(bundle)
-    if qd > last_known:
+    qd_period = qd.to_period("M")
+
+    # ---- Latest-knowledge mode (post-hoc inspection / ground truth) ----
+    if ctx is None:
+        bundle = load_series(indicator_id)
+        last_known = _last_known_label_date_from_bundle(bundle)
+        if qd > last_known:
+            raise PitDataUnavailableError(
+                indicator_id=indicator_id,
+                reason=(f"query_date={qd.date()} is past last_known_label_date="
+                        f"{last_known.date()} in latest cache"),
+                as_of=None,
+            )
+        state, obs_date = _state_at_from_bundle(bundle, qd)
+        return NberStateResult(
+            state=state,
+            state_date=obs_date,
+            last_known_label_date=last_known,
+            as_of=None,
+            source=indicator_id,
+            announcement_date=None,
+            is_pre_1978_training_only=False,
+        )
+
+    # ---- PIT mode: calendar-aware ----
+    cal = calendar if calendar is not None else NberCalendarLoader()
+
+    # Pre-1978 cycles: governed by NBER_PRE_1978_POLICY.
+    if qd_period < NBER_CALENDAR_BOUNDARY:
+        if NBER_PRE_1978_POLICY == "training_only" and ctx.is_real_time:
+            raise PitDataUnavailableError(
+                indicator_id=indicator_id,
+                reason=(
+                    f"NBER labels for query_date={qd.date()} (pre-1978) are "
+                    "training-only per NBER_PRE_1978_POLICY. Real-time "
+                    "inference unavailable: pre-1978 announcement chronology "
+                    "is inconsistent (cycles dated retroactively). To use "
+                    "training-mode labels, construct PitDataContext with "
+                    "is_real_time=False."
+                ),
+                as_of=ctx.as_of,
+            )
+        # Training mode (or relaxed policy) — fall back to latest cache,
+        # with caveat flag set.
+        bundle = load_series(indicator_id, as_of=ctx.as_of)
+        last_known = _last_known_label_date_from_bundle(bundle)
+        if qd > last_known:
+            raise PitDataUnavailableError(
+                indicator_id=indicator_id,
+                reason=(f"query_date={qd.date()} past last_known_label_date="
+                        f"{last_known.date()} in PIT cache"),
+                as_of=ctx.as_of,
+            )
+        state, obs_date = _state_at_from_bundle(bundle, qd)
+        return NberStateResult(
+            state=state,
+            state_date=obs_date,
+            last_known_label_date=last_known,
+            as_of=ctx.as_of,
+            source=indicator_id,
+            announcement_date=None,
+            is_pre_1978_training_only=True,
+        )
+
+    # Post-1978: calendar-driven.
+    try:
+        last_known = cal.last_known_label(ctx.as_of)
+    except NberCycleNotFoundError as exc:
         raise PitDataUnavailableError(
             indicator_id=indicator_id,
-            reason=(f"query_date={qd.date()} is past last_known_label_date="
-                    f"{last_known.date()} in PIT view at "
-                    f"as_of={'None' if ctx is None else ctx.as_of.date()} "
-                    "(NBER announces with 6-18 month delay; refusing to "
-                    "fabricate a label)"),
-            as_of=bundle.as_of,
-        )
-    state, obs_date = _state_at(bundle, qd)
+            reason=(
+                f"No NBER turning point announced by as_of={ctx.as_of.date()}. "
+                f"Calendar's earliest announcement is 1980-06-03 "
+                f"(1980-01 peak). Detail: {exc}"
+            ),
+            as_of=ctx.as_of,
+        ) from exc
+
+    try:
+        announced_at_query = cal._last_announced_turning_point(qd_period, ctx.as_of)
+    except NberCycleNotFoundError as exc:
+        # query_date is before any announced turning point at this as_of.
+        raise PitDataUnavailableError(
+            indicator_id=indicator_id,
+            reason=(
+                f"query_date={qd.date()} predates the earliest NBER "
+                f"announcement visible at as_of={ctx.as_of.date()}. "
+                f"Calendar covers 1978+ via committee announcements; this "
+                "query lands in the pre-announcement region. Detail: "
+                f"{exc}"
+            ),
+            as_of=ctx.as_of,
+        ) from exc
+
     return NberStateResult(
-        state=state,
-        state_date=obs_date,
-        last_known_label_date=last_known,
-        as_of=bundle.as_of,
-        source=indicator_id,
+        state=announced_at_query.regime,
+        state_date=announced_at_query.turning_point_date.to_timestamp(),
+        last_known_label_date=last_known.turning_point_date.to_timestamp(),
+        as_of=ctx.as_of,
+        source="calendar",
+        announcement_date=announced_at_query.announcement_date,
+        is_pre_1978_training_only=False,
     )
 
 
@@ -159,10 +258,32 @@ def last_known_label_date(
     *,
     ctx: PitDataContext | None = None,
     indicator_id: str = NBER_PRIMARY_INDICATOR,
+    calendar: NberCalendarLoader | None = None,
 ) -> pd.Timestamp:
-    """Return last_known_label_date in the PIT view at ``ctx.as_of`` (or latest)."""
-    bundle = load_series(indicator_id, as_of=ctx.as_of) if ctx is not None else load_series(indicator_id)
-    return _last_known_label_date(bundle)
+    """Return the last firm-determined NBER label date in the view at
+    ``ctx.as_of`` (or latest if ``ctx=None``).
+
+    Layer 3.5C: in PIT mode, this is the most recent turning point's
+    date with announcement_date <= as_of (per the NBER calendar).
+    Latest mode is unchanged.
+    """
+    if ctx is None:
+        bundle = load_series(indicator_id)
+        return _last_known_label_date_from_bundle(bundle)
+
+    cal = calendar if calendar is not None else NberCalendarLoader()
+    try:
+        last_known = cal.last_known_label(ctx.as_of)
+    except NberCycleNotFoundError as exc:
+        raise PitDataUnavailableError(
+            indicator_id=indicator_id,
+            reason=(
+                f"No NBER turning point announced by as_of={ctx.as_of.date()}; "
+                f"detail: {exc}"
+            ),
+            as_of=ctx.as_of,
+        ) from exc
+    return last_known.turning_point_date.to_timestamp()
 
 
 __all__ = [
