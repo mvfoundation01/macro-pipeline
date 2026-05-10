@@ -1,10 +1,17 @@
-"""Tests for ``macro_pipeline.regime.hmm_states`` (Layer 3A)."""
+"""Tests for ``macro_pipeline.regime.hmm_states`` (Layer 3A; adapted at L3.5A).
+
+L3.5A relocates ``train_and_save_hmm`` into the admin-only
+``scripts/train_hmm_v1.py`` and removes the auto-train fallback from
+``load_hmm``. The original determinism / pickle-roundtrip tests now
+exercise the script via subprocess instead of importing it.
+"""
 from __future__ import annotations
 
 import pickle
+import subprocess
+import sys
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 import pytest
 
@@ -19,18 +26,20 @@ from macro_pipeline.regime import (
     TrainedHmm,
     load_hmm,
     predict_state,
-    train_and_save_hmm,
 )
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+TRAIN_SCRIPT = REPO_ROOT / "scripts" / "train_hmm_v1.py"
 
 
 @pytest.fixture(scope="module")
 def trained_hmm() -> TrainedHmm:
-    """Single shared trained HMM (uses canonical pickle, creating if missing)."""
+    """Single shared trained HMM (loads the committed canonical pickle)."""
     return load_hmm()
 
 
 def test_hmm_pickle_exists(trained_hmm: TrainedHmm) -> None:
-    """After ``load_hmm`` runs, the canonical pickle must be on disk."""
+    """The committed canonical pickle must be present on disk (L3.5A)."""
     assert Path(HMM_PICKLE_PATH).exists()
     assert isinstance(trained_hmm, TrainedHmm)
 
@@ -64,20 +73,30 @@ def test_hmm_predict_2008_09_recession() -> None:
     assert r.model_version == HMM_VERSION
 
 
-def test_hmm_pickle_roundtrip_identical(tmp_path: Path) -> None:
-    """Train fresh into a tmp pickle, reload, and verify identical state
-    predictions on the same standardized observation."""
-    tmp_pickle = tmp_path / "tmp_hmm.pkl"
-    bundle_a = train_and_save_hmm(pickle_path=tmp_pickle, force=True)
-    bundle_b = load_hmm(tmp_pickle)
-    assert bundle_a.feature_names == bundle_b.feature_names
-    assert np.allclose(bundle_a.feature_mean, bundle_b.feature_mean)
-    assert np.allclose(bundle_a.feature_std, bundle_b.feature_std)
-    # Round-trip predict on a synthetic standardized row
-    obs = np.zeros((1, len(HMM_FEATURES)))
-    pa = bundle_a.hmm.predict(obs)
-    pb = bundle_b.hmm.predict(obs)
-    assert pa[0] == pb[0]
+def test_hmm_pickle_roundtrip_via_script(tmp_path: Path) -> None:
+    """L3.5A: training is admin-only via ``scripts/train_hmm_v1.py``.
+
+    Run the script in --dry-run mode (subprocess) and verify the
+    would-be sha256 matches the committed canonical pickle's sha256
+    — i.e. the script reproduces the artifact byte-equal under the
+    locked environment.
+    """
+    result = subprocess.run(
+        [sys.executable, str(TRAIN_SCRIPT), "--dry-run"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        timeout=180,
+    )
+    assert result.returncode == 0, (
+        f"train_hmm_v1.py --dry-run failed: stderr={result.stderr!r}"
+    )
+    out = result.stdout
+    assert "would-be pickle sha256:" in out
+    assert "MATCH" in out, (
+        f"L3.5A repro contract: would-be sha must match committed pickle. "
+        f"stdout=\n{out}"
+    )
 
 
 def test_hmm_pickle_loadable_directly() -> None:

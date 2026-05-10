@@ -64,4 +64,45 @@ class RegimeContextError(RegimeClassifierError):
     component: str = "regime_context"
 
 
-__all__ = ["PitDataUnavailableError", "RegimeClassifierError", "RegimeContextError"]
+# ---------------------------------------------------------------------------
+# Layer 3.5A — HMM frozen-contract exceptions (Codex findings A, D, O, Q, R, S)
+# ---------------------------------------------------------------------------
+class HmmArtifactMissingError(RuntimeError):
+    """Raised when the HMM pickle is missing from disk.
+
+    Layer 3.5A invariant: the inference path NEVER auto-trains. If the
+    artifact is absent the inference path fails closed; an admin must
+    re-run ``scripts/train_hmm_v1.py`` to regenerate it.
+    """
+
+
+class HmmArtifactCorruptError(RuntimeError):
+    """Raised when the HMM pickle's sha256 does not match the sidecar's
+    ``data_sha256`` — i.e. the artifact has been tampered with or
+    truncated. Inference fails closed."""
+
+
+class HmmMetadataIncompatibleError(RuntimeError):
+    """Raised when the sidecar ``schema_version`` or ``model_version``
+    does not match the version this build of ``macro_pipeline`` expects.
+
+    Future schema bumps should also bump the version constants in
+    ``regime.hmm_states`` so this error can guide admins to regenerate.
+    """
+
+
+class HmmConcurrencyError(RuntimeError):
+    """Raised when the HMM artifact's filelock could not be acquired
+    within the timeout (default 30s). Indicates contention with another
+    inference process or a stale lock from a crashed admin script."""
+
+
+__all__ = [
+    "HmmArtifactCorruptError",
+    "HmmArtifactMissingError",
+    "HmmConcurrencyError",
+    "HmmMetadataIncompatibleError",
+    "PitDataUnavailableError",
+    "RegimeClassifierError",
+    "RegimeContextError",
+]

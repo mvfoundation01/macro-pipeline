@@ -119,6 +119,49 @@ def write_cache_atomic(
     return parquet_path, meta_path
 
 
+def write_pickle_atomic_with_meta(
+    *,
+    pickle_path: Path,
+    pickle_bytes: bytes,
+    meta: dict,
+) -> tuple[Path, Path]:
+    """Atomically write a pickle artifact + sidecar ``.meta.json``.
+
+    Layer 3.5A.AM3: pickle artifacts have a different schema from
+    parquet caches (no ``row_count``; instead carry hmmlearn version,
+    pickle protocol, training-script sha, etc.). Rather than overload
+    the parquet-shaped ``write_cache_atomic`` we keep a parallel
+    helper with a focused contract:
+
+      1. Write ``pickle_bytes`` to ``pickle_path`` atomically (tmp +
+         fsync + replace).
+      2. Compute the pickle's sha256 from disk and stamp it onto
+         ``meta`` as ``data_sha256``.
+      3. Stamp ``schema_version`` (from ``meta`` if present, else
+         ``SCHEMA_VERSION``) and ``cache_written_at`` if not already
+         set by caller.
+      4. Atomically write ``meta`` JSON next to the pickle as
+         ``<pickle_path>.meta.json`` (i.e. ``regime_3state_v1.pkl`` →
+         ``regime_3state_v1.meta.json``).
+
+    Returns ``(pickle_path, meta_path)``.
+    """
+    pickle_path = Path(pickle_path)
+    pickle_path.parent.mkdir(parents=True, exist_ok=True)
+    atomic_write_bytes(pickle_path, pickle_bytes)
+
+    data_sha256 = _sha256_file(pickle_path)
+    meta_full = dict(meta)
+    meta_full["data_sha256"] = data_sha256
+    meta_full.setdefault("schema_version", meta.get("schema_version", SCHEMA_VERSION))
+    meta_full.setdefault("cache_written_at", pd.Timestamp.now().isoformat())
+
+    meta_path = pickle_path.with_suffix(".meta.json")
+    payload = json.dumps(meta_full, default=str, indent=2).encode("utf-8")
+    atomic_write_bytes(meta_path, payload)
+    return pickle_path, meta_path
+
+
 def read_cache_validated(
     stem: str,
     cache_dir: Path,
@@ -174,4 +217,5 @@ __all__ = [
     "atomic_write_parquet",
     "read_cache_validated",
     "write_cache_atomic",
+    "write_pickle_atomic_with_meta",
 ]

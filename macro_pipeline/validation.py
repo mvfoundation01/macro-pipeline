@@ -2068,10 +2068,214 @@ def pd_resolve_panel_path(path):
     return Path(path)
 
 
+def validate_gate12_hmm_frozen() -> GateReport:
+    """Gate 12 — Layer 3.5A HMM frozen-contract integrity.
+
+    Per ``LAYER_3_5_BUILD_SPEC.md`` §3.6:
+
+      1. Pickle exists at ``data/cache/hmm/regime_3state_v1.pkl``.
+      2. Sidecar exists at ``data/cache/hmm/regime_3state_v1.meta.json``.
+      3. Recomputed sha256 of pickle bytes == sidecar ``data_sha256``.
+      4. Sidecar has all required keys (``SIDECAR_REQUIRED_KEYS``).
+      5. Sidecar ``schema_version`` == ``SIDECAR_SCHEMA_VERSION``.
+      6. Sidecar ``model_version`` == ``SIDECAR_MODEL_VERSION``.
+      7. Sidecar ``hmmlearn_version`` == ``"0.3.3"``.
+      8. NBER overlap sanity: ``recession`` state has the highest NBER
+         overlap among the three states (data-driven label assignment).
+      9. ``train_and_save_hmm`` is NOT importable from
+         ``macro_pipeline.regime`` (Codex finding R closure).
+     10. ``load_hmm()`` returns a ``TrainedHmm`` whose
+         ``state_to_label`` mapping equals the sidecar's mapping.
+    """
+    import hashlib
+    import json
+    from pathlib import Path
+
+    findings: list[str] = []
+    warnings: list[str] = []
+    summary: dict = {}
+
+    from macro_pipeline.regime.hmm_states import (
+        HMM_PICKLE_PATH,
+        HMM_SIDECAR_PATH,
+        SIDECAR_MODEL_VERSION,
+        SIDECAR_REQUIRED_KEYS,
+        SIDECAR_SCHEMA_VERSION,
+    )
+
+    pickle_path = Path(HMM_PICKLE_PATH)
+    sidecar_path = Path(HMM_SIDECAR_PATH)
+
+    # 1. Pickle exists
+    if not pickle_path.exists():
+        findings.append(f"FAIL: pickle missing at {pickle_path}")
+        return GateReport(
+            name="Gate 12 - Layer 3.5A HMM Frozen Contract",
+            passed=False, findings=findings, summary=summary,
+        )
+    findings.append(f"Pickle present: {pickle_path}")
+
+    # 2. Sidecar exists
+    if not sidecar_path.exists():
+        findings.append(f"FAIL: sidecar missing at {sidecar_path}")
+        return GateReport(
+            name="Gate 12 - Layer 3.5A HMM Frozen Contract",
+            passed=False, findings=findings, summary=summary,
+        )
+    findings.append(f"Sidecar present: {sidecar_path}")
+
+    # 3. sha256 verification
+    h = hashlib.sha256()
+    with pickle_path.open("rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 20), b""):
+            h.update(chunk)
+    actual_sha = h.hexdigest()
+    summary["pickle_sha256"] = actual_sha
+
+    try:
+        meta = json.loads(sidecar_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        findings.append(f"FAIL: sidecar is not valid JSON: {exc}")
+        return GateReport(
+            name="Gate 12 - Layer 3.5A HMM Frozen Contract",
+            passed=False, findings=findings, summary=summary,
+        )
+    expected_sha = meta.get("data_sha256")
+    summary["sidecar_data_sha256"] = expected_sha
+    if expected_sha == actual_sha:
+        findings.append(
+            f"sha256 OK: recomputed={actual_sha[:8]} matches sidecar"
+        )
+    else:
+        findings.append(
+            f"FAIL: sha256 mismatch (recomputed={actual_sha}, "
+            f"sidecar.data_sha256={expected_sha})"
+        )
+
+    # 4-7. Sidecar key presence + values
+    missing = [k for k in SIDECAR_REQUIRED_KEYS if k not in meta]
+    if missing:
+        findings.append(f"FAIL: sidecar missing keys {missing}")
+    else:
+        findings.append(
+            f"All {len(SIDECAR_REQUIRED_KEYS)} required sidecar keys present"
+        )
+
+    if meta.get("schema_version") == SIDECAR_SCHEMA_VERSION:
+        findings.append(f"schema_version OK: {SIDECAR_SCHEMA_VERSION}")
+    else:
+        findings.append(
+            f"FAIL: schema_version={meta.get('schema_version')!r} "
+            f"(expected {SIDECAR_SCHEMA_VERSION!r})"
+        )
+
+    if meta.get("model_version") == SIDECAR_MODEL_VERSION:
+        findings.append(f"model_version OK: {SIDECAR_MODEL_VERSION}")
+    else:
+        findings.append(
+            f"FAIL: model_version={meta.get('model_version')!r} "
+            f"(expected {SIDECAR_MODEL_VERSION!r})"
+        )
+
+    expected_hmmlearn = "0.3.3"
+    if meta.get("hmmlearn_version") == expected_hmmlearn:
+        findings.append(f"hmmlearn_version OK: {expected_hmmlearn}")
+    else:
+        findings.append(
+            f"FAIL: hmmlearn_version={meta.get('hmmlearn_version')!r} "
+            f"(expected {expected_hmmlearn!r})"
+        )
+
+    summary["feature_names"] = meta.get("feature_names")
+    summary["state_to_label_mapping"] = meta.get("state_to_label_mapping")
+    summary["nber_overlap_per_state"] = meta.get("nber_overlap_per_state")
+
+    # 8. NBER overlap sanity
+    overlap = meta.get("nber_overlap_per_state", {})
+    state_to_label = meta.get("state_to_label_mapping", {})
+    if overlap and state_to_label:
+        try:
+            recession_idx = next(
+                k for k, v in state_to_label.items() if v == "recession"
+            )
+            recession_overlap = float(overlap.get(recession_idx, 0.0))
+            other_max = max(
+                float(v) for k, v in overlap.items() if k != recession_idx
+            )
+            if recession_overlap > other_max:
+                findings.append(
+                    f"NBER overlap sanity OK: recession-state idx="
+                    f"{recession_idx} has overlap={recession_overlap:.4f} "
+                    f"(> other max {other_max:.4f})"
+                )
+            else:
+                findings.append(
+                    f"FAIL: NBER overlap sanity broken — recession idx="
+                    f"{recession_idx} overlap={recession_overlap:.4f} not > "
+                    f"other max {other_max:.4f}"
+                )
+        except StopIteration:
+            findings.append("FAIL: no recession entry in state_to_label_mapping")
+    else:
+        findings.append("FAIL: NBER overlap or state mapping missing in sidecar")
+
+    # 9. train_and_save_hmm not importable
+    train_importable = False
+    try:
+        from macro_pipeline.regime import (  # type: ignore[attr-defined]  # noqa: F401
+            train_and_save_hmm,
+        )
+        train_importable = True
+    except ImportError:
+        pass
+    if train_importable:
+        findings.append(
+            "FAIL: train_and_save_hmm STILL importable from "
+            "macro_pipeline.regime (Codex finding R not closed)"
+        )
+    else:
+        findings.append(
+            "train_and_save_hmm NOT importable (Codex finding R closed)"
+        )
+
+    # 10. load_hmm consistency
+    try:
+        from macro_pipeline.regime import load_hmm
+        bundle = load_hmm()
+        loaded_mapping = {str(k): v for k, v in bundle.state_to_label.items()}
+        if loaded_mapping == state_to_label:
+            findings.append(
+                "load_hmm() state_to_label mapping == sidecar mapping"
+            )
+        else:
+            findings.append(
+                f"FAIL: load_hmm mapping {loaded_mapping} != sidecar "
+                f"{state_to_label}"
+            )
+    except Exception as exc:
+        findings.append(
+            f"FAIL: load_hmm() raised {type(exc).__name__}: {exc}"
+        )
+
+    passed = not any(f.startswith("FAIL") for f in findings)
+    return GateReport(
+        name="Gate 12 - Layer 3.5A HMM Frozen Contract",
+        passed=passed, findings=findings, warnings=warnings, summary=summary,
+    )
+
+
 def _cli_gate11() -> int:
     import logging
     logging.basicConfig(level="WARNING", format="%(message)s")
     report = validate_gate11_r_squared_panel()
+    print(report.render())
+    return 0 if report.passed else 1
+
+
+def _cli_gate12() -> int:
+    import logging
+    logging.basicConfig(level="WARNING", format="%(message)s")
+    report = validate_gate12_hmm_frozen()
     print(report.render())
     return 0 if report.passed else 1
 
@@ -2128,10 +2332,12 @@ if __name__ == "__main__":
         sys.exit(_cli_gate10())
     if cmd == "gate11":
         sys.exit(_cli_gate11())
+    if cmd == "gate12":
+        sys.exit(_cli_gate12())
     print(
         f"Unknown command: {cmd}. Available: "
         "gate1, gate2, gate3, gate4a, gate4b, gate4c, gate4d, "
-        "gate8, gate9, gate10, gate11",
+        "gate8, gate9, gate10, gate11, gate12",
         file=sys.stderr,
     )
     sys.exit(2)

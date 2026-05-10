@@ -1,4 +1,4 @@
-"""Regime classifier package (Layer 3A).
+"""Regime classifier package (Layer 3A; tightened at L3.5A).
 
 Public API
 ----------
@@ -7,18 +7,28 @@ Public API
 ``classify_kindleberger(ctx)``               — 5-phase rule-based classifier
 ``classify_dalio(ctx)``                      — 4-phase debt-cycle classifier
 ``predict_state(ctx)``                       — 3-state Gaussian HMM (frozen pickle)
-``train_and_save_hmm()``                     — one-time HMM training (pickle reuse)
+``load_hmm(pickle_path=None)``               — fail-closed pickle loader
 ``build_regime_context(ctx)``                — aggregate all four views
 ``RegimeContext``                            — combined output dataclass
 ``PitDataUnavailableError`` /
-``RegimeClassifierError``                    — typed exceptions
+``RegimeClassifierError`` / ``HmmArtifact*Error``
+                                             — typed exceptions
 
-See ``LAYER_3_BUILD_SPEC.md`` §4 for the full spec.
+Note: ``train_and_save_hmm`` was REMOVED from the public surface at
+L3.5A (Codex finding R). HMM training is admin-only and lives in
+``scripts/train_hmm_v1.py``; the inference path never auto-trains.
+
+See ``LAYER_3_BUILD_SPEC.md`` §4 and ``LAYER_3_5_BUILD_SPEC.md`` §3.5A
+for the full spec.
 """
 from __future__ import annotations
 
 from macro_pipeline.regime.dalio_cycle import DalioResult, classify_dalio
 from macro_pipeline.regime.exceptions import (
+    HmmArtifactCorruptError,
+    HmmArtifactMissingError,
+    HmmConcurrencyError,
+    HmmMetadataIncompatibleError,
     PitDataUnavailableError,
     RegimeClassifierError,
     RegimeContextError,
@@ -26,15 +36,18 @@ from macro_pipeline.regime.exceptions import (
 from macro_pipeline.regime.hmm_states import (
     HMM_FEATURES,
     HMM_PICKLE_PATH,
+    HMM_SIDECAR_PATH,
     HMM_TRAINING_END,
     HMM_TRAINING_START,
     HMM_VERSION,
+    SIDECAR_MODEL_VERSION,
+    SIDECAR_REQUIRED_KEYS,
+    SIDECAR_SCHEMA_VERSION,
     STATE_NAMES,
     HmmStateResult,
     TrainedHmm,
     load_hmm,
     predict_state,
-    train_and_save_hmm,
 )
 from macro_pipeline.regime.kindleberger import KindlebergerResult, classify_kindleberger
 from macro_pipeline.regime.nber_extract import (
@@ -49,13 +62,21 @@ from macro_pipeline.regime.regime_context import RegimeContext, build_regime_con
 __all__ = [
     "HMM_FEATURES",
     "HMM_PICKLE_PATH",
+    "HMM_SIDECAR_PATH",
     "HMM_TRAINING_END",
     "HMM_TRAINING_START",
     "HMM_VERSION",
     "NBER_FALLBACK_INDICATOR",
     "NBER_PRIMARY_INDICATOR",
+    "SIDECAR_MODEL_VERSION",
+    "SIDECAR_REQUIRED_KEYS",
+    "SIDECAR_SCHEMA_VERSION",
     "STATE_NAMES",
     "DalioResult",
+    "HmmArtifactCorruptError",
+    "HmmArtifactMissingError",
+    "HmmConcurrencyError",
+    "HmmMetadataIncompatibleError",
     "HmmStateResult",
     "KindlebergerResult",
     "NberStateResult",
@@ -71,5 +92,4 @@ __all__ = [
     "last_known_label_date",
     "load_hmm",
     "predict_state",
-    "train_and_save_hmm",
 ]
