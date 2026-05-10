@@ -11,7 +11,6 @@ Tier: 2C (official, public API).
 """
 from __future__ import annotations
 
-import json
 import logging
 import os
 import time
@@ -27,6 +26,7 @@ from tenacity import (
     wait_exponential,
 )
 
+from macro_pipeline.cache import write_cache_atomic
 from macro_pipeline.config import DATA_CACHE
 from macro_pipeline.loaders.base import IndicatorMetadata, Loader
 
@@ -106,10 +106,8 @@ def _build_dataframe(records: list[dict]) -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 # Cache
 # ---------------------------------------------------------------------------
-def _cache_paths(contract_code: str) -> tuple[Path, Path]:
-    parquet = DATA_CACHE / f"cftc_tff_spx_{contract_code}.parquet"
-    sidecar = DATA_CACHE / f"cftc_tff_spx_{contract_code}.meta.json"
-    return parquet, sidecar
+def _cache_paths(contract_code: str) -> Path:
+    return DATA_CACHE / f"cftc_tff_spx_{contract_code}.parquet"
 
 
 def _is_cache_fresh(parquet: Path) -> bool:
@@ -127,7 +125,7 @@ def load_cftc_tff_spx(
     *,
     force_refresh: bool = False,
 ) -> tuple[pd.DataFrame, IndicatorMetadata]:
-    parquet, sidecar = _cache_paths(contract_code)
+    parquet = _cache_paths(contract_code)
     use_cache = not force_refresh and _is_cache_fresh(parquet)
 
     if use_cache:
@@ -168,8 +166,17 @@ def load_cftc_tff_spx(
     )
 
     if not use_cache:
-        df.to_parquet(parquet)
-        sidecar.write_text(json.dumps(meta.to_dict(), default=str, indent=2))
+        # Layer 3.5E: route through ``write_cache_atomic`` so parquet +
+        # sidecar are committed atomically (tmp + fsync + replace) and
+        # the sidecar carries ``data_sha256`` / ``schema_version`` /
+        # ``row_count`` / ``cache_written_at`` for downstream
+        # ``read_cache_validated_subdir`` validation.
+        write_cache_atomic(
+            stem=f"cftc_tff_spx_{contract_code}",
+            df=df,
+            meta=meta.to_dict(),
+            cache_dir=DATA_CACHE,
+        )
 
     return df, meta
 

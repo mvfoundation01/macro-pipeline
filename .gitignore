@@ -18,9 +18,18 @@ venv/
 env/
 
 # Cache (auto-managed)
-data/cache/
+# NB: we ignore *contents* of data/cache/ rather than the directory
+# itself, so the L3.5A HMM carve-outs below can re-include specific
+# committed artifacts. (Per spec §3.5A-3.3-1.)
+data/cache/*
 data/derived/
 data/output/
+
+# L3.5A — HMM frozen artifact MUST be committed (sidecar + pickle).
+# This carve-out is the spec-locked exception to ``data/cache/*`` rule.
+!data/cache/hmm/
+!data/cache/hmm/*.pkl
+!data/cache/hmm/*.meta.json
 
 # Raw data (large; users provide their own)
 data/raw/
@@ -39,6 +48,13 @@ save/
 .mypy_cache/
 .ruff_cache/
 .ipynb_checkpoints/
+
+# Worktree-local pip --target install dir (L3.5A);
+# real deps are declared in pyproject.toml + uv.lock.
+.local-deps/
+
+# HMM lockfile created by filelock during loads (L3.5A)
+*.pkl.lock
 
 # IDE
 .vscode/

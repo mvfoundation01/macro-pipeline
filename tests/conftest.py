@@ -17,6 +17,7 @@ this flag — opt-in fixtures are the contract.
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -24,6 +25,21 @@ import pandas as pd
 import pytest
 
 FIXTURE_DIR = Path(__file__).parent / "fixtures"
+
+# Layer 3.5A — worktree-local dependency directory.
+# Tests run in a worktree whose master ``.venv`` may not have all the
+# Layer 3.5 deps yet (e.g. ``filelock``); ``scripts/install_local_deps.sh``
+# (or ``pip install --target .local-deps ...`` from the worktree root)
+# populates a sibling ``.local-deps`` folder that we prepend to sys.path
+# here so the package and tests resolve those imports without needing
+# a master-venv pip-install. After the L3.5 PR merges and V re-runs
+# ``uv lock`` + ``uv sync`` in master, this fallback path is benign
+# (still resolves before but contains the same package).
+_LOCAL_DEPS = Path(__file__).resolve().parent.parent / ".local-deps"
+if _LOCAL_DEPS.is_dir():
+    p = str(_LOCAL_DEPS)
+    if p not in sys.path:
+        sys.path.insert(0, p)
 
 
 # ---------------------------------------------------------------------------

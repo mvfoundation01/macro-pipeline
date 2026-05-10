@@ -1,0 +1,7 @@
+peak_date,peak_announcement_date,trough_date,trough_announcement_date,source_url,notes
+1980-01,1980-06-03,1980-07,1981-07-08,https://www.nber.org/research/business-cycle-dating/business-cycle-dating-committee-announcements,1980 cycle
+1981-07,1982-01-06,1982-11,1983-07-08,https://www.nber.org/research/business-cycle-dating/business-cycle-dating-committee-announcements,double-dip
+1990-07,1991-04-25,1991-03,1992-12-22,https://www.nber.org/research/business-cycle-dating/business-cycle-dating-committee-announcements,early-90s recession
+2001-03,2001-11-26,2001-11,2003-07-17,https://www.nber.org/research/business-cycle-dating/business-cycle-dating-committee-announcements,dot-com bust
+2007-12,2008-12-01,2009-06,2010-09-20,https://www.nber.org/research/business-cycle-dating/business-cycle-dating-committee-announcements,GFC
+2020-02,2020-06-08,2020-04,2021-07-19,https://www.nber.org/research/business-cycle-dating/business-cycle-dating-committee-announcements,COVID 4-month peak announcement

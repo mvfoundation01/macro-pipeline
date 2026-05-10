@@ -59,12 +59,32 @@ class IndicatorBundle:
     at the top level — see ``IndicatorMetadata.to_dict``).
     ``pit_safe`` is True iff this bundle came from the PIT path; backtest
     code should reject any bundle with ``pit_safe=False``.
+
+    Layer 3.5B fields (Option Z bookkeeping):
+    ``pit_safe_basis`` — short tag describing WHY the bundle is PIT-safe:
+        ``"vintage_panel"`` (FRED ALFRED materialised), ``"hlw_vintage"``
+        (HLW quarterly panel), ``"release_lag"`` (visibility-shift via
+        ``release_lag_days``), ``"asof_truncation"`` (no lag), or
+        ``"by_construction"`` (Option Z — series is constructed from
+        only-known-at-the-time data per its publishing methodology;
+        SAHMREALTIME is the canonical example).
+    ``derived_confidence_cap`` — Option Z upper bound on downstream
+        confidence ∈ (0, 1]. ``None`` when the source carries no derived
+        cap. Layer 3.5B propagates this through ``compute_final_confidence_cap``
+        so CRPS / CDRS aggregate caps reflect it.
+    ``notes`` — free-text trail visible to Layer 6 reporting; populated
+        by readers and downstream scorers. Same intent as the future
+        ``ScoredObservation.notes`` field (3.5D); 3.5B writes here from
+        the reader side and 3.5D will plumb the scorer side.
     """
     indicator_id: str
     data: pd.Series
     metadata: dict[str, Any]
     pit_safe: bool
     as_of: pd.Timestamp | None = None
+    pit_safe_basis: str = "n/a"
+    derived_confidence_cap: float | None = None
+    notes: list[str] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -259,6 +279,7 @@ class PitSeriesReader:
             metadata=meta,
             pit_safe=True,
             as_of=as_of,
+            pit_safe_basis="hlw_vintage",
         )
 
     def _load_via_vintage_panel(
@@ -280,33 +301,109 @@ class PitSeriesReader:
             metadata={**meta, "pit_source": "vintage_panel"},
             pit_safe=True,
             as_of=as_of,
+            pit_safe_basis="vintage_panel",
         )
 
     def _load_via_visibility_shift(
         self, indicator_id: str, as_of: pd.Timestamp,
     ) -> IndicatorBundle:
+        """Layer 3.5B refactor — explicit 3-way branching:
+
+        1. ``vintage`` flag + Option Z (``pit_safe_by_construction=True``):
+           return latest cache truncated at ``as_of``, annotated with
+           ``pit_safe_basis="by_construction"`` and ``derived_confidence_cap``
+           from config; downstream caps confidence accordingly.
+        2. ``vintage`` flag set but neither in ``VINTAGE_REQUIRED_SERIES``
+           NOR Option Z flagged: **raise ``PitContractViolationError``**
+           (Codex finding B closure — no more silent latest-cache
+           fallback claiming ``pit_safe=True``).
+        3. No vintage flag: standard release-lag visibility shift (when
+           ``release_lag_days > 0``) or as-of truncation (lag=0). This
+           is the Tier-1/2/3 indicator path, unchanged from L1.5.
+        """
         stem = _find_cache_stem(indicator_id)
         s, meta = _read_cached_series_and_meta(stem, indicator_id)
         lag = int(meta.get("release_lag_days", 0))
         needs_vintage = bool(meta.get("needs_vintage", False))
 
-        if needs_vintage:
-            log.warning(
-                "%s: needs_vintage=True but no materialized FRED vintage panel; "
-                "falling back to latest-cache truncation at as_of (results may "
-                "include revisions made after as_of).", indicator_id,
+        # Pull Option Z flags from live config (source of truth) with
+        # cache-meta fallback (so tests that mock meta with these keys
+        # work without re-importing config).
+        from macro_pipeline.config import FRED_SERIES_API
+        spec = FRED_SERIES_API.get(indicator_id, {})
+        pit_safe_by_construction = bool(
+            spec.get("pit_safe_by_construction",
+                     meta.get("pit_safe_by_construction", False))
+        )
+        derived_cap = spec.get(
+            "derived_confidence_cap", meta.get("derived_confidence_cap")
+        )
+        construction_rationale = spec.get(
+            "pit_construction_rationale",
+            meta.get("pit_construction_rationale"),
+        )
+
+        # ---- Branch 1: Option Z ----
+        if needs_vintage and pit_safe_by_construction:
+            out = s[s.index <= as_of].copy()
+            out.name = indicator_id
+            note = (
+                f"{indicator_id}: pit_safe_by_construction=True; "
+                f"derived_confidence_cap={derived_cap}. "
+                f"Rationale: {construction_rationale}"
+            )
+            log.info("%s: PIT-safe by construction; cap=%s", indicator_id, derived_cap)
+            return IndicatorBundle(
+                indicator_id=indicator_id,
+                data=out,
+                metadata={
+                    **meta,
+                    "pit_source": "by_construction_latest",
+                    "pit_safe_by_construction": True,
+                    "derived_confidence_cap": derived_cap,
+                    "applied_release_lag_days": lag,
+                },
+                pit_safe=True,
+                as_of=as_of,
+                pit_safe_basis="by_construction",
+                derived_confidence_cap=(
+                    float(derived_cap) if derived_cap is not None else None
+                ),
+                notes=[note],
             )
 
+        # ---- Branch 2: contract violation (no panel, no Option Z) ----
+        if needs_vintage:
+            from macro_pipeline.exceptions import PitContractViolationError
+            raise PitContractViolationError(
+                indicator_id=indicator_id,
+                reason=(
+                    f"Series {indicator_id!r} has vintage=True but is "
+                    "neither in VINTAGE_REQUIRED_SERIES (no materialized "
+                    "vintage panel) nor flagged "
+                    "pit_safe_by_construction=True. Required disposition: "
+                    "(a) materialise vintage panel, (b) set Option Z flag "
+                    "with rationale + derived_confidence_cap, OR (c) set "
+                    "vintage=False if the series is genuinely non-vintage."
+                ),
+                context={
+                    "as_of": str(as_of),
+                    "needs_vintage": True,
+                    "pit_safe_by_construction": False,
+                },
+            )
+
+        # ---- Branch 3: standard non-vintage path (Tier 1/2/3) ----
         if lag > 0:
             shifted = to_visibility_index(s, lag)
             visible = shifted[shifted.index <= as_of]
-            # Shift back to observation_date so the caller sees the
-            # series in its native time axis.
             obs_idx = visible.index - pd.Timedelta(days=lag)
             out = pd.Series(visible.values, index=obs_idx, name=indicator_id)
+            basis = "release_lag"
         else:
             out = s[s.index <= as_of].copy()
             out.name = indicator_id
+            basis = "asof_truncation"
 
         return IndicatorBundle(
             indicator_id=indicator_id,
@@ -318,6 +415,7 @@ class PitSeriesReader:
             },
             pit_safe=True,
             as_of=as_of,
+            pit_safe_basis=basis,
         )
 
 
@@ -361,8 +459,17 @@ class PitDataContext:
     Layer 5 should require ``PitDataContext`` as the only data-access
     argument so backtest code cannot accidentally pass a latest-view
     bundle. ``as_of=None`` raises immediately at construction time.
+
+    Layer 3.5C: ``is_real_time`` (default ``True``) governs the NBER
+    pre-1978 policy. Real-time callers (default) refuse to label
+    pre-1978 dates because the announcement chronology is inconsistent
+    before that boundary; training-mode callers (``is_real_time=False``)
+    explicitly opt in to latest-knowledge labels for historical
+    calibration / fitting workflows. See ``NBER_PRE_1978_POLICY`` in
+    ``config.py``.
     """
     as_of: pd.Timestamp = field(default=None)  # type: ignore[assignment]
+    is_real_time: bool = True
 
     def __post_init__(self) -> None:
         if self.as_of is None:

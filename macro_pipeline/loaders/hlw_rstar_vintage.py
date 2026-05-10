@@ -52,6 +52,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from macro_pipeline.cache import write_cache_atomic
 from macro_pipeline.config import DATA_CACHE, DATA_RAW
 from macro_pipeline.loaders.base import IndicatorMetadata, Loader
 
@@ -285,9 +286,6 @@ def build_cache(*, force_refresh: bool = False) -> tuple[pd.DataFrame, Indicator
     long = pd.concat(parts, axis=0, ignore_index=True)
     long = long.set_index(["vintage", "date"]).sort_index()
 
-    DATA_CACHE.mkdir(parents=True, exist_ok=True)
-    long.to_parquet(parquet)
-
     vintages_meta = {
         v: vintage_to_publication_date(v).date().isoformat()
         for v in discover_vintages()
@@ -324,7 +322,18 @@ def build_cache(*, force_refresh: bool = False) -> tuple[pd.DataFrame, Indicator
             ),
         },
     )
-    sidecar.write_text(json.dumps(meta.to_dict(), default=str, indent=2))
+    # Layer 3.5E (D25 — AM26): the build is a single concatenated long-
+    # format parquet (NOT per-vintage as the spec hypothesised), so the
+    # atomic-write granularity is the whole vintage panel. Either every
+    # vintage commits or nothing does — there is no partial-vintage
+    # state visible to readers thanks to ``write_cache_atomic``'s tmp
+    # + fsync + replace flow.
+    write_cache_atomic(
+        stem="official_HLW_VINTAGE",
+        df=long,
+        meta=meta.to_dict(),
+        cache_dir=DATA_CACHE,
+    )
     return long, meta
 
 

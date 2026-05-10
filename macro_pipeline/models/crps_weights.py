@@ -93,6 +93,13 @@ class WeightEstimationResult:
     cv_folds: int = 0
     lambda_used: float = float("nan")
     is_placeholder: bool = False
+    # Layer 3B addition: when the active component subset differs from
+    # the 6-key EXPERT_COEFFICIENT_PRIORS (e.g. NAPMNOI dropped due to
+    # FRED licensing change, LEI dropped because CB LEI is not feasibly
+    # sourced), the weight dict is the *redistributed* result and the
+    # full audit trail lives here.
+    inactive_components: list[str] = field(default_factory=list)
+    redistribution_method: str = ""
     notes: str = ""
     extra: dict[str, Any] = field(default_factory=dict)
 

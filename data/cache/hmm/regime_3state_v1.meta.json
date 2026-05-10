@@ -1,0 +1,37 @@
+{
+  "schema_version": "1.0",
+  "model_version": "v1",
+  "model_family": "GaussianHMM",
+  "n_components": 3,
+  "training_window_start": "1982-01",
+  "training_window_end": "2019-12",
+  "n_obs_train": 456,
+  "feature_names": [
+    "T10Y2Y",
+    "PHILLY_LEI_PROXY",
+    "IC4WSA",
+    "NFCI",
+    "UMCSENT"
+  ],
+  "feature_matrix_sha256": "a634020a68305db4a5bf2c68f28cd530dda2ccf1dec836b9cd6b2a34e1917ac5",
+  "nber_label_sha256": "33ded4da8c65d646a60ef06d20fd56113beaa16e2ef18e1786bba378398963bb",
+  "state_to_label_mapping": {
+    "0": "expansion",
+    "2": "late-cycle",
+    "1": "recession"
+  },
+  "nber_overlap_per_state": {
+    "0": 0.0,
+    "1": 0.5,
+    "2": 0.037815126050420166
+  },
+  "hmmlearn_version": "0.3.3",
+  "python_version": "3.12.10",
+  "pickle_protocol": 4,
+  "random_state": 42,
+  "created_at_utc": "2026-05-10T02:00:09.038242+00:00",
+  "training_script_path": "scripts/train_hmm_v1.py",
+  "training_script_sha256": "038c246a92a479662ced6edb00ece3402e0d2e150713e809977747f570c4e47f",
+  "data_sha256": "aa813d167e0e3f591c55cf254b06e1f977e48e1fd158f96845ac7b02791514c5",
+  "cache_written_at": "2026-05-09T22:00:09.054931"
+}

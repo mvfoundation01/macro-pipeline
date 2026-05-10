@@ -175,10 +175,16 @@ def tier5_realtime_check(
 # ---------------------------------------------------------------------------
 @dataclass
 class AppliedCaps:
-    """Audit-trail dataclass for the final cap aggregation."""
+    """Audit-trail dataclass for the final cap aggregation.
+
+    Layer 3.5B: ``derived_confidence_cap`` carries the Option Z cap
+    (e.g. 0.70 for SAHMREALTIME) and participates in the MIN
+    aggregation alongside source / vintage / staleness caps.
+    """
     source_cap: float = 1.0
     vintage_confidence_cap: float | None = None
     vintage_staleness_cap: float | None = None
+    derived_confidence_cap: float | None = None
     tier5_block: bool = False
     tier5_reason: str = ""
     final_cap: float = 1.0
@@ -212,6 +218,12 @@ def compute_final_confidence_cap(
     if vcc is not None:
         out.vintage_confidence_cap = float(vcc)
 
+    # Layer 3.5B Option Z: ``derived_confidence_cap`` is propagated by
+    # the PIT reader for series flagged ``pit_safe_by_construction=True``.
+    dcc = meta.get("derived_confidence_cap")
+    if dcc is not None:
+        out.derived_confidence_cap = float(dcc)
+
     if as_of is not None:
         pub_date = meta.get("hlw_vintage_publication_date") \
             or meta.get("vintage_publication_date")
@@ -233,6 +245,7 @@ def compute_final_confidence_cap(
 
     out.final_cap = aggregate_caps(
         out.source_cap, out.vintage_confidence_cap, out.vintage_staleness_cap,
+        out.derived_confidence_cap,
     )
     return out
 
