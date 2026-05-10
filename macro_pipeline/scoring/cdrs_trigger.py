@@ -24,6 +24,7 @@ import numpy as np
 import pandas as pd
 
 from macro_pipeline.access import PitDataContext, load_series
+from macro_pipeline.exceptions import legitimate_missing_data_exceptions
 from macro_pipeline.scoring.scored_observation import CompositeBuildError
 
 T_COMPONENTS: tuple[str, ...] = (
@@ -70,7 +71,7 @@ def t1_hy_oas_30d_roc(ctx: PitDataContext) -> tuple[float | None, float | None, 
     """30D rate of change in HY OAS (bps), sigmoid'd around +50bps."""
     try:
         hy = _pit_series("BAMLH0A0HYM2", ctx)
-    except Exception as exc:
+    except legitimate_missing_data_exceptions() as exc:
         return None, None, f"T1 HY load error: {type(exc).__name__}: {exc}"
     if hy.empty:
         return None, None, "T1 HY OAS empty in PIT view (starts 1996-12)"
@@ -94,7 +95,7 @@ def t2_vix_12m_pctile(ctx: PitDataContext) -> tuple[float | None, float | None, 
     """Trailing 12M percentile rank of latest VIX."""
     try:
         vix = _pit_series("VIX_YAHOO", ctx)
-    except Exception as exc:
+    except legitimate_missing_data_exceptions() as exc:
         return None, None, f"T2 VIX load error: {type(exc).__name__}: {exc}"
     if vix.empty:
         return None, None, "T2 VIX empty in PIT view (starts 1990-01)"
@@ -116,7 +117,7 @@ def t3_gamma_sign(ctx: PitDataContext) -> tuple[float | None, float | None, str]
     """
     try:
         gamma = _pit_series("CBOE_GAMMA", ctx)
-    except Exception as exc:
+    except legitimate_missing_data_exceptions() as exc:
         return None, None, f"T3 gamma load error: {type(exc).__name__}: {exc}"
     if gamma.empty:
         return None, None, "T3 CBOE_GAMMA empty in PIT view (starts 2022-12-12) — D9 drop"
@@ -131,7 +132,7 @@ def t4_breadth_thrust(ctx: PitDataContext) -> tuple[float | None, float | None, 
     """S5FI breadth: linear ramp 0 at ≥80%, 0.5 at 40%, 1.0 at ≤20%."""
     try:
         s5fi = _pit_series("S5FI", ctx)
-    except Exception as exc:
+    except legitimate_missing_data_exceptions() as exc:
         return None, None, f"T4 S5FI load error: {type(exc).__name__}: {exc}"
     if s5fi.empty:
         return None, None, "T4 S5FI empty in PIT view (starts 2006-12)"
@@ -159,7 +160,7 @@ def t5_move_z(ctx: PitDataContext) -> tuple[float | None, float | None, str]:
     """12M rolling z-score on MOVE → sigmoid."""
     try:
         move = _pit_series("MOVE", ctx)
-    except Exception as exc:
+    except legitimate_missing_data_exceptions() as exc:
         return None, None, f"T5 MOVE load error: {type(exc).__name__}: {exc}"
     if move.empty:
         return None, None, "T5 MOVE empty in PIT view (starts 2002-11)"

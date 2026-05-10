@@ -2960,13 +2960,27 @@ def validate_gate16_cache_integrity() -> GateReport:
         findings.append("FAIL: Gate 11 still length-checks sha256")
 
     # 4. Three narrowed exception sites have specific exception tuples.
+    # Layer 3.5b-V (D30) consolidated 3.5E D27's inline tuple
+    # ``(HmmArtifactMissingError, HmmArtifactCorruptError,
+    # HmmMetadataIncompatibleError)`` into the shared helper
+    # ``legitimate_missing_data_exceptions()`` (the helper adds
+    # ``PitDataUnavailableError`` to the caught types — empirically
+    # zero impact at the D27 site since ``predict_state`` doesn't
+    # raise it). The Gate 16 sub-criterion 4 check therefore accepts
+    # EITHER the original inline-tuple pattern OR the consolidated
+    # helper pattern at the regime_context HMM-catch site.
     rc_src = (pkg_root / "regime" / "regime_context.py").read_text(encoding="utf-8")
     cdrs_src = (pkg_root / "scoring" / "cdrs.py").read_text(encoding="utf-8")
-    rc_narrow_ok = (
-        "HmmArtifactMissingError" in rc_src
-        and "HmmArtifactCorruptError" in rc_src
-        and "HmmMetadataIncompatibleError" in rc_src
-        and "except Exception" not in _around_predict_state(rc_src)
+    rc_around = _around_predict_state(rc_src)
+    rc_narrow_ok = "except Exception" not in rc_around and (
+        # Pre-3.5b-V D27 inline-tuple form (still acceptable)
+        (
+            "HmmArtifactMissingError" in rc_around
+            and "HmmArtifactCorruptError" in rc_around
+            and "HmmMetadataIncompatibleError" in rc_around
+        )
+        # Post-3.5b-V D30 consolidated helper form
+        or "legitimate_missing_data_exceptions" in rc_around
     )
     cdrs_narrow_count = cdrs_src.count("PitContractViolationError")
     cdrs_narrow_ok = cdrs_narrow_count >= 2 and cdrs_src.count(

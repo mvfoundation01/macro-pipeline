@@ -156,8 +156,14 @@ def test_pit_truncates_at_vintage_quarter_end():
 
 def test_pit_pre_2015_raises():
     """The earliest vintage in this file is 2015Q4 (published 2016-01-14).
-    asof before that should raise (no vintage available)."""
-    with pytest.raises(ValueError, match="No HLW vintage"):
+    asof before that should raise (no vintage available).
+
+    Layer 3.5b-V (D30) refined the raised type from bare ``ValueError``
+    to ``PitDataUnavailableError`` so the broader AP-6 narrowing helper
+    catches it correctly as the "PIT data missing" semantic it always
+    was."""
+    from macro_pipeline.regime.exceptions import PitDataUnavailableError
+    with pytest.raises(PitDataUnavailableError, match="No HLW vintage"):
         get_pit_rstar("2010-01-01")
 
 

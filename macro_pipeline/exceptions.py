@@ -231,6 +231,44 @@ class CacheValidationError(Exception):
         return " ".join(parts)
 
 
+# ---------------------------------------------------------------------------
+# Layer 3.5b-V (D30) — shared helper for legitimate "component missing"
+# fallbacks at scoring/regime metric sites.
+# ---------------------------------------------------------------------------
+def legitimate_missing_data_exceptions() -> tuple[type[BaseException], ...]:
+    """The canonical exception tuple for "component missing — degrade
+    gracefully" fallbacks at scoring (V1-V5, T1-T5) and regime metric
+    sites (kindleberger, dalio, HMM).
+
+    Catch this tuple at sites where a missing component is a legitimate
+    degradation path. Does NOT include
+    ``PitContractViolationError`` / ``RegimeClassifierError`` /
+    ``HmmConcurrencyError`` / ``CacheValidationError`` /
+    ``IndicatorLoadError`` / ``KeyError`` / ``ValueError`` /
+    ``FileNotFoundError`` — those propagate so contract / config /
+    cache / env issues fail loudly rather than silently swallow into
+    "component missing" notes (Codex L3.5 finding V; consolidates
+    Layer 3.5E D27 inline tuple).
+
+    Lazy import of ``regime/exceptions`` avoids the
+    ``exceptions.py ↔ regime/exceptions.py`` module-load cycle.
+    Returned as a function (vs constant) so callers reuse the same
+    tuple shape and so the import deferral is per-call cheap.
+    """
+    from macro_pipeline.regime.exceptions import (
+        HmmArtifactCorruptError,
+        HmmArtifactMissingError,
+        HmmMetadataIncompatibleError,
+        PitDataUnavailableError,
+    )
+    return (
+        HmmArtifactMissingError,
+        HmmArtifactCorruptError,
+        HmmMetadataIncompatibleError,
+        PitDataUnavailableError,
+    )
+
+
 __all__ = [
     "CacheValidationError",
     "IndicatorAuthError",
@@ -241,4 +279,5 @@ __all__ = [
     "IndicatorRateLimitError",
     "PitContractViolationError",
     "from_request_exception",
+    "legitimate_missing_data_exceptions",
 ]
