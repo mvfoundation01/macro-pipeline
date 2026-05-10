@@ -26,7 +26,26 @@ Layer 5 backlog reference (if any).
 
 ---
 
-## L5 backlog additions (deferrals from L3.5)
+## L5 backlog additions (deferrals from L3.5 + L3.5b)
+
+### L5-13 — CDRS notes migration symmetry with CRPS
+
+**Status**: pending (deferred from 3.5b per Codex 5.5 review finding X,
+severity LOW).
+**Effort**: 1–2h.
+**Triggered by**: Codex L3.5 review finding X.
+**Priority**: Tier 3 (low / nice-to-have).
+**Description**: Codex L3.5 review finding X (LOW): CRPS notes
+migration is clean (3.5D AM25 migrated `metadata_extra` → `notes`);
+CDRS mostly leaves V/T notes in `metadata_extra` and does not yet
+propagate NBER pre-1978 training caveats into `ScoredObservation.notes`.
+Not currently biting because CDRS does not use Option Z components and
+pre-1978 is unreachable, but the symmetry claim made in 3.5D
+verification is ahead of implementation. Migrate CDRS notes propagation
+to use the same `_format_pit_lineage_notes()` helper as CRPS; add NBER
+pre-1978 caveat propagation when `pre_1978_training_only` flag is
+True. Touches `scoring/cdrs.py` + tests. Right-sized scope when L5
+walk-forward CV begins exercising training-mode code paths.
 
 ### L5-14 — Comprehensive AP-6 hygiene sweep across out-of-scope categories
 
