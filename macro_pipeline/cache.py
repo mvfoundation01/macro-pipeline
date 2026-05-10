@@ -347,15 +347,29 @@ def read_cache_validated(
 ) -> tuple[pd.DataFrame, dict] | None:
     """Read cache validating schema_version, sha256, and row_count.
 
-    Returns ``None`` (and logs at WARNING) if either file is missing,
-    the metadata is corrupt JSON, the schema_version does not match,
-    the row count does not match, or the sha256 does not match.
+    Returns ``None`` (and logs at WARNING) for "rebuild me" signals:
+    either file missing, metadata corrupt JSON, schema_version
+    mismatch, sha256 mismatch, or row_count mismatch. Callers that
+    own a rebuild flow (loaders) treat ``None`` as the rebuild
+    signal.
+
+    **Raises** ``CacheValidationError`` for integrity-contract
+    violations: a sidecar that exists but lacks ``data_sha256`` is a
+    Layer 3.5b-T-D2 violation (mandatory field). The previous
+    implementation short-circuited the sha check when
+    ``expected_hash`` was falsy, silently accepting invalid sidecars
+    (Codex L3.5 finding T). Post-3.5b-T (per D28 + AM-3.5b-T-1=A)
+    the migration scaffold is intentionally not built — empirical
+    state is post-migration (138/138 caches carry ``data_sha256``
+    after 3.5E STEP 0); transitional DeprecationWarning +
+    auto-recompute would be dormant code.
 
     Caches written before A.5 (no ``data_sha256``/``schema_version``)
-    are rejected. Callers that need to read legacy caches should fall
-    back to ``pd.read_parquet`` directly until those caches are
-    rewritten through ``write_cache_atomic``.
+    are rejected; the rejection is now hard (raise) for the
+    ``data_sha256`` path and soft (return None) for everything else.
     """
+    from macro_pipeline.exceptions import CacheValidationError
+
     parquet_path = cache_dir / f"{stem}.parquet"
     meta_path = cache_dir / f"{stem}.meta.json"
     if not (parquet_path.exists() and meta_path.exists()):
@@ -374,8 +388,17 @@ def read_cache_validated(
         return None
 
     expected_hash = meta.get("data_sha256")
+    if not expected_hash:
+        raise CacheValidationError(
+            path=str(parquet_path),
+            reason=(
+                "sidecar missing data_sha256 field "
+                "(mandatory post-Layer 3.5b-T)"
+            ),
+            context={"meta_path": str(meta_path), "stem": stem},
+        )
     actual_hash = _sha256_file(parquet_path)
-    if expected_hash and actual_hash != expected_hash:
+    if actual_hash != expected_hash:
         log.warning("Cache %s: sha256 mismatch; invalidating.", stem)
         return None
 

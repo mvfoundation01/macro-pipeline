@@ -137,9 +137,42 @@ def _find_cache_stem(indicator_id: str) -> str:
 
 
 def _read_cached_series_and_meta(stem: str, indicator_id: str) -> tuple[pd.Series, dict]:
+    """Read a cached single-series parquet through the validated cache helper.
+
+    Layer 3.5b-T (closes Codex finding T): the prior implementation
+    called ``pd.read_parquet`` directly and ignored the sidecar
+    entirely — a tampered parquet, a stale ``data_sha256``, or a
+    schema_version drift would all silently feed downstream scoring
+    with corrupt or wrong-version data. Production reads now route
+    through ``cache.read_cache_validated`` which validates
+    schema_version + sha256 + row_count + mandatory ``data_sha256``
+    field. Any cache-integrity failure raises
+    ``CacheValidationError`` — there is no silent fallback at the
+    production boundary.
+
+    Loaders that own a rebuild flow continue to call
+    ``read_cache_validated`` directly and treat ``None`` as the
+    rebuild signal; this access-layer wrapper has no rebuild flow,
+    so ``None`` from the helper (schema mismatch, missing files,
+    sha mismatch, row_count mismatch) is converted to a raise.
+    """
+    from macro_pipeline.cache import read_cache_validated
+    from macro_pipeline.exceptions import CacheValidationError
+
     parquet_path = DATA_CACHE / f"{stem}.parquet"
-    meta_path = DATA_CACHE / f"{stem}.meta.json"
-    df = pd.read_parquet(parquet_path)
+    result = read_cache_validated(stem, DATA_CACHE)
+    if result is None:
+        raise CacheValidationError(
+            path=str(parquet_path),
+            reason=(
+                "cache validation failed for production read "
+                "(schema_version mismatch, missing files, sha256 "
+                "mismatch, or row_count mismatch); rebuild via the "
+                "appropriate loader"
+            ),
+            context={"stem": stem, "indicator_id": indicator_id},
+        )
+    df, meta = result
     if df.shape[1] == 0:
         raise ValueError(f"{indicator_id}: empty parquet at {parquet_path}")
     # The convention is "column name = bare indicator_id", but legacy
@@ -147,7 +180,6 @@ def _read_cached_series_and_meta(stem: str, indicator_id: str) -> tuple[pd.Serie
     # matches indicator_id, else the first column.
     s = (df[indicator_id] if indicator_id in df.columns else df.iloc[:, 0]).copy()
     s.name = indicator_id
-    meta = json.loads(meta_path.read_bytes()) if meta_path.exists() else {}
     return s, meta
 
 
