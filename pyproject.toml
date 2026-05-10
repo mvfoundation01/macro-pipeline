@@ -91,6 +91,13 @@ ignore = ["E501", "RUF002", "RUF003", "RUF046", "RUF059"]
 # L3.5B PIT enforcement tests: same naming pattern (test names embed
 # exception class names + sub-phase tag).
 "tests/test_pit_enforcement.py" = ["E402", "N802"]
+# L3.5D dissent + rename tests: test names embed RegimeState constants,
+# sub-phase tags (3_5B / 3_5D), and class-style identifiers.
+"tests/test_regime_dissent.py" = ["E402", "N802"]
+"tests/test_scored_observation_rename.py" = ["E402", "N802"]
+# L3.5D RegimeState(str, Enum) is the spec-literal form (§6.3-1). Python
+# 3.11+ offers StrEnum but spec compatibility takes precedence.
+"macro_pipeline/regime/regime_context.py" = ["UP042"]
 # pit_audit dataclass field name mirrors the module-level constant
 # ``VINTAGE_REQUIRED_SERIES`` for clarity (uppercase preserves the link).
 "macro_pipeline/utils/pit_audit.py" = ["N815"]

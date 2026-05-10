@@ -9,7 +9,7 @@ contains the CRPS production scorer (Layer 3B); CDRS arrives in 3C.
 | Module | Layer | Output |
 |---|---|---|
 | `scored_observation.py` | 3B | `ScoredObservation` dataclass + `CompositeBuildError` |
-| `crps.py` | 3B | `compute_crps(ctx)` → 12M-forward recession probability |
+| `crps.py` | 3B | `compute_crps(ctx)` → 12M-forward Recession Risk Score (raw composite; not yet calibrated to probability — see L5-RM-4) |
 
 ## §2. Spec deviations (Strategic Claude approved)
 
@@ -325,3 +325,67 @@ the audit returns 0 mismatches. Gate 13
 (`validate_gate13_pit_contracts`) re-runs this audit + the 4-anchor
 smoke-test on every gate execution.
 
+
+
+---
+
+# §D21. Layer 3.5D — Risk Score, not Probability + INDETERMINATE state
+
+**Spec ref**: `LAYER_3_5_BUILD_SPEC.md` §6 (3.5D).
+
+## §D21.1 — Why "Risk Score" not "probability"
+
+CRPS and CDRS are **risk scores**, not probabilities. The `raw_score`
+field on `ScoredObservation` (renamed from `score_value` at Layer 3.5D
+per Decision Lock 3.5D-D3) is a weighted/multiplicative composite of
+component signals. Until Layer 5's blocked walk-forward calibration
+(L5-RM-4 for CRPS, L5-RM-6 for CDRS), the raw composite is **not**
+calibrated against 12M-forward NBER recession-start labels (CRPS) or
+SPX max-drawdown ≥20% labels (CDRS) and **must not** be interpreted
+as an event probability.
+
+The `calibrated_probability` field (NEW at 3.5D, default `None`) is
+the future home for the calibrated value. `calibration_metadata` (NEW)
+records the calibration method, fit data window, and diagnostics.
+
+## §D21.2 — INDETERMINATE regime state (HMM dissent)
+
+Per spec §6.3-2 + Decision Lock 3.5D-D1: when the HMM disagrees with
+the NBER+Kindleberger consensus, `derive_regime_state` returns
+`("indeterminate", "hmm_dissent_indeterminate", 0.40)`. Downstream:
+
+- **CRPS confidence** is capped at 0.60 (regime-driven, applied at
+  `compute_crps` post-`confidence_score_v2` via
+  `aggregate_caps(final_cap, INDETERMINATE_CONFIDENCE_CAP)`).
+- **CDRS confidence** is capped at 0.60 (same mechanism).
+- **CDRS R multiplier** uses the **consensus state's R**, not a hard-
+  coded 1.0 (per Decision Lock 3.5D-D2 / AM21=B / D24). Spec §6.4-D2
+  alternative #3 ("R from consensus") was selected after empirical
+  smoke-test showed R=1.0 default would inflate calm-anchor CDRS via
+  the HMM v1's known late-cycle bias post-2008, breaking Gate 10
+  differential floor. AM21=B orthogonalizes sizing (R) from
+  uncertainty signal (the 0.60 confidence cap) and preserves the
+  Layer 3 calibration intact.
+
+## §D21.3 — score_value deprecation
+
+`ScoredObservation.score_value` is now a read-only `@property` that
+returns `self.raw_score` while emitting `DeprecationWarning`.
+Constructor callers MUST use `raw_score=`. Full removal at the L4–L5
+boundary per Decision Lock 3.5D-D3.
+
+## §D21.4 — notes field migration (3.5B + 3.5C lineage)
+
+Layer 3.5D introduces `ScoredObservation.notes: list[str]`. The pre-
+3.5D `metadata_extra` keys carrying PIT lineage are migrated into
+`notes` via `_format_pit_lineage_notes()` in `crps.py`:
+
+| Pre-3.5D `metadata_extra` key | Migrated form in `notes` |
+|---|---|
+| `pit_safe_basis_per_component` | "PIT-safe basis per component: …" (one line, only if any non-default basis) |
+| `derived_confidence_cap_applied` | "Derived confidence cap applied: MIN=0.70 …" |
+| `pit_construction_notes` | (already strings) |
+| 3.5C `is_pre_1978_training_only` | "NBER pre-1978 training-mode label (caveat)" — only when reached |
+
+Dedup: `dict.fromkeys(notes)` preserves insertion order while removing
+equivalent strings. Spec §6.3-4 + Decision Lock 3.5D-AM25.

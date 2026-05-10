@@ -83,8 +83,12 @@ def test_compute_crps_2025_06_expansion_calm():
     so = compute_crps(ctx)
     assert isinstance(so, ScoredObservation)
     assert so.score_type == "CRPS"
-    assert 0.0 <= so.score_value <= 0.35
-    assert so.regime_state in {"expansion", "late-cycle"}
+    assert 0.0 <= so.raw_score <= 0.35
+    # Layer 3.5D D24: at 2025-06 the HMM v1 reads 'recession' while
+    # NBER+Kindleberger consensus is 'expansion' (HMM late-cycle bias
+    # post-2008 — see regime/README §3). derive_regime_state correctly
+    # flags this as 'indeterminate'.
+    assert so.regime_state in {"expansion", "late-cycle", "indeterminate"}
     assert so.metadata_extra["weights_is_placeholder"] is True
     assert so.metadata_extra["redistribution_method"] == "proportional"
     assert "lei_3d_rule" in so.metadata_extra["inactive_components"]
@@ -96,11 +100,16 @@ def test_compute_crps_2008_09_recession_signal():
     UN-inverts during recessions as Fed cuts rates, so the yield-curve
     component drops to ~0 and the 4-component Path B max is ~0.57. Spec
     §5.5's >0.85 expectation assumed all 6 components; our active 4 max
-    out near 0.57. We assert > 0.40 (well above the expansion baseline)."""
+    out near 0.57. We assert > 0.40 (well above the expansion baseline).
+
+    Layer 3.5D D24: at 2008-09-15 the HMM v1 reads 'recession' while
+    consensus (after Kindleberger=revulsion override of NBER expansion)
+    is 'late-cycle'; derive_regime_state correctly flags 'indeterminate'.
+    """
     ctx = PitDataContext(as_of=pd.Timestamp("2008-09-15"))
     so = compute_crps(ctx)
-    assert so.score_value > 0.40
-    assert so.regime_state in {"recession", "late-cycle"}
+    assert so.raw_score > 0.40
+    assert so.regime_state in {"recession", "late-cycle", "indeterminate"}
     # Sahm should normalize to 1.0 (rule fully triggered)
     assert so.component_normalized["sahm_rule"] >= 0.99
     # HY OAS should be in extreme widening regime
@@ -111,15 +120,15 @@ def test_compute_crps_2017_06_calm_baseline():
     """Mid-cycle 2017 calm: all signals quiet. Score < 0.20."""
     ctx = PitDataContext(as_of=pd.Timestamp("2017-06-01"))
     so = compute_crps(ctx)
-    assert so.score_value < 0.20
+    assert so.raw_score < 0.20
     assert so.component_normalized["sahm_rule"] == 0.0
     assert so.component_normalized["hy_oas_regime"] < 0.30
 
 
 def test_compute_crps_recession_strictly_above_expansion():
     """Sanity-check ordering: 2008-09 score must exceed 2017-06 score."""
-    rec = compute_crps(PitDataContext(as_of=pd.Timestamp("2008-09-15"))).score_value
-    cal = compute_crps(PitDataContext(as_of=pd.Timestamp("2017-06-01"))).score_value
+    rec = compute_crps(PitDataContext(as_of=pd.Timestamp("2008-09-15"))).raw_score
+    cal = compute_crps(PitDataContext(as_of=pd.Timestamp("2017-06-01"))).raw_score
     assert rec > cal
 
 

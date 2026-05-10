@@ -266,6 +266,60 @@ def _load_component(
     )
 
 
+def _format_pit_lineage_notes(loads: list) -> list[str]:
+    """Layer 3.5D shared helper: collect PIT-lineage notes from
+    component ``IndicatorBundle`` objects, dedup while preserving
+    insertion order, and return a list[str] suitable for the
+    ``ScoredObservation.notes`` field.
+
+    Migrates the pre-3.5D ``metadata_extra["pit_safe_basis_per_component"]``,
+    ``metadata_extra["derived_confidence_cap_applied"]``, and
+    ``metadata_extra["pit_construction_notes"]`` entries into a single
+    ordered, deduped list.
+
+    Per Decision Lock 3.5D-AM25: each non-empty source produces one
+    note line; ``dict.fromkeys`` preserves order while removing
+    equivalent strings.
+    """
+    notes: list[str] = []
+
+    # 1. Per-component PIT basis (one summary line if any non-default)
+    bases = {
+        cl.name: getattr(cl.bundle, "pit_safe_basis", "n/a")
+        for cl in loads
+    }
+    non_default = {
+        name: basis
+        for name, basis in bases.items()
+        if basis not in ("n/a", "release_lag", "asof_truncation")
+    }
+    if non_default:
+        notes.append(
+            "PIT-safe basis per component: "
+            + ", ".join(f"{name}={basis}" for name, basis in non_default.items())
+        )
+
+    # 2. Derived-cap summary (single line if any component carries a cap)
+    derived_caps = [
+        getattr(cl.bundle, "derived_confidence_cap", None) for cl in loads
+    ]
+    bound_caps = [c for c in derived_caps if c is not None]
+    if bound_caps:
+        notes.append(
+            f"Derived confidence cap applied: MIN={min(bound_caps):.2f} "
+            f"(from {sum(1 for c in derived_caps if c is not None)} component(s))"
+        )
+
+    # 3. Per-component construction notes (already strings)
+    for cl in loads:
+        for note in getattr(cl.bundle, "notes", []):
+            if note:
+                notes.append(note)
+
+    # Dedup preserving order.
+    return list(dict.fromkeys(notes))
+
+
 def _compute_quality_cap(loads: list[_ComponentLoad], ctx: PitDataContext) -> tuple[float, dict[str, float | None]]:
     """Aggregate per-component quality caps and the 1Y horizon cap.
 
@@ -418,7 +472,19 @@ def compute_crps(
     # derived_cap, horizon_cap). Pre-3.5B this clamp was only via
     # the horizon cap inside ``confidence_score_v2``; now the full
     # source-quality + Option Z chain binds.
-    confidence = min(confidence, final_cap * 100.0)
+    # Layer 3.5D: when regime_state == "indeterminate" (HMM dissents
+    # from consensus), additionally cap at INDETERMINATE_CONFIDENCE_CAP
+    # (0.60) per Decision Lock 3.5D-D1. The cap is regime-driven, not
+    # indicator-driven, so it lives at the score-aggregation level
+    # (separate from the source/derived cap chain).
+    from macro_pipeline.regime.regime_context import (
+        INDETERMINATE_CONFIDENCE_CAP,
+        RegimeState,
+    )
+    effective_cap = final_cap
+    if regime_state == RegimeState.INDETERMINATE.value:
+        effective_cap = min(effective_cap, INDETERMINATE_CONFIDENCE_CAP)
+    confidence = min(confidence, effective_cap * 100.0)
 
     # 5. Conviction split (§5.4.4)
     conv_stat, conv_op, conv_act = _conviction_from_components(
@@ -429,11 +495,21 @@ def compute_crps(
         confidence_breakdown=confidence_inputs,
     )
 
-    # 6. Build ScoredObservation
+    # 6. Build ScoredObservation (Layer 3.5D: raw_score; notes from
+    #    cross-phase migration; INDETERMINATE rationale appended).
+    notes_list = _format_pit_lineage_notes(loads)
+    if regime_state == RegimeState.INDETERMINATE.value:
+        notes_list.append(
+            f"HMM dissent: regime_state=indeterminate; confidence "
+            f"capped at {INDETERMINATE_CONFIDENCE_CAP:.2f}. Per Decision "
+            "Lock 3.5D-D1 / spec §6.3-2."
+        )
+    notes_list = list(dict.fromkeys(notes_list))  # dedup preserving order
+
     return ScoredObservation(
         as_of=ctx.as_of,
         score_type="CRPS",
-        score_value=score,
+        raw_score=score,
         confidence=confidence,
         confidence_breakdown=dict(confidence_inputs),
         conviction_statistical=conv_stat,
@@ -450,6 +526,7 @@ def compute_crps(
         regime_phase_dalio=regime.regime_phase_dalio,
         pit_safe=True,
         pit_source=_aggregate_pit_source(loads),
+        notes=notes_list,
         metadata_extra={
             "regime_state_source": regime_state_source,
             "regime_state_confidence_haircut": conf_haircut,
@@ -465,21 +542,6 @@ def compute_crps(
                 [cl.indicator_id for cl in loads],
                 strict=True,
             )),
-            # Layer 3.5B Option Z lineage (per AM12 cross-phase note;
-            # 3.5D will migrate these into ScoredObservation.notes when
-            # the field is added).
-            "pit_safe_basis_per_component": {
-                cl.name: getattr(cl.bundle, "pit_safe_basis", "n/a")
-                for cl in loads
-            },
-            "derived_confidence_cap_applied": (
-                caps_breakdown.get("derived_cap_min")
-            ),
-            "pit_construction_notes": [
-                note
-                for cl in loads
-                for note in getattr(cl.bundle, "notes", [])
-            ],
         },
     )
 

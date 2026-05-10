@@ -133,21 +133,33 @@ def test_pit_safe_by_construction_requires_rationale(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# 6. POS — ScoredObservation.metadata_extra carries construction lineage
+# 6. POS — ScoredObservation.notes carries construction lineage (3.5D AM25)
 # ---------------------------------------------------------------------------
 def test_layer_6_displays_construction_caveat_in_notes():
+    """Layer 3.5D AM25 migration: the 3.5B ``metadata_extra`` lineage
+    keys (``pit_safe_basis_per_component``, ``derived_confidence_cap_applied``,
+    ``pit_construction_notes``) are MIGRATED into the new
+    ``ScoredObservation.notes: list[str]`` field. Post-migration, the
+    ``metadata_extra`` keys are dropped."""
     ctx = PitDataContext(as_of=pd.Timestamp("2008-09-15"))
     obs = compute_crps(ctx)
-    extra = obs.metadata_extra
-    # Per AM12: surface via metadata_extra until 3.5D adds .notes field
-    assert "pit_safe_basis_per_component" in extra
-    sahm_basis = extra["pit_safe_basis_per_component"].get("sahm_rule")
-    assert sahm_basis == "by_construction"
-    assert extra.get("derived_confidence_cap_applied") == pytest.approx(0.70)
+    notes_concat = "\n".join(obs.notes)
+    # SAHM Option Z construction caveat surfaces in .notes.
+    assert "SAHMREALTIME" in notes_concat
+    assert "pit_safe_by_construction" in notes_concat
+    # 3.5B metadata_extra keys are GONE post-migration.
+    assert "pit_safe_basis_per_component" not in obs.metadata_extra
+    assert "derived_confidence_cap_applied" not in obs.metadata_extra
+    assert "pit_construction_notes" not in obs.metadata_extra
+    # The PIT basis summary is encoded in a single notes line.
     assert any(
-        "SAHMREALTIME" in n and "pit_safe_by_construction" in n
-        for n in extra.get("pit_construction_notes", [])
-    ), f"Construction caveat missing from notes: {extra.get('pit_construction_notes')}"
+        "by_construction" in n.lower() for n in obs.notes
+    ), f"Construction basis missing: {obs.notes}"
+    # Derived cap summary is encoded.
+    assert any(
+        "0.70" in n or "derived confidence cap" in n.lower()
+        for n in obs.notes
+    ), f"Derived cap line missing: {obs.notes}"
 
 
 # ---------------------------------------------------------------------------

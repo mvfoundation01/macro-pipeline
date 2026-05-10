@@ -1527,9 +1527,9 @@ def validate_gate9_crps() -> GateReport:
                 f"FAIL: score_type={so.score_type!r} at {asof_str} "
                 "(expected 'CRPS')"
             )
-        if not 0.0 <= so.score_value <= 1.0:
+        if not 0.0 <= so.raw_score <= 1.0:
             findings.append(
-                f"FAIL: score_value={so.score_value} at {asof_str} not in [0, 1]"
+                f"FAIL: raw_score={so.raw_score} at {asof_str} not in [0, 1]"
             )
 
         for cap_name, cap_val in so.quality_caps_applied.items():
@@ -1542,14 +1542,14 @@ def validate_gate9_crps() -> GateReport:
                 )
 
         if (asof_str, label) in recession_anchors:
-            rec_scores.append(so.score_value)
+            rec_scores.append(so.raw_score)
         else:
-            calm_scores.append(so.score_value)
+            calm_scores.append(so.raw_score)
 
         per_anchor.append({
             "as_of": asof_str,
             "label": label,
-            "score": round(so.score_value, 4),
+            "score": round(so.raw_score, 4),
             "regime_state": so.regime_state,
             "regime_state_source": so.metadata_extra.get("regime_state_source"),
             "final_cap": round(so.final_quality_cap, 3),
@@ -1721,7 +1721,7 @@ def validate_gate10_cdrs() -> GateReport:
     def _record(asof_str: str, label: str, reach: str, so) -> None:
         per_anchor.append({
             "as_of": asof_str, "label": label, "reach": reach,
-            "score": round(so.score_value, 4),
+            "score": round(so.raw_score, 4),
             "V": round(so.metadata_extra["V_score"], 3),
             "T": round(so.metadata_extra["T_score"], 3),
             "R": round(so.metadata_extra["R_multiplier"], 3),
@@ -1739,9 +1739,9 @@ def validate_gate10_cdrs() -> GateReport:
                 f"{type(exc).__name__}: {exc}"
             )
             continue
-        if not 0.0 <= so.score_value <= 1.0:
+        if not 0.0 <= so.raw_score <= 1.0:
             findings.append(
-                f"FAIL: CDRS at {asof_str} = {so.score_value} out of [0,1]"
+                f"FAIL: CDRS at {asof_str} = {so.raw_score} out of [0,1]"
             )
         for cap_name, cap_val in so.quality_caps_applied.items():
             if cap_val is None:
@@ -1754,7 +1754,7 @@ def validate_gate10_cdrs() -> GateReport:
         for key in ("V_score", "T_score", "R_multiplier"):
             if key not in so.metadata_extra:
                 findings.append(f"FAIL: metadata_extra missing {key} at {asof_str}")
-        event_scores[asof_str] = so.score_value
+        event_scores[asof_str] = so.raw_score
         _record(asof_str, label, reach, so)
 
     for asof_str, label in calm_anchors:
@@ -1766,11 +1766,11 @@ def validate_gate10_cdrs() -> GateReport:
                 f"{type(exc).__name__}: {exc}"
             )
             continue
-        if not 0.0 <= so.score_value <= 1.0:
+        if not 0.0 <= so.raw_score <= 1.0:
             findings.append(
-                f"FAIL: CDRS at {asof_str} = {so.score_value} out of [0,1]"
+                f"FAIL: CDRS at {asof_str} = {so.raw_score} out of [0,1]"
             )
-        calm_scores[asof_str] = so.score_value
+        calm_scores[asof_str] = so.raw_score
         _record(asof_str, label, "calm", so)
 
     if event_scores.get("2007-09-15", 0.0) >= 0.18:
@@ -2383,7 +2383,7 @@ def validate_gate13_pit_contracts() -> GateReport:
         conf01 = float(obs.confidence) / 100.0
         respected = conf01 <= cap_70 + 1e-9
         anchor_results.append(
-            {"as_of": asof, "score": round(obs.score_value, 4),
+            {"as_of": asof, "score": round(obs.raw_score, 4),
              "confidence_01": round(conf01, 6),
              "final_quality_cap": round(obs.final_quality_cap, 4),
              "respects_cap": respected}
@@ -2602,6 +2602,248 @@ def _cli_gate14() -> int:
     return 0 if report.passed else 1
 
 
+def validate_gate15_probability_semantics() -> GateReport:
+    """Gate 15 — Layer 3.5D probability semantics + dissent fail-closed.
+
+    Per ``LAYER_3_5_BUILD_SPEC.md`` §6.6:
+
+      1. ``RegimeState`` enum includes INDETERMINATE.
+      2. ``derive_regime_state`` returns INDETERMINATE on HMM dissent
+         (verified at 2025-06-01 — known dissent point).
+      3. INDETERMINATE caps confidence_overall ≤0.60 (×100 in [0, 100]
+         scale → ≤60).
+      4. CDRS R_MULTIPLIER for INDETERMINATE = consensus state's R
+         (per AM21=B / D24); R=0.6 at 2025-06 (consensus expansion);
+         R=1.0 at 2008-09 (consensus late-cycle).
+      5. ``ScoredObservation.raw_score`` field exists;
+         ``calibrated_probability`` field exists with default None.
+      6. Zero non-deprecated references to ``score_value`` in package
+         code (excluding the deprecated ``@property``).
+      7. Layer 6-facing strings consistently use "Risk Score" not
+         "probability" for raw composites.
+    """
+    import ast
+    import re
+    from pathlib import Path
+
+    from macro_pipeline.access import PitDataContext
+    from macro_pipeline.regime import (
+        INDETERMINATE_CONFIDENCE_CAP,
+        RegimeState,
+        build_regime_context,
+    )
+    from macro_pipeline.scoring.cdrs import compute_cdrs
+    from macro_pipeline.scoring.crps import compute_crps
+    from macro_pipeline.scoring.scored_observation import ScoredObservation
+
+    findings: list[str] = []
+    warnings_list: list[str] = []
+    summary: dict = {}
+
+    # 1. RegimeState enum has INDETERMINATE
+    if RegimeState.INDETERMINATE.value == "indeterminate":
+        findings.append("RegimeState.INDETERMINATE = 'indeterminate' OK")
+    else:
+        findings.append(
+            f"FAIL: RegimeState.INDETERMINATE.value = "
+            f"{RegimeState.INDETERMINATE.value!r}"
+        )
+
+    # 2. derive_regime_state at 2025-06 → INDETERMINATE
+    rc = build_regime_context(PitDataContext(as_of=pd.Timestamp("2025-06-01")))
+    state, source, haircut = rc.derive_regime_state()
+    summary["dissent_anchor_2025_06"] = {
+        "state": state, "source": source, "haircut": haircut,
+    }
+    if state == RegimeState.INDETERMINATE.value:
+        findings.append(
+            f"derive_regime_state at 2025-06 -> ({state!r}, {source!r}, "
+            f"haircut={haircut})"
+        )
+    else:
+        findings.append(
+            f"FAIL: derive_regime_state at 2025-06 returned ({state!r}, "
+            f"{source!r}); expected indeterminate"
+        )
+
+    # 3. INDETERMINATE caps confidence ≤60 (CRPS at 2025-06)
+    crps_25 = compute_crps(PitDataContext(as_of=pd.Timestamp("2025-06-01")))
+    summary["crps_2025_06_confidence"] = round(crps_25.confidence, 4)
+    if crps_25.confidence <= INDETERMINATE_CONFIDENCE_CAP * 100.0 + 1e-6:
+        findings.append(
+            f"INDETERMINATE caps CRPS confidence at "
+            f"{INDETERMINATE_CONFIDENCE_CAP * 100:.0f}: "
+            f"{crps_25.confidence:.2f} <= "
+            f"{INDETERMINATE_CONFIDENCE_CAP * 100:.0f}"
+        )
+    else:
+        findings.append(
+            f"FAIL: CRPS confidence at 2025-06 = "
+            f"{crps_25.confidence:.2f} exceeds INDETERMINATE cap "
+            f"{INDETERMINATE_CONFIDENCE_CAP * 100:.0f}"
+        )
+
+    # 4. CDRS R = consensus R for INDETERMINATE (AM21=B)
+    cdrs_25 = compute_cdrs(PitDataContext(as_of=pd.Timestamp("2025-06-01")))
+    cdrs_08 = compute_cdrs(PitDataContext(as_of=pd.Timestamp("2008-09-15")))
+    r_25 = cdrs_25.metadata_extra["R_multiplier"]
+    r_08 = cdrs_08.metadata_extra["R_multiplier"]
+    summary["cdrs_2025_06_R"] = r_25
+    summary["cdrs_2008_09_R"] = r_08
+    # Consensus at 2025-06 = expansion (R=0.6); at 2008-09 = late-cycle (R=1.0)
+    if r_25 == 0.6 and r_08 == 1.0:
+        findings.append(
+            "CDRS R from consensus (AM21=B) OK: 2025-06 R=0.6 "
+            "(consensus expansion), 2008-09 R=1.0 (consensus late-cycle)"
+        )
+    else:
+        findings.append(
+            f"FAIL: CDRS R for INDETERMINATE not from consensus: "
+            f"2025-06 R={r_25} (expected 0.6), 2008-09 R={r_08} "
+            "(expected 1.0)"
+        )
+
+    # 5. ScoredObservation has raw_score + calibrated_probability fields
+    fields_present = {f.name for f in ScoredObservation.__dataclass_fields__.values()}
+    summary["scored_observation_fields"] = sorted(fields_present)
+    if "raw_score" in fields_present and "calibrated_probability" in fields_present:
+        findings.append(
+            "ScoredObservation: raw_score + calibrated_probability fields present"
+        )
+    else:
+        findings.append(
+            f"FAIL: missing field(s); have={sorted(fields_present)}"
+        )
+    if cdrs_25.calibrated_probability is None:
+        findings.append("calibrated_probability defaults to None")
+    else:
+        findings.append(
+            f"FAIL: calibrated_probability default = "
+            f"{cdrs_25.calibrated_probability!r}, expected None"
+        )
+
+    # 6. Zero non-deprecated `score_value` AST references in macro_pipeline/
+    # AST-walk: flag only real attribute accesses (``something.score_value``)
+    # or assignment targets (``score_value = ...``). String literals,
+    # docstrings, comments, and backtick-fenced sphinx code spans are
+    # ignored. The deprecated property in
+    # ``scoring/scored_observation.py`` is whitelisted.
+    pkg_root = Path(__file__).parent
+    bad_refs: list[str] = []
+
+    class _ScoreValueWalker(ast.NodeVisitor):
+        def __init__(self, rel: Path) -> None:
+            self.rel = rel
+            self.refs: list[tuple[int, str]] = []
+            self._inside_score_value_property = False
+
+        def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+            if node.name == "score_value":
+                # The deprecated property: skip its body entirely.
+                return
+            self.generic_visit(node)
+
+        def visit_Attribute(self, node: ast.Attribute) -> None:
+            if node.attr == "score_value":
+                self.refs.append((node.lineno, "attribute_access"))
+            self.generic_visit(node)
+
+        def visit_keyword(self, node: ast.keyword) -> None:
+            if node.arg == "score_value":
+                # Constructor kwarg ``score_value=...``
+                lineno = getattr(node.value, "lineno", -1)
+                self.refs.append((lineno, "keyword_arg"))
+            self.generic_visit(node)
+
+    score_obs_rel = Path("scoring") / "scored_observation.py"
+    for path in pkg_root.rglob("*.py"):
+        rel = path.relative_to(pkg_root)
+        if rel == score_obs_rel:
+            continue  # whitelisted: contains the deprecated @property
+        text = path.read_text(encoding="utf-8")
+        try:
+            tree = ast.parse(text)
+        except SyntaxError:
+            bad_refs.append(f"{rel}: parse error")
+            continue
+        walker = _ScoreValueWalker(rel)
+        walker.visit(tree)
+        for lineno, kind in walker.refs:
+            line = text.splitlines()[lineno - 1] if lineno >= 1 else ""
+            bad_refs.append(f"{rel}:{lineno} ({kind}): {line.strip()}")
+    summary["score_value_residual_refs"] = bad_refs
+    if not bad_refs:
+        findings.append(
+            "Zero non-deprecated ``score_value`` AST refs in macro_pipeline/"
+        )
+    else:
+        findings.append(
+            f"FAIL: {len(bad_refs)} ``score_value`` AST ref(s) outside the "
+            f"deprecated property: {bad_refs[:5]}"
+        )
+
+    # 7. Layer 6-facing strings: no "probability" attached to raw CRPS/CDRS
+    #    (excluding L5-forward references and the documented exemptions).
+    forbidden_patterns = [
+        # "12M-forward recession probability" wording
+        r"recession\s+probability",
+        r"drawdown\s+probability",
+    ]
+    layer6_files = [
+        pkg_root / "scoring" / "README.md",
+        pkg_root / "scoring" / "crps.py",
+        pkg_root / "scoring" / "cdrs.py",
+        pkg_root / "regime" / "README.md",
+    ]
+    bad_layer6: list[str] = []
+    for path in layer6_files:
+        if not path.exists():
+            continue
+        text = path.read_text(encoding="utf-8")
+        for pattern in forbidden_patterns:
+            for m in re.finditer(pattern, text, flags=re.IGNORECASE):
+                line_no = text[: m.start()].count("\n") + 1
+                line = text.splitlines()[line_no - 1]
+                # Allow L5-forward references and §D21 explainers.
+                if (
+                    "L5" in line or "§D21" in line or "calibrated_probability" in line
+                    or "L5-RM" in line or "until L5" in line.lower()
+                    or "raw_score" in line  # phrasing like "raw_score; not yet calibrated to probability"
+                ):
+                    continue
+                # Allow the SAHM "12M_recession_probability_composite"
+                # context constant (internal guard key).
+                if "12M_recession_probability_composite" in line:
+                    continue
+                bad_layer6.append(f"{path.name}:{line_no}: {line.strip()}")
+    summary["layer6_probability_residual_refs"] = bad_layer6
+    if not bad_layer6:
+        findings.append(
+            "Layer 6-facing strings: no 'probability' wording attached to "
+            "raw CRPS/CDRS (excluding L5 forward references)"
+        )
+    else:
+        findings.append(
+            f"FAIL: {len(bad_layer6)} unguarded 'probability' wording(s): "
+            f"{bad_layer6[:5]}"
+        )
+
+    passed = not any(f.startswith("FAIL") for f in findings)
+    return GateReport(
+        name="Gate 15 - Layer 3.5D Probability Semantics + Dissent",
+        passed=passed, findings=findings, warnings=warnings_list,
+        summary=summary,
+    )
+
+
+def _cli_gate15() -> int:
+    import logging
+    logging.basicConfig(level="WARNING", format="%(message)s")
+    report = validate_gate15_probability_semantics()
+    print(report.render())
+    return 0 if report.passed else 1
+
+
 def _cli_gate10() -> int:
     import logging
     logging.basicConfig(level="WARNING", format="%(message)s")
@@ -2660,10 +2902,12 @@ if __name__ == "__main__":
         sys.exit(_cli_gate13())
     if cmd == "gate14":
         sys.exit(_cli_gate14())
+    if cmd == "gate15":
+        sys.exit(_cli_gate15())
     print(
         f"Unknown command: {cmd}. Available: "
         "gate1, gate2, gate3, gate4a, gate4b, gate4c, gate4d, "
-        "gate8, gate9, gate10, gate11, gate12, gate13, gate14",
+        "gate8, gate9, gate10, gate11, gate12, gate13, gate14, gate15",
         file=sys.stderr,
     )
     sys.exit(2)

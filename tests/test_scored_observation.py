@@ -11,7 +11,7 @@ def _valid_kwargs(**overrides) -> dict:
     base = dict(
         as_of=pd.Timestamp("2025-06-01"),
         score_type="CRPS",
-        score_value=0.40,
+        raw_score=0.40,
         confidence=72.0,
         confidence_breakdown={"data_quality": 0.9, "track_record": 0.8,
                                "regime_stability": 0.7,
@@ -40,16 +40,16 @@ def _valid_kwargs(**overrides) -> dict:
 def test_constructs_with_valid_inputs():
     so = ScoredObservation(**_valid_kwargs())
     assert so.score_type == "CRPS"
-    assert so.score_value == 0.40
+    assert so.raw_score == 0.40
     assert so.regime_state == "expansion"
     assert so.metadata_extra == {}
 
 
-def test_score_value_must_be_in_unit_interval():
-    with pytest.raises(ValueError, match="score_value"):
-        ScoredObservation(**_valid_kwargs(score_value=1.2))
-    with pytest.raises(ValueError, match="score_value"):
-        ScoredObservation(**_valid_kwargs(score_value=-0.1))
+def test_raw_score_must_be_in_unit_interval():
+    with pytest.raises(ValueError, match="raw_score"):
+        ScoredObservation(**_valid_kwargs(raw_score=1.2))
+    with pytest.raises(ValueError, match="raw_score"):
+        ScoredObservation(**_valid_kwargs(raw_score=-0.1))
 
 
 def test_score_type_validated():

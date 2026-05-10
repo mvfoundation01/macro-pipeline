@@ -65,7 +65,13 @@ from macro_pipeline.regime.nber_extract import (
     extract_nber_state,
     last_known_label_date,
 )
-from macro_pipeline.regime.regime_context import RegimeContext, build_regime_context
+from macro_pipeline.regime.regime_context import (
+    INDETERMINATE_CONFIDENCE_CAP,
+    INDETERMINATE_CONFIDENCE_HAIRCUT,
+    RegimeContext,
+    RegimeState,
+    build_regime_context,
+)
 
 __all__ = [
     "HMM_FEATURES",
@@ -74,6 +80,8 @@ __all__ = [
     "HMM_TRAINING_END",
     "HMM_TRAINING_START",
     "HMM_VERSION",
+    "INDETERMINATE_CONFIDENCE_CAP",
+    "INDETERMINATE_CONFIDENCE_HAIRCUT",
     "NBER_CALENDAR_BOUNDARY",
     "NBER_FALLBACK_INDICATOR",
     "NBER_PRIMARY_INDICATOR",
@@ -98,6 +106,7 @@ __all__ = [
     "RegimeClassifierError",
     "RegimeContext",
     "RegimeContextError",
+    "RegimeState",
     "TrainedHmm",
     "build_regime_context",
     "classify_dalio",

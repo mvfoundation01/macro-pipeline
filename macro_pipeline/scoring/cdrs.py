@@ -62,8 +62,43 @@ CDRS_PROXY_SUBSTITUTIONS: list[str] = [
 ]
 
 
-def _resolve_r_multiplier(state: str, source: str) -> tuple[float, bool]:
-    """Map (regime_state, derive_regime_state source) → R, regime_neutralized."""
+def _resolve_r_multiplier(
+    state: str, source: str, regime_ctx: object | None = None,
+) -> tuple[float, bool]:
+    """Map (regime_state, derive_regime_state source) → (R, regime_neutralized).
+
+    Layer 3.5D AM21=B: when ``state == "indeterminate"`` (HMM dissents
+    from consensus per spec §6.3-2), the R multiplier is taken from the
+    **consensus state** (NBER+Kindleberger result), NOT a hard-coded
+    1.0. This orthogonalizes the sizing decision (R) from the
+    uncertainty signal (the 0.60 confidence cap, applied separately at
+    score-aggregation level). Spec §6.4-D2 explicitly lists "R from
+    consensus" as alternative #3.
+
+    The pre-3.5D ``hmm_dissent_neutralized`` path (Layer 3B) is now
+    dead code in real-time mode for post-1978 dates because the
+    Layer 3.5C calendar makes NBER always available; the path is
+    preserved here for the (rare) pre-1978 + training-mode case.
+    """
+    # Layer 3.5D INDETERMINATE: use consensus state's R, return
+    # regime_neutralized=False (the 0.60 cap is the dissent signal,
+    # not the R multiplier).
+    from macro_pipeline.regime.regime_context import RegimeState
+
+    if state == RegimeState.INDETERMINATE.value:
+        if regime_ctx is None:
+            raise CompositeBuildError(
+                "CDRS R multiplier: regime_state='indeterminate' requires "
+                "a RegimeContext (regime_ctx=) for consensus resolution."
+            )
+        consensus = _consensus_state_for_indeterminate(regime_ctx)
+        if consensus not in REGIME_MULTIPLIER:
+            raise CompositeBuildError(
+                f"CDRS R multiplier: consensus state {consensus!r} for "
+                f"INDETERMINATE not in REGIME_MULTIPLIER table."
+            )
+        return REGIME_MULTIPLIER[consensus], False
+
     if state not in REGIME_MULTIPLIER:
         raise CompositeBuildError(
             f"CDRS R multiplier: unknown regime_state {state!r}; "
@@ -74,6 +109,35 @@ def _resolve_r_multiplier(state: str, source: str) -> tuple[float, bool]:
     if neutralized:
         return base * REGIME_NEUTRALIZATION_FACTOR, True
     return base, False
+
+
+def _consensus_state_for_indeterminate(regime_ctx: object) -> str:
+    """Return the consensus regime_state given a RegimeContext, BYPASSING
+    the HMM-dissent check from ``derive_regime_state`` (Layer 3.5D).
+
+    Mirrors the consensus computation in ``derive_regime_state`` Phase A
+    but does NOT raise on HMM dissent — the caller has already
+    determined dissent is the case.
+    """
+    # Local import: avoids circular dependency at module import time.
+    from macro_pipeline.regime.regime_context import _KINDLEBERGER_STRESS
+
+    nber = regime_ctx.nber
+    kindleberger = regime_ctx.kindleberger
+    if nber is not None:
+        if nber.state == "recession":
+            return "recession"
+        if kindleberger.phase in _KINDLEBERGER_STRESS:
+            return "late-cycle"
+        return "expansion"
+    # NBER unavailable: use HMM as consensus stand-in (rare; pre-1978
+    # training mode).
+    if regime_ctx.hmm is not None:
+        return regime_ctx.hmm.state
+    raise CompositeBuildError(
+        "CDRS consensus resolution: NBER unavailable AND HMM unavailable; "
+        "INDETERMINATE state is unreachable in this configuration."
+    )
 
 
 def _conviction_from_components(
@@ -117,7 +181,7 @@ def compute_cdrs(ctx: PitDataContext) -> ScoredObservation:
     # ---- Regime multiplier from derive_regime_state ----
     regime = build_regime_context(ctx, skip_hmm=False)
     state, source, conf_haircut = regime.derive_regime_state()
-    r, regime_neutralized = _resolve_r_multiplier(state, source)
+    r, regime_neutralized = _resolve_r_multiplier(state, source, regime_ctx=regime)
 
     # ---- Final score (D13 — direct multiplication, no sigmoid wrap) ----
     raw_cdrs = v_result.score * t_result.score * r
@@ -169,13 +233,17 @@ def compute_cdrs(ctx: PitDataContext) -> ScoredObservation:
         "revision_penalty": 0.0,
     }
     confidence = confidence_score_v2(**confidence_inputs, horizon="1Y")
-    # Layer 3.5B: clamp by ``final_cap`` (now includes Option Z
-    # ``derived_confidence_cap`` via MIN aggregation). CDRS does not
-    # currently load any Option-Z-flagged series, so this clamp is
-    # a no-op vs the existing source/horizon chain — but it makes the
-    # contract uniform with CRPS and forward-compatible with future
-    # Option Z indicators.
-    confidence = min(confidence, final_cap * 100.0)
+    # Layer 3.5B clamp by ``final_cap``. Layer 3.5D adds INDETERMINATE
+    # cap (0.60) when regime_state == "indeterminate" — orthogonal to
+    # source/derived caps (regime-driven, not indicator-driven).
+    from macro_pipeline.regime.regime_context import (
+        INDETERMINATE_CONFIDENCE_CAP,
+        RegimeState,
+    )
+    effective_cap = final_cap
+    if state == RegimeState.INDETERMINATE.value:
+        effective_cap = min(effective_cap, INDETERMINATE_CONFIDENCE_CAP)
+    confidence = min(confidence, effective_cap * 100.0)
 
     # ---- Conviction split ----
     conv_stat, conv_op, conv_act = _conviction_from_components(
@@ -206,10 +274,26 @@ def compute_cdrs(ctx: PitDataContext) -> ScoredObservation:
     component_sources = _component_sources(v_result.active_components, t_result.active_components)
     pit_source = _aggregate_pit_source(indicator_ids, ctx)
 
+    # Layer 3.5D: collect INDETERMINATE rationale + cross-phase notes.
+    notes_list: list[str] = []
+    if state == RegimeState.INDETERMINATE.value:
+        consensus_for_r = _consensus_state_for_indeterminate(regime)
+        notes_list.append(
+            f"HMM dissent: regime_state=indeterminate; R={r:.2f} from "
+            f"consensus={consensus_for_r!r} (per Decision Lock 3.5D-D2 / "
+            f"AM21=B); confidence capped at "
+            f"{INDETERMINATE_CONFIDENCE_CAP:.2f}."
+        )
+    # CDRS does not currently load any Option-Z-flagged series (SAHM is
+    # CRPS-only); but if any V/T component bundle carries
+    # derived_confidence_cap or pit_safe_basis="by_construction" notes,
+    # propagate them here for symmetry with CRPS.
+    notes_list = list(dict.fromkeys(notes_list))  # dedup preserving order
+
     return ScoredObservation(
         as_of=ctx.as_of,
         score_type="CDRS",
-        score_value=cdrs,
+        raw_score=cdrs,
         confidence=confidence,
         confidence_breakdown=dict(confidence_inputs),
         conviction_statistical=conv_stat,
@@ -226,6 +310,7 @@ def compute_cdrs(ctx: PitDataContext) -> ScoredObservation:
         regime_phase_dalio=regime.regime_phase_dalio,
         pit_safe=True,
         pit_source=pit_source,
+        notes=notes_list,
         metadata_extra={
             "cdrs_method": "two_stage_v1",
             "cdrs_active_components": cdrs_active,
@@ -247,13 +332,6 @@ def compute_cdrs(ctx: PitDataContext) -> ScoredObservation:
             "t_method": t_result.method,
             "v_notes": list(v_result.notes),
             "t_notes": list(t_result.notes),
-            # Layer 3.5B Option Z lineage (3.5D will migrate to .notes).
-            # CDRS does not currently load any Option-Z-flagged series
-            # (SAHM is CRPS-only), so derived_confidence_cap_applied will
-            # typically be None; this field exists for forward
-            # compatibility once additional Option Z candidates land.
-            "derived_confidence_cap_applied": None,
-            "pit_construction_notes": [],
         },
     )
 

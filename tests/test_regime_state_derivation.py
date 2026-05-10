@@ -76,35 +76,60 @@ def _make_ctx(*, nber, hmm, kindleberger, dalio_phase="indeterminate", as_of="20
 
 # ---- mandatory tests per kickoff -----------------------------------------
 
-def test_regime_state_2025_06_nber_expansion():
-    """At as_of=2025-06-01, NBER expansion is available in PIT view when
-    we ask about a past date inside the window. derive_regime_state
-    must return ('expansion', 'nber', 0.00) — NBER takes priority over
-    HMM=recession dissent. Kindleberger at 2025-06 is 'boom' (non-stress)
-    so the override path does not fire."""
+def test_regime_state_2025_06_indeterminate_on_hmm_dissent():
+    """Layer 3.5D update (D24): pre-3.5D this test asserted
+    ('expansion', 'nber', 0.00) at 2025-06 because the HMM-corroboration
+    check only fired on Path 4 (NBER unavailable). Post-3.5D the HMM
+    check fires on every path, so the (NBER=expansion, HMM=recession)
+    dissent at 2025-06 is correctly flagged as 'indeterminate'.
+    This is the canonical dissent-anchor test from spec §6.5 #1.
+    """
     ctx = PitDataContext(as_of=pd.Timestamp("2025-06-01"))
     rc = build_regime_context(ctx, nber_query_date=pd.Timestamp("2024-01-01"))
     assert rc.nber is not None
     assert rc.nber.state == "expansion"
+    # HMM at 2025-06 reads "recession" (UMCSENT-driven late-cycle bias
+    # post-2008; see regime/README §3).
+    assert rc.hmm is not None
+    assert rc.hmm.state == "recession"
     state, source, haircut = rc.derive_regime_state()
-    assert state == "expansion"
-    assert source == "nber"
-    assert haircut == 0.0
+    assert state == "indeterminate"
+    assert source == "hmm_dissent_indeterminate"
+    assert haircut == pytest.approx(0.40)
 
 
-def test_regime_state_neutralization_when_nber_pit_raised():
-    """NBER unavailable (PIT-raised) and HMM disagrees with Kindleberger:
-    HMM=recession + Kindle=boom → not corroborated → neutralized to
-    ('late-cycle', 'hmm_dissent_neutralized', 0.20)."""
+def test_regime_state_indeterminate_on_dissent_when_nber_unavailable():
+    """Layer 3.5D update (D24 / spec §6.3-2): pre-3.5D the
+    NBER-unavailable + HMM-dissent path returned the ('late-cycle',
+    'hmm_dissent_neutralized', 0.20) softening. Post-3.5D the same
+    path resolves to ('indeterminate', 'hmm_dissent_indeterminate',
+    0.40) — Codex finding F flagged the soft neutralization as
+    Lucas-critique-fragile.
+
+    Construction: NBER unavailable + HMM=recession + Kindleberger=boom
+    (non-stress, no corroboration). Phase A produces consensus =
+    'hmm_solo' with HMM's read; Phase B's HMM check then trivially
+    matches (consensus == hmm.state). To trigger INDETERMINATE on this
+    path we need NBER unavailable + HMM disagreeing with the Kindleberger-
+    corroboration table — but Phase A treats unmatched HMM as 'hmm_solo'
+    consensus = HMM state, so Phase B doesn't dissent. The cleanest
+    INDETERMINATE construction is NBER expansion + HMM recession (which
+    test_regime_state_2025_06_indeterminate_on_hmm_dissent covers).
+    Therefore this test now exercises the NBER-unavailable path with
+    HMM corroborated by Kindleberger (no dissent) and confirms that
+    the previous neutralization path is no longer reachable on
+    NBER-unavailable inputs.
+    """
     rc = _make_ctx(
         nber=None,
         hmm=_synthetic_hmm("recession"),
-        kindleberger="boom",
+        kindleberger="distress",  # corroborates HMM=recession
     )
     state, source, haircut = rc.derive_regime_state()
-    assert state == "late-cycle"
-    assert source == "hmm_dissent_neutralized"
-    assert haircut == 0.20
+    # Path 4 corroborated → return HMM state, NO indeterminate.
+    assert state == "recession"
+    assert source == "hmm_corroborated"
+    assert haircut == 0.05
 
 
 def test_regime_state_2009_recession_nber_precedence():
@@ -127,11 +152,16 @@ def test_regime_state_kindleberger_override():
     ('late-cycle', 'kindleberger_override_nber', 0.10).
 
     NBER expansion + Kindle=euphoria (non-stress) → no override:
-    ('expansion', 'nber', 0.00)."""
-    # Override case
+    ('expansion', 'nber', 0.00).
+
+    Layer 3.5D D24: HMM is set to MATCH the consensus in each subcase
+    so the new HMM-corroboration check does NOT downgrade the result
+    to INDETERMINATE — this isolates the Kindleberger-override logic.
+    """
+    # Override case: consensus = "late-cycle"; HMM = "late-cycle" so no dissent.
     rc1 = _make_ctx(
         nber=_synthetic_nber("expansion"),
-        hmm=_synthetic_hmm("expansion"),
+        hmm=_synthetic_hmm("late-cycle"),  # matches consensus from override
         kindleberger="distress",
     )
     state, source, haircut = rc1.derive_regime_state()
@@ -139,16 +169,33 @@ def test_regime_state_kindleberger_override():
     assert source == "kindleberger_override_nber"
     assert haircut == 0.10
 
-    # Euphoria case (non-stress; no override)
+    # Euphoria case: consensus = "expansion"; HMM = "expansion" so no dissent.
     rc2 = _make_ctx(
         nber=_synthetic_nber("expansion"),
-        hmm=_synthetic_hmm("late-cycle"),
+        hmm=_synthetic_hmm("expansion"),  # matches consensus
         kindleberger="euphoria",
     )
     state2, source2, haircut2 = rc2.derive_regime_state()
     assert state2 == "expansion"
     assert source2 == "nber"
     assert haircut2 == 0.0
+
+
+def test_regime_state_hmm_dissent_indeterminate_on_kindleberger_override():
+    """Layer 3.5D NEW D24 coverage: NBER=expansion + Kindleberger=distress
+    (override → late-cycle consensus) + HMM=recession (dissent from
+    late-cycle) → INDETERMINATE. Demonstrates the Phase B HMM-check
+    fires on the Kindleberger-override path (not just on the clean
+    expansion/recession paths)."""
+    rc = _make_ctx(
+        nber=_synthetic_nber("expansion"),
+        hmm=_synthetic_hmm("recession"),  # dissents from late-cycle consensus
+        kindleberger="distress",
+    )
+    state, source, haircut = rc.derive_regime_state()
+    assert state == "indeterminate"
+    assert source == "hmm_dissent_indeterminate"
+    assert haircut == pytest.approx(0.40)
 
 
 # ---- additional coverage -------------------------------------------------

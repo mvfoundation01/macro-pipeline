@@ -1,15 +1,30 @@
-"""Aggregator dataclass that bundles all 4 regime views (Layer 3A).
+"""Aggregator dataclass that bundles all 4 regime views (Layer 3A;
+extended at L3.5D for HMM-dissent → INDETERMINATE).
 
-Spec: ``LAYER_3_BUILD_SPEC.md`` §4.
+Spec: ``LAYER_3_BUILD_SPEC.md`` §4 + ``LAYER_3_5_BUILD_SPEC.md`` §6.
 
 A ``RegimeContext`` is the universal "what regime are we in at as_of"
 output that downstream Layer 3 components (CRPS, CDRS) consume. It
 carries the four independently-computed views — NBER, Kindleberger,
 Dalio, HMM — plus enough metadata to trace which inputs were used.
+
+Layer 3.5D adds:
+- ``RegimeState(str, Enum)`` with EXPANSION / LATE_CYCLE / RECESSION /
+  INDETERMINATE (NEW). The enum values are strings, so any caller
+  comparing ``regime_state == "indeterminate"`` continues to work.
+- ``derive_regime_state`` now performs an HMM-corroboration check on
+  every path (not just when NBER is unavailable). When HMM dissents
+  from the consensus state, return ``("indeterminate",
+  "hmm_dissent_indeterminate", 0.40)``. CRPS / CDRS callers cap
+  confidence at 0.60 when ``regime_state == "indeterminate"``. Per
+  Decision Lock 3.5D-D2 / AM21 = B, the **R-multiplier in CDRS uses
+  the consensus state's R**, not a hard-coded 1.0 (orthogonalizes
+  sizing from uncertainty signal).
 """
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from enum import Enum
 
 import pandas as pd
 
@@ -22,6 +37,27 @@ from macro_pipeline.regime.exceptions import (
 from macro_pipeline.regime.hmm_states import HmmStateResult, predict_state
 from macro_pipeline.regime.kindleberger import KindlebergerResult, classify_kindleberger
 from macro_pipeline.regime.nber_extract import NberStateResult, extract_nber_state
+
+
+class RegimeState(str, Enum):
+    """Enumeration of regime-state labels (Layer 3.5D).
+
+    Values are strings to preserve backward compatibility with the
+    pre-L3.5D ``regime_state: str`` field on ``ScoredObservation``.
+    """
+
+    EXPANSION = "expansion"
+    LATE_CYCLE = "late-cycle"
+    RECESSION = "recession"
+    INDETERMINATE = "indeterminate"
+
+
+# Layer 3.5D: confidence cap when regime_state==INDETERMINATE.
+INDETERMINATE_CONFIDENCE_CAP: float = 0.60
+# Haircut applied to ``regime_stability`` confidence input in
+# ``derive_regime_state`` when the HMM dissents from consensus.
+INDETERMINATE_CONFIDENCE_HAIRCUT: float = 0.40
+
 
 # Kindleberger phase sets used by ``derive_regime_state`` (Layer 3B).
 # The trigger sets are deliberate: HMM=recession is corroborated only
@@ -89,27 +125,47 @@ class RegimeContext:
         Returns
         -------
         (regime_state, source, confidence_haircut)
-            ``regime_state``        ∈ {"expansion", "late-cycle", "recession"}
+            ``regime_state``        ∈ {"expansion", "late-cycle",
+                                       "recession", "indeterminate"}
             ``source``              tag identifying which view drove the call
             ``confidence_haircut``  amount in [0, 1] to subtract from the
                                     ``regime_stability`` input of
                                     ``confidence_score_v2`` to reflect
                                     classifier disagreement.
 
-        Priority order (Layer 3B kickoff):
+        Priority order (Layer 3.5D refactor of Layer 3B logic):
 
-        1. NBER recession                                       → ("recession", "nber", 0.00)
+        1. NBER recession  → consensus = "recession", source = "nber"
         2. NBER expansion + Kindleberger ∈ {distress, revulsion}
-           → ("late-cycle", "kindleberger_override_nber", 0.10)
-        3. NBER expansion                                       → ("expansion", "nber", 0.00)
-        4. NBER unavailable (PIT-raised at as_of):
-           a. HMM corroborated by Kindleberger (truth table below)
-              → (hmm.state, "hmm_corroborated", 0.05)
-           b. HMM dissents from Kindleberger
-              → ("late-cycle", "hmm_dissent_neutralized", 0.20)
-        5. No NBER and no HMM                                   → raise RegimeContextError
+                           → consensus = "late-cycle",
+                             source = "kindleberger_override_nber"
+        3. NBER expansion  → consensus = "expansion", source = "nber"
+        4. NBER unavailable + HMM corroborated by Kindleberger
+                           → consensus = hmm.state,
+                             source = "hmm_corroborated"
+        5. NBER unavailable + HMM available but dissents from
+           Kindleberger (post-3.5C: structurally unreachable in
+           real-time mode for post-1978 dates because the calendar
+           always provides an authoritative answer; but reachable for
+           pre-1978 training mode)
+                           → consensus = hmm.state, source =
+                             "hmm_solo" (no neutralization here;
+                             dissent surfacing happens below)
+        6. No NBER and no HMM → raise ``RegimeContextError``.
 
-        Corroboration truth table (HMM ↔ Kindleberger):
+        Layer 3.5D HMM-corroboration check on the consensus
+        =================================================
+
+        After computing the consensus per (1)–(5), if HMM is available
+        AND ``hmm.state != consensus`` we return INDETERMINATE with a
+        0.40 confidence haircut and let the caller cap the headline
+        confidence at ``INDETERMINATE_CONFIDENCE_CAP`` (0.60). This
+        replaces Layer 3B's "late-cycle ×0.95 neutralization" — Codex
+        finding F flagged the prior path as too soft and ChatGPT Dim 2
+        flagged it as Lucas-critique-fragile.
+
+        Corroboration truth table (HMM ↔ Kindleberger), still used in
+        Path 4 above:
 
         | HMM         | Kindleberger ∈                      | Corroborated? |
         |-------------|--------------------------------------|---------------|
@@ -117,49 +173,75 @@ class RegimeContext:
         | expansion   | {displacement, boom, euphoria}       | ✓             |
         | late-cycle  | {boom, euphoria}                     | ✓             |
         | otherwise                                              dissent       |
-
-        The neutralization rule (4b) exists because the HMM v1 has a
-        known UMCSENT-driven false-recession bias post-2020. When NBER
-        cannot be consulted (e.g. a recent as_of past the 180d release
-        lag) and Kindleberger disagrees with the HMM, we refuse to
-        commit to either label and fall back to "late-cycle" with a
-        20% confidence haircut.
         """
-        # Path 1-3: NBER is authoritative when it speaks.
+        # ----- Phase A: compute consensus from NBER + Kindleberger + HMM-fallback -----
+        consensus_state: str
+        consensus_source: str
+        consensus_haircut: float
+
         if self.nber is not None:
             if self.nber.state == "recession":
-                return ("recession", "nber", 0.00)
-            # NBER says expansion — but Kindleberger stress overrides.
-            if self.kindleberger.phase in _KINDLEBERGER_STRESS:
-                return ("late-cycle", "kindleberger_override_nber", 0.10)
-            return ("expansion", "nber", 0.00)
+                consensus_state, consensus_source, consensus_haircut = (
+                    "recession", "nber", 0.00,
+                )
+            elif self.kindleberger.phase in _KINDLEBERGER_STRESS:
+                consensus_state, consensus_source, consensus_haircut = (
+                    "late-cycle", "kindleberger_override_nber", 0.10,
+                )
+            else:
+                consensus_state, consensus_source, consensus_haircut = (
+                    "expansion", "nber", 0.00,
+                )
+        else:
+            # NBER unavailable: HMM is the fallback authority (if present).
+            if self.hmm is None:
+                raise RegimeContextError(
+                    reason=(
+                        "Cannot derive regime state: NBER unavailable at "
+                        f"as_of={self.as_of.date() if self.as_of is not None else None} "
+                        "and HMM also missing (e.g. as_of < 1982-01 or "
+                        "pickle load failed). Inspect RegimeContext.notes "
+                        "for details."
+                    ),
+                    context={
+                        "as_of": str(self.as_of) if self.as_of is not None else None,
+                        "kindleberger_phase": self.kindleberger.phase,
+                        "dalio_phase": self.dalio.phase,
+                    },
+                )
+            kphase = self.kindleberger.phase
+            hmm_state = self.hmm.state
+            corroborated = (
+                (hmm_state == "recession" and kphase in _KINDLEBERGER_STRESS)
+                or (hmm_state == "expansion" and kphase in _KINDLEBERGER_NON_STRESS)
+                or (hmm_state == "late-cycle" and kphase in _KINDLEBERGER_LATE)
+            )
+            if corroborated:
+                consensus_state, consensus_source, consensus_haircut = (
+                    hmm_state, "hmm_corroborated", 0.05,
+                )
+            else:
+                # Layer 3.5D: Path 5b reached only when NBER unavailable.
+                # Take HMM's read as the consensus and let the dissent
+                # check below downgrade to INDETERMINATE.
+                consensus_state, consensus_source, consensus_haircut = (
+                    hmm_state, "hmm_solo", 0.10,
+                )
 
-        # Path 4: NBER unavailable. Need at least HMM to proceed.
-        if self.hmm is None:
-            raise RegimeContextError(
-                reason=(
-                    "Cannot derive regime state: NBER unavailable at "
-                    f"as_of={self.as_of.date() if self.as_of is not None else None} "
-                    "and HMM also missing (e.g. as_of < 1982-01 or pickle "
-                    "load failed). Inspect RegimeContext.notes for details."
-                ),
-                context={
-                    "as_of": str(self.as_of) if self.as_of is not None else None,
-                    "kindleberger_phase": self.kindleberger.phase,
-                    "dalio_phase": self.dalio.phase,
-                },
+        # ----- Phase B: HMM-corroboration check on consensus (Layer 3.5D) -----
+        # Per Decision Lock 3.5D-D1 / spec §6.3-2: when HMM is available
+        # AND its state differs from the consensus, classify the regime
+        # as INDETERMINATE. The 0.60 confidence cap is applied
+        # downstream by compute_crps / compute_cdrs (orthogonalized from
+        # the haircut applied here to ``regime_stability`` input).
+        if self.hmm is not None and self.hmm.state != consensus_state:
+            return (
+                RegimeState.INDETERMINATE.value,
+                "hmm_dissent_indeterminate",
+                INDETERMINATE_CONFIDENCE_HAIRCUT,
             )
 
-        hmm_state = self.hmm.state
-        kphase = self.kindleberger.phase
-        corroborated = (
-            (hmm_state == "recession" and kphase in _KINDLEBERGER_STRESS)
-            or (hmm_state == "expansion" and kphase in _KINDLEBERGER_NON_STRESS)
-            or (hmm_state == "late-cycle" and kphase in _KINDLEBERGER_LATE)
-        )
-        if corroborated:
-            return (hmm_state, "hmm_corroborated", 0.05)
-        return ("late-cycle", "hmm_dissent_neutralized", 0.20)
+        return (consensus_state, consensus_source, consensus_haircut)
 
 
 def build_regime_context(
@@ -224,4 +306,10 @@ def build_regime_context(
     )
 
 
-__all__ = ["RegimeContext", "build_regime_context"]
+__all__ = [
+    "INDETERMINATE_CONFIDENCE_CAP",
+    "INDETERMINATE_CONFIDENCE_HAIRCUT",
+    "RegimeContext",
+    "RegimeState",
+    "build_regime_context",
+]

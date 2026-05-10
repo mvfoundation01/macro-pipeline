@@ -61,7 +61,7 @@ def test_cdrs_2007_09_event_floor():
     """Floor — full reach event 2007-09 ≥ 0.18 (Gate 10 #3)."""
     so = compute_cdrs(PitDataContext(as_of=pd.Timestamp("2007-09-15")))
     assert isinstance(so, ScoredObservation)
-    assert so.score_value >= 0.18
+    assert so.raw_score >= 0.18
     assert so.score_type == "CDRS"
 
 
@@ -80,25 +80,25 @@ def test_cdrs_2020_02_event_floor():
     See LAYER_3_5_DEVIATIONS.md D23.
     """
     so = compute_cdrs(PitDataContext(as_of=pd.Timestamp("2020-02-20")))
-    assert so.score_value >= 0.13
+    assert so.raw_score >= 0.13
 
 
 def test_cdrs_2000_03_partial_floor():
     """Floor — partial reach event 2000-03 ≥ 0.13 (Gate 10 #4)."""
     so = compute_cdrs(PitDataContext(as_of=pd.Timestamp("2000-03-15")))
-    assert so.score_value >= 0.13
+    assert so.raw_score >= 0.13
 
 
 def test_cdrs_direction_events_above_calm():
     """min(events) > max(calm) per Gate 10 #2."""
     events = [
-        compute_cdrs(PitDataContext(as_of=pd.Timestamp("2007-09-15"))).score_value,
-        compute_cdrs(PitDataContext(as_of=pd.Timestamp("2020-02-20"))).score_value,
+        compute_cdrs(PitDataContext(as_of=pd.Timestamp("2007-09-15"))).raw_score,
+        compute_cdrs(PitDataContext(as_of=pd.Timestamp("2020-02-20"))).raw_score,
     ]
     calm = [
-        compute_cdrs(PitDataContext(as_of=pd.Timestamp("2017-06-01"))).score_value,
-        compute_cdrs(PitDataContext(as_of=pd.Timestamp("2014-06-01"))).score_value,
-        compute_cdrs(PitDataContext(as_of=pd.Timestamp("2005-06-01"))).score_value,
+        compute_cdrs(PitDataContext(as_of=pd.Timestamp("2017-06-01"))).raw_score,
+        compute_cdrs(PitDataContext(as_of=pd.Timestamp("2014-06-01"))).raw_score,
+        compute_cdrs(PitDataContext(as_of=pd.Timestamp("2005-06-01"))).raw_score,
     ]
     assert min(events) > max(calm)
 
@@ -111,11 +111,11 @@ def test_cdrs_differential_ratio():
     achievable ratio (Path B reality, mirroring Gate 9 calibration).
     Layer 5 with refitted weights (L5-6) may restore 5×."""
     event_max = max(
-        compute_cdrs(PitDataContext(as_of=pd.Timestamp(d))).score_value
+        compute_cdrs(PitDataContext(as_of=pd.Timestamp(d))).raw_score
         for d in ("2007-09-15", "2020-02-20")
     )
     calm_max = max(
-        compute_cdrs(PitDataContext(as_of=pd.Timestamp(d))).score_value
+        compute_cdrs(PitDataContext(as_of=pd.Timestamp(d))).raw_score
         for d in ("2017-06-01", "2014-06-01", "2005-06-01")
     )
     assert event_max >= 3.0 * calm_max
@@ -211,7 +211,7 @@ def test_cdrs_2020_02_nber_takes_priority_over_hmm_dissent():
 
 
 def test_cdrs_clipped_to_unit_interval():
-    """score_value must always lie in [0, 1] (clipping enforced)."""
+    """raw_score must always lie in [0, 1] (clipping enforced)."""
     for asof in ("2017-06-01", "2007-09-15", "2025-06-01"):
         so = compute_cdrs(PitDataContext(as_of=pd.Timestamp(asof)))
-        assert 0.0 <= so.score_value <= 1.0
+        assert 0.0 <= so.raw_score <= 1.0
