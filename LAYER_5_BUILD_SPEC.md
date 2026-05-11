@@ -162,6 +162,8 @@ Build agent's sub-phase verification reports MUST report all three for the sub-p
 | L5-RM-6 | "Isotonic calibration is monotone non-decreasing across the [0, 1] domain at every horizon × CV-fold" | Empirical sweep of fitted isotonic regressor across 1000-point grid per horizon × fold; assert `np.all(np.diff(out) >= -1e-9)` over every grid; archive sweep results in verification |
 | L5-F | "DMS bps applied to 5Y and 10Y output paths, NOT to 1Y or 3Y output paths" | grep audit over `scoring/` + `analysis/` for `dms_adjustment_bps` references; confirm horizon-conditional application; AST-walk over horizon dispatcher to verify branch coverage |
 | L5-G | "Bayesian shrinkage weight applied per-horizon with sample-size-adaptive k/(k+n) form, NOT collapsed to constant weight" | grep audit + AST-walk over `shrink_weight(horizon, n)` callsites; assert at least 4 distinct horizon values; assert no constant `weight = 0.30` literal anywhere |
+| **L5-B Task A + Task B (v2 audit #5 per S-2)** | "Train-only z-scoring (no test contamination)" | AST audit that feature mean/std computed from train windows only; per-fold serialized; assert `(mean, std)` recomputed for every fold and NEVER reused across folds |
+| **L5-RM-6 (v2 audit #6 per S-2)** | "No pre-RM-6 calibrated_probability use" | grep audit that downstream code (L5-C / L5-D / L5-E / L5-F / L5-G) does NOT consume `calibrated_probability` field before L5-RM-6 populates it; assert any earlier consumption raises `RuntimeError("calibrated_probability accessed before L5-RM-6 fit")` |
 
 Failure to provide grep / AST audit in verification report for these claims = REVISE-REQUIRED.
 
@@ -238,6 +240,26 @@ Maintained in `LAYER_5_DEVIATIONS.md` (new file at build worktree root; created 
 **Forks**:
 - L5-C, L5-D, L5-E, L5-F are mostly independent given L5-RM-6 output; can be authored in any order within chunk 4. Build order locked to C → D → E → F for build determinism.
 
+<!-- CHUNK 6 v2 START — §3.3 calibration target schema (E.1 fix; S-2) -->
+
+### §3.3 Calibration target schema (NEW v2; closes ChatGPT E.1 / L5-RISK-1)
+
+| `score_type` | Raw input | Event label | Horizon scope | Monotone direction | Target field |
+|---|---|---|---|---|---|
+| `CRPS` | recession raw score (L3B + L5-B Task A refit) | NBER recession starts within 12M (USREC) | 12M only | increasing | `calibrated_probability` |
+| `CDRS` | drawdown risk score (L3C + L5-B Task A refit) | SPX drawdown ≥X% within H | 1Y/3Y/5Y/10Y; X ∈ {10%, 20%, 35%, 50%, 65%} | increasing | `calibrated_probability` (per X) |
+| `RETURN_POSITIVE` | Ridge return forecast (L5-B Task B) | forward real total return > 0 at horizon H | 1Y/3Y/5Y/10Y | depends on raw score sign convention | `positive_return_probability` (NEW slot) |
+
+Rules:
+1. `calibrated_probability` field MUST refer to the same event class within a `score_type`. NEVER mix.
+2. Isotonic monotone-increasing constraint applies ONLY when raw score direction matches event direction. If score is risk-direction and event is return-direction, invert (`1 − raw_score`) OR use a separate model.
+3. L5-C Brier evaluation MUST use event labels matching the calibrated probability field semantics.
+4. `positive_return_probability` is a NEW `ScoredObservation` slot added in L5-RM-4 dataclass migration (per S-2 in §10).
+
+<!-- CHUNK 6 v2 END (continued in §3.2 row addition, §5.RM-4, §5.RM-6, §5.C, §2.5, §10) -->
+
+---
+
 ### §3.2 Cross-Sub-Phase Semantic Table (NEW section type #2)
 
 Every field that L5 introduces, modifies, or finalizes across sub-phase boundaries is tracked here for ChatGPT 5.5 cross-reference verification. Fields without cross-phase movement live entirely in their owning sub-phase's spec (not tracked here).
@@ -245,7 +267,8 @@ Every field that L5 introduces, modifies, or finalizes across sub-phase boundari
 | Field name | Type | Introduced in | Modified in | Final form | Cross-references |
 |---|---|---|---|---|---|
 | `raw_score` | `float64 ∈ [0, 1]` | L3B (CRPS output) | L5-B (Ridge weight refit produces same shape with fitted weights); L5-RM-4 (formally renames to clarify it is NOT calibrated probability) | `float64 ∈ [0, 1]` (unchanged semantically; formally distinguished from calibrated_probability via §5.RM-4.3) | §5.B.4 ; §5.RM-4.3 |
-| `calibrated_probability` | `Optional[float64] ∈ [0, 1]` | 3.5D (slot added to `ScoredObservation`; None until L5 fills) | L5-RM-4 (populates via raw_score → identity passthrough at first); L5-RM-6 (replaces with isotonic transform of raw_score) | `float64 ∈ [0, 1]` (post-L5-RM-6; never None for any scored observation produced by L5 calibrated path) | §5.RM-4.3, §5.RM-6.5 |
+| `calibrated_probability` | `Optional[float64] ∈ [0, 1]` | 3.5D (slot added to `ScoredObservation`; None until L5 fills) | L5-RM-4 (populates via raw_score → identity passthrough at first); L5-RM-6 (replaces with isotonic transform of raw_score) | `float64 ∈ [0, 1]` (post-L5-RM-6; never None for any scored observation produced by L5 calibrated path) | §5.RM-4.3, §5.RM-6.5, **§3.3 target schema (v2)** |
+| `positive_return_probability` | `Optional[float64] ∈ [0, 1]` | **L5-RM-4 (NEW v2 via S-2)** | populated by L5-RM-6 in return-forecast (Task B) path only | `float64 ∈ [0, 1]` (post-L5-RM-6 Task B path); None for risk-direction (CRPS/CDRS) paths | §3.3, §5.RM-4.1.1, §5.RM-6.1.2 |
 | `calibration_metadata` | `Optional[dict[str, Any]]` | 3.5D (slot added) | L5-RM-4 (populates with `{"method": "raw_passthrough"}`); L5-RM-6 (overwrites with full `{"method": "isotonic", "fit_window": (start, end), "n_train_obs": n, "horizon": h, "monotonicity_audit": "PASS"}`) | full dict post-L5-RM-6 | §5.RM-4.3, §5.RM-6.5 |
 | `notes` | `list[str]` | 3.5D (introduced); 3.5D AM25 migrated CRPS `metadata_extra` → notes | L5-RM-4 (absorbs **L5-13** backlog item — migrates CDRS `metadata_extra` to notes; mirrors CRPS pattern via shared `_format_pit_lineage_notes()`) | post-L5-RM-4: both CRPS + CDRS use notes uniformly | §5.RM-4.5 |
 | `calibrated_probability_band_lower` | `Optional[float64] ∈ [0, 1]` | **L5-E (NEW; amended via S-1)** | unchanged after introduction | NEW slot added to `ScoredObservation` via L5-RM-4 (dataclass field; default None until L5-E populates with bootstrap-CV-residual-derived lower band) | §5.E.3 |
@@ -260,12 +283,13 @@ Every field that L5 introduces, modifies, or finalizes across sub-phase boundari
 
 **Cross-sub-phase migrations summarized**:
 
-1. `ScoredObservation` dataclass gains 5 new slots at **L5-RM-4** as a single atomic dataclass migration (slot list amended via **S-1** in chunk 3; supersedes chunk 1 initial sketch):
+1. `ScoredObservation` dataclass gains **6 new slots** at **L5-RM-4** as a single atomic dataclass migration (slot list amended via **S-1** in chunk 3, then expanded via **S-2** in chunk 6 v2 for `positive_return_probability` per §3.3 calibration target schema):
    - `calibrated_probability_band_lower: Optional[float] = None`
    - `calibrated_probability_band_upper: Optional[float] = None`
    - `drawdown_conditional_distribution: Optional[dict[str, float]] = None`
    - `dms_adjustment_bps: float = 0.0`
    - `bayesian_shrinkage_weight: float = 0.0`
+   - `positive_return_probability: Optional[float] = None` (NEW v2 per S-2; ∈ [0, 1]; populated only by L5-RM-6 Task B return-forecast path; None for risk-direction CRPS/CDRS paths)
    
 2. L5-D, L5-E, L5-F, L5-G **populate** these slots; they do not add fields. This avoids 4 separate dataclass migrations.
 
@@ -769,6 +793,9 @@ class ScoredObservation:
     
     # ---- L5 Bayesian shrinkage weight slot (L5-RM-4 NEW; L5-G populates) ----
     bayesian_shrinkage_weight: float = 0.0    # ∈ [0, 1]
+    
+    # ---- L5 positive return probability slot (L5-RM-4 NEW v2 per S-2; L5-RM-6 Task B path populates) ----
+    positive_return_probability: float | None = None    # ∈ [0, 1] when present; populated only by L5-RM-6 Task B return-forecast path per §3.3 calibration target schema
 ```
 
 ##### §5.RM-4.1.2 Validator extensions in `__post_init__`
@@ -1007,7 +1034,7 @@ Regime-triggered override (overrides quarterly):
 
 | Element | Specification |
 |---|---|
-| Assumption | Monotone relationship raw_score → P(positive forward return at horizon H); preserved by isotonic. Mild assumption (some empirical violations expected near low-event-count tails) |
+| Assumption | Monotone relationship raw_score → P(event) where event semantics are score-type-conditional per §3.3 calibration target schema (CRPS → NBER recession 12M; CDRS → drawdown ≥X% at H; RETURN_POSITIVE → return>0 at H); preserved by isotonic. Mild assumption (some empirical violations expected near low-event-count tails). **v2 fix per S-2**: prior wording "P(positive forward return at horizon H)" was monolithic; replaced with event-conditional language matching §3.3 to prevent label-mismatch in L5-C Brier evaluation (closes ChatGPT E.1) |
 | Estimator | Pool-Adjacent-Violators (PAV) via `sklearn.isotonic.IsotonicRegression(out_of_bounds='clip', y_min=0.0, y_max=1.0)` |
 | Identification | Monotonicity constraint resolves direction (raw_score↑ ⇒ calibrated_prob↑); calibration data anchors levels |
 | Consistency | Under monotone DGP, PAV consistent (Robertson-Wright 1988); finite-sample bias controlled by training-window size |
@@ -1042,8 +1069,9 @@ Regime-triggered override (overrides quarterly):
 | 8 | `test_rejects_calibration_with_insufficient_samples_min_50` | NEG | Fitting with `n_train_obs < 50` for any horizon raises `ValueError("insufficient samples for isotonic")` |
 | 9 | `test_bootstrap_se_seeded_for_reproducibility` | NEG-invariant | Two runs with `random_seed=42` produce identical `bootstrap_se_distribution`; failure raises |
 | 10 | `test_rejects_horizon_outside_1Y_3Y_5Y_10Y_in_calibrator_dict` | NEG | `fit_isotonic_per_horizon` called with non-standard horizon keys raises `ValueError` |
+| 11 (v2 NEW per S-2) | `test_calibration_target_matches_score_type_per_3_3_table` | NEG (invariant) | For every `score_type ∈ {"CRPS", "CDRS", "RETURN_POSITIVE"}`, calibrator's event_label semantics match §3.3 calibration target schema row; mismatch (e.g., CRPS calibrator fed return-direction labels) raises `ValueError("calibration target semantics mismatch §3.3")` |
 
-NEG count: tests 2, 7, 8, 9, 10 = 5 strict; test 6 (clip invariant) is invariant-style; tests 4, 5 assert specific trigger behaviors (POS as recognition tests). Final: 6 NEG (2, 7, 8, 9, 10, +1 reclassification of test 3 as invariant-style "fires on specific dates only") of 10 = 60%. **Floor met.**
+NEG count v2: tests 2, 7, 8, 9, 10, 11 = 6 strict; test 6 (clip invariant) is invariant-style; tests 4, 5 assert specific trigger behaviors (POS as recognition tests). Final: 7 NEG of 11 = 64%. **Floor met.** Total tests = 11 (was 10 in v1; +1 via S-2).
 
 #### §5.RM-6.6 Gate 21 — Isotonic calibration integrity
 
@@ -1166,7 +1194,7 @@ Per horizon, `brier_climatology` = Brier(predicted = climatology_rate, actual) w
 | 1 | `test_brier_score_matches_formula_on_synthetic_input` | POS | Synthetic `p=[0.2, 0.7, 0.5]`, `y=[0, 1, 1]` ⇒ `brier == ((0.2)² + (0.3)² + (0.5)²)/3 = 0.1267` |
 | 2 | `test_murphy_decomposition_algebra_to_1e_neg_10` | POS-invariant | `brier == reliability - resolution + uncertainty` to 1e-10 |
 | 3 | `test_climatology_baseline_matches_constant_prior_brier` | POS | Climatology Brier == Brier(predicted=ȳ, actual=y) per horizon |
-| 4 | `test_brier_improvement_positive_post_isotonic_per_horizon` | POS | For every horizon: `brier_score < brier_climatology` (Gate 22 sub-criterion) |
+| 4 (v2 amended per S-2) | `test_brier_improvement_positive_post_isotonic_per_horizon_per_score_type` | POS, parametrized × 3 score_types | For every `(horizon, score_type)` combination per §3.3 calibration target schema: `brier_score < brier_climatology` (Gate 22 sub-criterion). Event labels MUST match §3.3 row (CRPS → NBER USREC 12M; CDRS → SPX drawdown ≥X% within H; RETURN_POSITIVE → return>0 at H) |
 | 5 | `test_rejects_calibrated_probability_outside_zero_one` | NEG | `compute_brier_per_horizon` with `p=1.5` raises `ValueError` |
 | 6 | `test_rejects_non_binary_forward_returns` | NEG | `y=[0.5, 1, 0]` raises `ValueError("forward_returns_binary must be 0 or 1")` |
 | 7 | `test_rejects_horizon_keys_mismatch_between_p_and_y` | NEG | `p` has keys {1Y, 3Y}; `y` has keys {1Y, 5Y} raises |
@@ -1925,8 +1953,9 @@ L3.5 + L3.5b closed at D30. L5 spec/build deviations use `Sxx` IDs.
 | ID | Date | Sub-phase | Topic | Disposition | Rationale | Backlog ref |
 |---|---|---|---|---|---|---|
 | S-1 | 2026-05-10 | chunk 3 / §3.2 + §5.RM-4 | ScoredObservation new-slot list reconciliation across chunks | ACCEPT | Chunk 1 §3.2 initial sketch listed 5 new slots (`forecast_sigma`, `drawdown_probability_distribution`, `dms_adjustment_bps`, `bayesian_shrinkage_weight`, `cv_fold_id`). Strategic continuation prompt §3.2 specified revised 5-slot list (`calibrated_probability_band_lower`, `calibrated_probability_band_upper`, `drawdown_conditional_distribution`, `dms_adjustment_bps`, `bayesian_shrinkage_weight`); `cv_fold_id` relocated to `calibration_metadata` dict (transient field semantics). Continuation prompt supersedes per V's standing approval; §3.2 amended in chunk 3 authoring. Chunk-1 paragraph block also updated to reflect new list. Rationale for adoption: (i) explicit band lower/upper cleaner for L5-E/G downstream consumers vs derived-from-sigma form; (ii) `cv_fold_id` semantics belong in calibration_metadata per L3.5D pattern; (iii) `drawdown_conditional_distribution` better conveys conditioning explicit | none |
+| **S-2** | 2026-05-11 | v2 chunk 6 / §3.3 + §3.2 + §5.RM-4 + §5.RM-6 + §5.C + §2.5 audits #5 + #6 | Calibration target schema added; ScoredObservation slot count 5 → 6 (added `positive_return_probability`); closes ChatGPT 5.5 v1 review E.1 / L5-RISK-1 | ACCEPT | Mechanism: CRPS/CDRS are risk-direction scores (recession risk / drawdown risk); v1 spec assumed isotonic monotone-increasing fit against "P(positive forward return at horizon H)" without disambiguating event direction. This causes inverted reliability for risk-direction scores: when raw_score goes UP (high risk), P(positive_return) should go DOWN — fitting isotonic monotone-increasing inverts the natural calibration semantics. v2 fix: §3.3 calibration target schema explicitly per-`score_type` event labels (CRPS → NBER USREC 12M; CDRS → SPX drawdown ≥X% within H; RETURN_POSITIVE → return>0 at H); §5.RM-4.1.1 adds `positive_return_probability` slot for RETURN_POSITIVE path; §5.RM-6.1.2 wording updated to event-conditional language; §5.RM-6.5 adds invariant test #11; §5.C.5 test #4 parametrized × 3 score_types. Audits #5 (train-only z-scoring) + #6 (no pre-RM-6 calibrated_probability use) added to §2.5. Disposition: ACCEPT. Backlog: none | none |
 
-Reserved: S-2 through S-25.
+Reserved: S-3 through S-25.
 
 ---
 
