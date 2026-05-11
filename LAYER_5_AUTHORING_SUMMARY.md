@@ -1,145 +1,167 @@
-# LAYER 5 BUILD SPEC — Authoring Summary
+# LAYER 5 BUILD SPEC — Authoring Summary (v2)
 
 **Spec file**: `LAYER_5_BUILD_SPEC.md`
 **Branch**: `claude/layer-5-spec` (base: `590e4a5` = main = L3.5b merge commit)
-**Authoring agent**: Claude Code under V's role-widening directive (2026-05-10)
-**Status**: v1 draft complete — **ready for V freeze + ChatGPT 5.5 methodology review**
-**Date**: 2026-05-10
+**Authoring agent**: Claude Code under V's role-widening directive (v1: 2026-05-10; v2 incorporation: 2026-05-11)
+**Status**: **v2 draft complete — closes ChatGPT 5.5 v1 review 3 HIGH + 4 MED + 8 risk items; ready for V freeze + ChatGPT 5.5 v2 review**
+**v1 predecessor**: tag `layer5-spec-v1` at `d776eb4` (preserved as historical snapshot)
+**v2 tag**: `layer5-spec-v2` at chunk-10 closure SHA
+**Date**: 2026-05-11
 
 ---
 
-## §1 — Effort actuals (cumulative across 5 chunks)
+## §1 — Effort actuals (cumulative chunks 1-10)
 
-| Chunk | Effort actual (h equivalent) | Target | Variance |
-|---|---:|---:|---:|
-| 1 — scope + discipline + sub-phase decomposition | 2.75 | 2-3 | within |
-| 2 — L5-A walk-forward CV + L5-B Ridge fit (Q1/Q2/Q3) | 2.8 | 2-3 | within |
-| 3 — L5-RM-4 + L5-RM-6 + L5-C (Q4/Q5; 9-slot batched; L5-13 absorbed; S-1 filed) | 3.8 | 2-3 | +0.8 over |
-| 4 — L5-D + L5-E + L5-F + L5-G (Q6/Q7; Gate 25 composite authored) | 2.7 | 2-3 | within |
-| 5 — L5-H + §6 gates + §7 backlog + §8 ChatGPT handoff + §9 closure (Q8) | 1.9 | 1-2 | within |
-| **Total** | **~14.0** | **9-14** | **at ceiling** |
-
-Project budget: 9-14h equivalent. Actual: ~14h. **At upper edge of band**.
+| Chunk | Effort actual (h equiv) | Target | Scope |
+|---|---:|---:|---|
+| 1 | 2.75 | 2-3 | v1 scope + discipline + decomposition |
+| 2 | 2.8 | 2-3 | v1 L5-A + L5-B (Q1/Q2/Q3) |
+| 3 | 3.8 | 2-3 | v1 L5-RM-4 + L5-RM-6 + L5-C (Q4/Q5; S-1) |
+| 4 | 2.7 | 2-3 | v1 L5-D + L5-E + L5-F + L5-G (Q6/Q7; Gate 25 composite) |
+| 5 | 1.95 | 1-2 | v1 L5-H + gates + backlog + ChatGPT handoff + closure (Q8) |
+| **v1 total** | **14.0** | **9-14** | spec v1 complete |
+| 6 (v2) | 1.55 | 1.5-2 | E.1 calibration target schema (S-2) |
+| 7 (v2) | 2.9 | 2-3 | E.2 L5-B Task A + Task B split (S-3) |
+| 8 (v2) | 1.3 | 1-1.5 | E.3 Bayesian k_h backsolve (S-4) |
+| 9 (v2) | 3.1 | 2-3 | E.4 + E.5 + E.6 + E.7 MED fixes (S-5, S-6, S-7) |
+| 10 (v2) | ~1.9 | 1-2 | closure + risk register + tag v2 |
+| **v2 total** | **~10.75** | **7.5-11.5** | v2 incorporation complete |
+| **v1 + v2 grand total** | **~24.75** | budget 9-14 (v1) + 7.5-11.5 (v2) = 16.5-25.5 | within ceiling |
 
 ---
 
-## §2 — Q-resolutions locked (8 / 8)
+## §2 — v2 closures vs ChatGPT 5.5 v1 review
 
-| Q | Owning sub-phase | Locked option | Anchor |
+| Finding | Severity | Closure mechanism | Sxx |
 |---|---|---|---|
-| Q1 | L5-A | C — expanding primary + rolling-20Y robustness | Welch-Goyal 2008; Campbell-Thompson 2008 |
-| Q2 | L5-A | C — horizon-dependent step (1mo / 1mo / 12mo / 60mo) | Pesaran 2007; Hyndman 2018 |
-| Q3 | L5-B | C — nested walk-forward (outer OOS + inner λ) + LOO fixed-λ-from-L3 robustness | HTF 2017 §7.10 |
-| Q4 | L5-RM-6 | C — per-horizon separate (4 calibrators) | Calibration literature; cross-horizon consistency reported |
-| Q5 | L5-RM-6 | C — quarterly + Sahm Rule >0.30 + 10Y-3M curve flip | Empirical band check at build-time |
-| Q6 | L5-F | C — horizon-conditional (5Y=−125 / 10Y=−175 / 1Y/3Y=0; ±50 sensitivity) | Dimson-Marsh-Staunton 2002 + 2020 update |
-| Q7 | L5-G | C — k/(k+n) horizon-dependent + sample-size-adaptive; DMS 6.5% US primary + 4.5% global robustness | Master Prompt v3.1 §4 Principle 6 |
-| Q8 | L5-H | C — all 4 horizons (1Y / 3Y / 5Y / 10Y) | Master Prompt v3.1 §14 |
+| **E.1** Calibration target schema mismatch | HIGH | §3.3 NEW + §3.2 row + §5.RM-4 6 slots + §5.RM-6 wording + §5.C parametrize + audits #5/#6 | S-2 |
+| **E.2** Scalar Ridge cannot refit components | HIGH | §5.B FULL rewrite: Task A (composite-weight refit penalized logistic) + Task B (return-forecast Ridge); dual API; 25 tests vs 15; Gate 19 17 sub-criteria | S-3 |
+| **E.3** Bayesian k_h unit inconsistency | HIGH | §5.G.1 backsolved k_h = (w_ref / (1-w_ref)) × n_ref = {5.9, 6.7, 9.4, 11.0}; W_REF_TARGET match within ±2pp test; audit #9 | S-4 |
+| **E.4** Drawdown sparse cell nan-cliff | MED | §5.D.1.1 +7 fields; §5.D.1.3 NEW cell sparsity policy with hierarchical pooling; Wilson 95% intervals per threshold; audit #8 | S-5 |
+| **E.5+E.7** Block bootstrap + forecast band undercoverage | MED | §5.B.1.4 block-size + bandwidth sensitivity; §5.E.1 +5 fields (joint_bootstrap_sigma, covariance_ridge_isotonic, empirical_coverage_95, coverage_inflation_factor); audit #10 | S-6 |
+| **E.6** λ + calibrator stability + trigger thrashing | MED | §5.B Task B B8/B9 (lambda_log10_sd + sign_flip_rate); §5.RM-6.1.4 90d cooldown + coalescing + max 6/year + escalation; §5.RM-6.5 tests #12-14 | S-7 |
 
-**8 / 8 locked.** All with explicit option matrix + reasoning in spec body.
+**Closure rate: 6/6 (100%)** at spec level. Build-time will verify empirically.
 
 ---
 
-## §3 — Sxx deviation register
+## §3 — Q-resolutions (8/8; all v1 + v2 modifiers)
 
-| ID | Date | Sub-phase | Topic | Disposition | Backlog |
-|---|---|---|---|---|---|
-| **S-1** | 2026-05-10 | chunk 3 / §3.2 + §5.RM-4 | ScoredObservation new-slot list reconciliation (chunk 1 sketch → continuation prompt list; cv_fold_id → calibration_metadata dict; band lower/upper replaces forecast_sigma) | ACCEPT | none |
-
-**Total Sxx filed**: 1. Reserved S-2 through S-25 for L5 build deviations.
-
----
-
-## §4 — Cross-references
-
-| Metric | Count |
-|---|---|
-| Cross-references created in spec body | ≈45 (anchors §0..§12 + §X.Y.Z per sub-phase) |
-| Forward references to chunks 2-5 resolved | All (chunks 2-5 authored sequentially) |
-| Dangling references | 0 |
-| §3.2 cross-sub-phase semantic table rows | 13 fields (8 existing + 5 NEW via L5-RM-4 batched) |
-| Methodology rigor blocks (Type-1) | 7 (L5-A through L5-G; L5-H is structural-only) |
-| Cross-sub-phase semantic tables (Type-2) | 1 (§3.2; amended via S-1) |
-| ChatGPT 5.5 handoff checklist items (Type-3) | 21 (10 MUST verify + 7 MAY flag + 4 deferred to V) |
-
----
-
-## §5 — Spec-level conviction aggregate
-
-| Field | Value | Binding-constraint chain |
+| Q | Locked option | v2 modifier (if any) |
 |---|---|---|
-| `conviction_statistical` | 0.93 | min(chunks 1: 0.96 / 2: 0.94 / 3: 0.93 / 4: 0.93 / 5: 0.93) |
-| `conviction_operational` | 0.91 | min(chunks 1: 0.94 / 2: 0.93 / 3: 0.91 / 4: 0.91 / 5: 0.93) — binding chunks 3-4 |
-| `conviction_actionability` | 0.95 | min(chunks 1: 0.97 / 2: 0.96 / 3: 0.96 / 4: 0.95 / 5: 0.97) |
-| **Aggregate (MIN)** | **0.91** | **Binding: operational** (codebase recon depth uniform; deferred to build-time pre-flights) |
-
-Aggregate 0.91 ≥ 0.90 freeze floor → **APPROVE-FOR-FREEZE**.
+| Q1 | C — expanding primary + rolling-20Y | — |
+| Q2 | C — horizon-dependent step | — |
+| Q3 | C — nested walk-forward + LOO robustness | v2 applies separately Task A + Task B per S-3 |
+| Q4 | C — per-horizon separate (4 calibrators) | — |
+| Q5 | C — quarterly + Sahm 0.30 + curve flip | **v2 per S-7: 90d cooldown + coalescing + max 6/year + escalation 0.30→0.35 if frequency >6/year** |
+| Q6 | C — horizon-conditional DMS bps (5Y=−125 / 10Y=−175; ±50) | — |
+| Q7 | C — k/(k+n) horizon-dependent + DMS 6.5% US primary + 4.5% global robustness | **v2 per S-4: k_h backsolved from W_REF_TARGET × N_REF_NONOVERLAP** |
+| Q8 | C — all 4 horizons in L5 | — |
 
 ---
 
-## §6 — Headline numbers (verified arithmetic ×10)
+## §4 — Sxx register (cumulative L5)
 
-| Metric | Value | Source |
+| ID | Date | Chunk | Topic | Disposition |
+|---|---|---|---|---|
+| S-1 | 2026-05-10 | 3 (v1) | ScoredObservation slot list reconciliation | ACCEPT |
+| S-2 | 2026-05-11 | 6 (v2) | Calibration target schema (E.1) | ACCEPT |
+| S-3 | 2026-05-11 | 7 (v2) | L5-B Task A + Task B split (E.2) | ACCEPT |
+| S-4 | 2026-05-11 | 8 (v2) | Bayesian k_h backsolve (E.3) | ACCEPT |
+| S-5 | 2026-05-11 | 9 (v2) | Drawdown sparse cell intervals (E.4) | ACCEPT |
+| S-6 | 2026-05-11 | 9 (v2) | Block bootstrap + forecast band coverage (E.5+E.7) | ACCEPT |
+| S-7 | 2026-05-11 | 9 (v2) | Calibrator stability + trigger cooldown (E.6) | ACCEPT |
+
+**Total cumulative L5 Sxx: 7.** All ACCEPT. None require V override. Reserved S-8 through S-25 for L5 build deviations.
+
+---
+
+## §5 — Risk Register (NEW v2 §13)
+
+| ID | Risk | Severity |
 |---|---|---|
-| Sub-phases | 10 (L5-A / L5-B / L5-RM-4 / L5-RM-6 / L5-C / L5-D / L5-E / L5-F / L5-G / L5-H) | §4 decomposition |
-| Total build effort target | 47–66h | sum of bands |
-| Test delta target | +78 (602 → 680) | sum of test deltas |
-| NEG floor | ≥50% per sub-phase; spec aggregate 51% (40 NEG / 78 tests) | per §X.5 NEG counts |
-| New gates | 8 (Gates 18 through 25; Gate 25 composite L5-F + L5-G) | §6 consolidated |
-| New modules | 8 NEW Python modules + 8 NEW test modules | §X.0 file inventories |
-| New `ScoredObservation` slots | 5 (batched at L5-RM-4) | §3.2 + S-1 |
+| L5-RISK-1 | `calibrated_probability` events mismatch | HIGH (mitigated by S-2) |
+| L5-RISK-2 | Scalar Ridge cannot refit components | HIGH (mitigated by S-3) |
+| L5-RISK-3 | Shrinkage unit inconsistency | HIGH (mitigated by S-4) |
+| L5-RISK-4 | Drawdown 10Y cells overstate precision | MED (mitigated by S-5) |
+| L5-RISK-5 | HAC/bootstrap undercoverage | MED (mitigated by S-6) |
+| L5-RISK-6 | λ path instability | MED (mitigated by S-7) |
+| L5-RISK-7 | Recalibration trigger thrashing | MED (mitigated by S-7) |
+| L5-RISK-8 | DMS assumption stale | LOW-MED (mitigated by §1.3 Row 15 annual review) |
 
 ---
 
-## §7 — ChatGPT 5.5 paste-block pointers
+## §6 — Standing Order #4 audits (10 total; 6 NEW in v2)
 
-V pastes the following to ChatGPT 5.5 to initiate methodology review:
-
-1. `LAYER_5_BUILD_SPEC.md` (the spec — ≈115 KB after chunks 1-5)
-2. `HANDOFF_REVIEWER_METHODOLOGY_v2.md` (existing reviewer prompt template; V controls)
-3. **This file** (`LAYER_5_AUTHORING_SUMMARY.md`) — single-page summary
-4. Reference: `LAYER_3_5_BUILD_SPEC.md` + `LAYER_3_5b_RETROSPECTIVE.md` for predecessor context
-
-ChatGPT 5.5 reviews against §8 checklist:
-- §8.1: 10 MUST-verify methodology claims (each maps to methodology rigor block)
-- §8.2: 7 MAY-flag concerns (each pre-empted with Strategic response)
-- §8.3: 4 V-judgment items (deferred to V, not methodology)
-
-Expected reviewer latency: 2-4 days (per HANDOFF_STRATEGIC_CLAUDE_v4 §4 calendar pattern).
-
----
-
-## §8 — V freeze recommendation
-
-**APPROVE-FOR-FREEZE.** Rationale:
-- 8 / 8 Q-resolutions locked with option-matrix + reasoning + literature anchors
-- 7 methodology rigor blocks complete (Type-1 section type, 7 fields each)
-- Cross-sub-phase semantic table (§3.2) reconciled via S-1
-- ChatGPT 5.5 handoff checklist complete (Type-3 section type, 21 items)
-- Spec-level conviction aggregate 0.91 ≥ 0.90 floor
-- Standing Order #4 audits explicit and testable (L5-A AST contamination / L5-RM-6 PAV monotonicity / L5-F DMS application / L5-G shrinkage horizon-dependence)
-- Pause-and-verify cadence preserved (5 chunks committed sequentially with self-verification)
-
-Post-freeze sequence:
-1. V tags candidate `layer5-spec-v1` (optional)
-2. V opens ChatGPT 5.5 chat → paste-block per §7
-3. ChatGPT 5.5 review returns 2-4 days; v2 incorporation cycle if needed
-4. Post-v2 freeze: trigger L5 build (separate `claude/layer-5-build` branch; pre-flight per L5-A spec)
-
----
-
-## §9 — Commit chain (`claude/layer-5-spec`)
-
-| Chunk | SHA | Commit message |
+| # | Owning sub-phase | Universal claim |
 |---|---|---|
-| 1 | `82267c1` | L5 spec chunk 1: scope + discipline + sub-phase decomposition |
-| 2 | `684e2d4` | L5 spec chunk 2: L5-A walk-forward CV + L5-B Ridge fit (Q1/Q2/Q3 locked) |
-| 3 | `ba89afd` | L5 spec chunk 3: calibration triad RM-4/RM-6/C (Q4/Q5 locked; 9-slot batched; L5-13 absorbed; S-1 filed) |
-| 4 | `ea6df2f` | L5 spec chunk 4: distribution + horizon-prior tetrad D/E/F/G (Q6/Q7 locked; Gate 25 composite authored) |
-| 5 | (pending this commit) | L5 spec chunk 5: closure + gates 18-25 + backlog + ChatGPT 5.5 handoff + QC (Q8 locked) |
-
-Branch tip post-chunk-5: ready for V inspection / freeze / push.
+| 1 | L5-A | Walk-forward CV zero cross-fold contamination |
+| 2 | L5-RM-6 | Isotonic PAV monotonicity preservation |
+| 3 | L5-F | DMS bps 5Y/10Y exclusive application |
+| 4 | L5-G | Bayesian shrinkage horizon-dependent (no constant 0.30) |
+| **5 NEW v2** | L5-B Task A + Task B | Train-only z-scoring (no test contamination) |
+| **6 NEW v2** | L5-RM-6 | No pre-RM-6 calibrated_probability use |
+| **7 NEW v2** | L5-C | Brier improvement w/ climatology + bin counts |
+| **8 NEW v2** | L5-D | Drawdown cell completeness (all 16 cells have n + event + width + label) |
+| **9 NEW v2** | L5-G | Shrinkage k_h + n_eff unit consistency (reference weights numerically verified) |
+| **10 NEW v2** | L5-E | Forecast band empirical coverage reported per horizon |
 
 ---
 
-**END — LAYER_5_AUTHORING_SUMMARY.md**
+## §7 — ChatGPT 5.5 v2 paste-block pointers
+
+V pastes the following to a NEW ChatGPT 5.5 chat for v2 methodology review:
+
+1. `LAYER_5_BUILD_SPEC.md` v2 (the spec — ≈155 KB after chunks 1-10)
+2. `HANDOFF_REVIEWER_METHODOLOGY_v2.md` (V controls)
+3. **This file** (`LAYER_5_AUTHORING_SUMMARY.md` v2) — single-page summary
+4. `LAYER_5_CHUNK_6_through_10_VERIFICATION.md` × 5 (chunks 6-10 v2 self-verifications)
+5. ChatGPT 5.5 v1 review document (so reviewer can see what was closed)
+6. Reference: `LAYER_3_5_BUILD_SPEC.md` + `LAYER_3_5b_RETROSPECTIVE.md` for predecessor context
+
+Expected reviewer latency: 2-4 days. Expected verdict: **FREEZE-WITH-NOTES** (3 HIGH all closed; 4 MED all closed; 8 risk items registered; 6 new audits added).
+
+---
+
+## §8 — Spec-level v2 conviction aggregate
+
+| Field | v1 value | v2 chunks min | v2 binding-constraint chain |
+|---|---|---|---|
+| `conviction_statistical` | 0.93 | min(0.95 / 0.95 / 0.97 / 0.94 / 0.95) = 0.94 | improved post-v2 |
+| `conviction_operational` | 0.91 | min(0.93 / 0.91 / 0.94 / 0.91 / 0.94) = 0.91 | unchanged |
+| `conviction_actionability` | 0.95 | min(0.96 / 0.96 / 0.97 / 0.96 / 0.97) = 0.96 | improved post-v2 |
+| **Aggregate (MIN across v1+v2)** | 0.91 | **0.91** | binding: operational |
+
+Aggregate 0.91 ≥ 0.90 freeze floor → **APPROVE-FOR-FREEZE v2**.
+
+---
+
+## §9 — V's next 2 actions
+
+1. **Review this Authoring Summary v2 + LAYER_5_BUILD_SPEC.md v2** (~10 min)
+2. **Either**:
+   - **APPROVE-AS-IS** → open NEW ChatGPT 5.5 chat with paste-block per §7
+   - **OVERRIDE** → request Strategic to edit spec; then re-tag (force-push)
+
+---
+
+## §10 — v1 vs v2 commit chain (`claude/layer-5-spec`)
+
+| Chunk | Phase | SHA | Commit message |
+|---|---|---|---|
+| 1 | v1 | `82267c1` | scope + discipline + sub-phase decomposition |
+| 2 | v1 | `684e2d4` | L5-A walk-forward CV + L5-B Ridge fit (Q1/Q2/Q3) |
+| 3 | v1 | `ba89afd` | calibration triad RM-4/RM-6/C (Q4/Q5; 9-slot batched; L5-13 absorbed; S-1) |
+| 4 | v1 | `ea6df2f` | distribution + horizon-prior tetrad D/E/F/G (Q6/Q7; Gate 25) |
+| 5 | v1 | `d776eb4` | closure + gates + backlog + ChatGPT handoff + QC (Q8) — **tag `layer5-spec-v1`** |
+| 6 | v2 | `b0c42d0` | calibration target schema (E.1 fix; S-2) |
+| 7 | v2 | `aaec209` | L5-B Task A + Task B split (E.2 fix; S-3) |
+| 8 | v2 | `b7e0da4` | Bayesian k_h backsolve (E.3 fix; S-4) |
+| 9 | v2 | `effce45` | MED fixes E.4/E.5/E.6/E.7 (S-5/S-6/S-7) |
+| 10 | v2 | (pending) | closure + risk register + tag layer5-spec-v2 |
+
+Branch tip post-chunk-10: ready for V inspection / freeze v2 / paste to ChatGPT 5.5.
+
+---
+
+**END — LAYER_5_AUTHORING_SUMMARY.md v2**

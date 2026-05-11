@@ -17,8 +17,11 @@
 | Build branch | `claude/layer-5-build` (created at L5-A pre-flight kickoff post-spec-freeze) |
 | Target tag (post-build) | `layer5-complete` |
 | Sub-phases | L5-A → L5-B → L5-RM-4 → L5-RM-6 → L5-C → L5-D → L5-E → L5-F → L5-G → L5-H (sequential, gated, pause-and-verify each) |
-| Estimated build effort | 47–66h work + ~8h spec verification + ~24h ChatGPT 5.5 + Codex review = 79–98h end-to-end |
-| Tests delta target | +78 (602 → 680); MIN +70, MAX +90 |
+| Estimated build effort (v1) | 47–66h work (superseded by v2 below) |
+| **Estimated build effort (v2 per S-3 + chunk-9 expansions)** | **62–88h work** + ~8h spec verification + ~24h ChatGPT 5.5 + Codex review = 94–120h end-to-end (v2 expansions: L5-B 8-10h → 12-16h via S-3; L5-D +12 tests vs +8 via S-5; L5-E +9 tests vs +6 via S-6; L5-G +8 tests vs +6 via S-4; L5-RM-6 +14 tests vs +10 via S-2+S-7; L5-B +25 tests vs +15 via S-3; net +20-30h estimated for additional test authoring + dual-API L5-B + drawdown pooling + joint bootstrap) |
+| Tests delta target (v1) | +78 (superseded by v2 below) |
+| **Tests delta target (v2)** | **~+100** (estimated; net additions: L5-RM-6 +4 from S-2+S-7; L5-B +10 from S-3; L5-D +4 from S-5; L5-E +3 from S-6; L5-G +2 from S-4); MIN +90, MAX +115 |
+| **Sxx ceiling (v2 expected during build)** | 8–12 entries expected during build (v1 had 1; v2 spec authoring filed 7; build-time may file 1–5 more for empirical surprises) |
 | Gates added | 18, 19, 20, 21, 22, 23, 24, 25 (8 new gates) |
 | Deviation register | continues from D30; L5 build deviations use `Sxx` IDs reserved S-1 through S-25 to distinguish from L3.5-era `Dxx` |
 | Reviewer for L5 spec methodology | ChatGPT 5.5 (re-engages from Dim 1/2/3 prior findings) |
@@ -77,7 +80,7 @@ Layer 5 turns **raw scores into calibrated probabilities** suitable for institut
 | 3 | CV step size (Q2) | **Horizon-dependent** (monthly 1Y/3Y, annual 5Y, 5Y blocks 10Y) | Meta-prompt §2.2 Q2; locked in chunk 2 |
 | 4 | Ridge λ selection (Q3) | **CV-selected via nested walk-forward** (outer = OOS evaluation, inner = λ selection) + leave-one-out robustness with fixed-λ from L3 baseline | Meta-prompt §2.2 Q3; locked in chunk 2 |
 | 5 | Isotonic calibration scope (Q4) | **Per-horizon separate** (4 calibrators: 1Y / 3Y / 5Y / 10Y) | Meta-prompt §2.2 Q4; locked in chunk 3 |
-| 6 | Recalibration cadence (Q5) | **Quarterly + regime-triggered override** (Sahm Rule >0.30 OR 10Y–3M curve inversion regime flip forces refit) | Meta-prompt §2.2 Q5; locked in chunk 4 |
+| 6 | Recalibration cadence (Q5; **v2 amended per S-7**) | **Quarterly + regime-triggered override** (Sahm Rule >0.30 OR 10Y–3M curve inversion regime flip forces refit); **escalation per S-7: if empirical refit frequency >6/year over rolling 5Y window → escalate Sahm threshold 0.30 → 0.35 (file Sxx if triggered at build-time)**; **90d cooldown + coalescing per §5.RM-6.1.4** | Meta-prompt §2.2 Q5; locked in chunk 4; v2 cooldown per S-7 |
 | 7 | DMS survivorship bps (Q6) | **−150 bps mid-band central** + horizon conditional (5Y: −125; 10Y: −175) + ±50 sensitivity in outputs | Meta-prompt §2.2 Q6; locked in chunk 4 |
 | 8 | Bayesian shrinkage weight (Q7) | **Horizon-dependent + sample-size-adaptive** (1Y w=5%, 3Y w=15%, 5Y w=30%, 10Y w=50%) with k/(k+n) form (k = horizon × 15) | Meta-prompt §2.2 Q7; locked in chunk 4 |
 | 9 | Horizon scope (Q8) | **All 4 horizons (1Y / 3Y / 5Y / 10Y) in L5** | Meta-prompt §2.2 Q8; locked in chunk 5 |
@@ -86,6 +89,7 @@ Layer 5 turns **raw scores into calibrated probabilities** suitable for institut
 | 12 | L5 reviewer (code) | Codex 5.5 (post-build) | Meta-prompt §1 |
 | 13 | Calibrated probability storage | `ScoredObservation.calibrated_probability` slot introduced at 3.5D | Verified empirically `scoring/scored_observation.py:89` |
 | 14 | CV input panel | `data/cache/analysis/r_squared_panel.parquet` (atomic; sha-validated; 4-horizon indexed) | Verified empirically `analysis/r_squared_panel.py:53` |
+| **15 (NEW v2 per chunk 10 closure)** | **DMS source freshness check (closes L5-RISK-8)** | **Annual review against latest UBS Global Investment Returns Yearbook (currently 2026 edition); biennial spec smoke-test for material divergence from 6.5% US / 4.5% global priors; if material divergence detected, file Sxx and revise Q7 anchor** | v2 prompt §2.9 |
 
 Q-resolutions Q1–Q8 are **locked at chunk authoring time** with full option matrix + reasoning embedded in the owning sub-phase's §X.4 "Decisions for V to Confirm" block; ChatGPT 5.5 may pressure-test each.
 
@@ -2204,5 +2208,24 @@ Cumulative AP-1 through AP-15 from prior layers apply. L5-specific additions:
 
 ---
 
-<!-- END OF CHUNK 1 — sections §0 through §4 + §10 register skeleton + §11 methodology locator + §12 anti-patterns -->
-<!-- Chunks 2-5 will populate §5 sub-phase specs, §6 gates, §7 backlog, §8 ChatGPT handoff, §9 closure QC. -->
+<!-- CHUNK 10 v2 START — §13 Risk Register (closure) -->
+
+## §13 — Risk Register (NEW v2; from ChatGPT 5.5 v1 review §H)
+
+| ID | Risk | Severity | Detection signal | Mitigation in spec |
+|---|---|---|---|---|
+| **L5-RISK-1** | `calibrated_probability` means different events in different paths | HIGH | Brier label mismatch; inverted reliability diagram | §3.3 calibration target schema + §5.RM-6.5 invariant test #11 + S-2 |
+| **L5-RISK-2** | Scalar Ridge cannot refit CRPS/CDRS component weights | HIGH | Only one β per composite reported | §5.B Task A component matrix + AST audit test A1 + S-3 |
+| **L5-RISK-3** | Shrinkage weight arithmetic not unit-consistent | HIGH | Computed `w` at reference cutpoints ≠ `W_REF_TARGET` | §5.G.1 backsolved k_h + §5.G.5 test #7 (±2pp match) + §2.5 audit #9 + S-4 |
+| **L5-RISK-4** | 10Y drawdown cells overstate precision | MED | Wilson CI width >0.50; n_eff ≤ 10 | §5.D.1.3 hierarchical pooling + §5.D.5 test #12 + §2.5 audit #8 + S-5 |
+| **L5-RISK-5** | HAC/bootstrap inference undercovers at long horizons | MED | 95% bands cover <90% OOS | §5.B.1.4 block + bandwidth sensitivity + §5.E coverage inflation + S-6 |
+| **L5-RISK-6** | λ path instability hidden by grid-edge test | MED | SD(log10 λ) >1; sign flips >20% | §5.B.5 Task B tests B8/B9 + S-7 |
+| **L5-RISK-7** | Recalibration trigger thrashing | MED | >4 refits/year; double trigger within 90 days | §5.RM-6.1.4 90d cooldown + coalescing + max 6/year + escalation 0.30→0.35 + S-7 |
+| **L5-RISK-8** | DMS assumption becomes stale | LOW-MED | New UBS Global Investment Returns Yearbook edition differs materially from cited 6.5% / 4.5% anchors | §1.3 Row 15 annual review placeholder + biennial spec smoke-test |
+
+---
+
+<!-- END — L5 BUILD SPEC v2. -->
+<!-- v1 (commit d776eb4 tag layer5-spec-v1) preserved as historical snapshot. -->
+<!-- v2 (commit <chunk10-SHA> tag layer5-spec-v2) closes ChatGPT 5.5 v1 review: 3 HIGH + 4 MED + risk register + 6 audits + 7 Sxx -->
+<!-- Next milestone: ChatGPT 5.5 v2 methodology review -->
