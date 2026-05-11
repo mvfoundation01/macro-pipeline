@@ -248,11 +248,11 @@ Every field that L5 introduces, modifies, or finalizes across sub-phase boundari
 | `calibrated_probability` | `Optional[float64] ∈ [0, 1]` | 3.5D (slot added to `ScoredObservation`; None until L5 fills) | L5-RM-4 (populates via raw_score → identity passthrough at first); L5-RM-6 (replaces with isotonic transform of raw_score) | `float64 ∈ [0, 1]` (post-L5-RM-6; never None for any scored observation produced by L5 calibrated path) | §5.RM-4.3, §5.RM-6.5 |
 | `calibration_metadata` | `Optional[dict[str, Any]]` | 3.5D (slot added) | L5-RM-4 (populates with `{"method": "raw_passthrough"}`); L5-RM-6 (overwrites with full `{"method": "isotonic", "fit_window": (start, end), "n_train_obs": n, "horizon": h, "monotonicity_audit": "PASS"}`) | full dict post-L5-RM-6 | §5.RM-4.3, §5.RM-6.5 |
 | `notes` | `list[str]` | 3.5D (introduced); 3.5D AM25 migrated CRPS `metadata_extra` → notes | L5-RM-4 (absorbs **L5-13** backlog item — migrates CDRS `metadata_extra` to notes; mirrors CRPS pattern via shared `_format_pit_lineage_notes()`) | post-L5-RM-4: both CRPS + CDRS use notes uniformly | §5.RM-4.5 |
-| `forecast_sigma` | `float64 ≥ 0` (annualized return std) | **L5-E (NEW)** | unchanged after introduction | NEW slot added to `ScoredObservation` via L5-RM-4 (dataclass field; default None until L5-E populates) | §5.E.3 |
-| `drawdown_probability_distribution` | `Optional[dict[str, float]]` (CDF percentiles {"p10": ..., "p25": ..., "p50": ..., "p75": ..., "p90": ...}) | **L5-D (NEW)** | unchanged after introduction | NEW slot in `ScoredObservation` via L5-RM-4 | §5.D.3 |
+| `calibrated_probability_band_lower` | `Optional[float64] ∈ [0, 1]` | **L5-E (NEW; amended via S-1)** | unchanged after introduction | NEW slot added to `ScoredObservation` via L5-RM-4 (dataclass field; default None until L5-E populates with bootstrap-CV-residual-derived lower band) | §5.E.3 |
+| `calibrated_probability_band_upper` | `Optional[float64] ∈ [0, 1]` | **L5-E (NEW; amended via S-1)** | unchanged after introduction | NEW slot added to `ScoredObservation` via L5-RM-4; paired with `_lower` to express forecast band directly | §5.E.3 |
+| `drawdown_conditional_distribution` | `Optional[dict[str, float]]` (CDF percentiles {"p10": ..., "p25": ..., "p50": ..., "p75": ..., "p90": ...} keyed by drawdown threshold) | **L5-D (NEW; renamed via S-1)** | unchanged after introduction | NEW slot in `ScoredObservation` via L5-RM-4 | §5.D.3 |
 | `dms_adjustment_bps` | `float64` (negative; annualized bps) | **L5-F (NEW)** | unchanged after introduction | NEW slot in `ScoredObservation` via L5-RM-4 (default 0.0 for 1Y/3Y; populated for 5Y/10Y at L5-F) | §5.F.2 |
 | `bayesian_shrinkage_weight` | `float64 ∈ [0, 1]` (k/(k+n) form) | **L5-G (NEW)** | unchanged after introduction | NEW slot in `ScoredObservation` via L5-RM-4 (default 0.0 in 1Y; horizon-dependent populated at L5-G) | §5.G.3 |
-| `cv_fold_id` | `Optional[int]` (integer 0+, None for non-CV scoring) | **L5-A (NEW)** | unchanged after introduction | NEW slot in `ScoredObservation` via L5-RM-4 (populated only when scoring within a CV fold, not for production scoring) | §5.A.3 |
 | `regime_state` | `str ∈ {"expansion", "late-cycle", "recession", "indeterminate"}` | L3A | 3.5D (added "indeterminate") | unchanged in L5 | §5.B.4 (Ridge fits stratified by regime_state); §5.G.3 (shrinkage may be regime-conditional in future L5b sprint) |
 | `confidence_overall` | `float64 ∈ [0, 100]` | L1.5B | 3.5D (cap 60 applied when regime=indeterminate) | unchanged in L5 | §5.B.4, §5.G.4 |
 | `metadata_extra` | `dict[str, Any]` (bag of everything) | L3 | L5-RM-4 (drains remaining CDRS V/T notes into `notes` per L5-13) | post-L5-RM-4: shrunk by L5-13 migration | §5.RM-4.5 |
@@ -260,16 +260,18 @@ Every field that L5 introduces, modifies, or finalizes across sub-phase boundari
 
 **Cross-sub-phase migrations summarized**:
 
-1. `ScoredObservation` dataclass gains 5 new slots at **L5-RM-4** as a single atomic dataclass migration:
-   - `forecast_sigma: Optional[float] = None`
-   - `drawdown_probability_distribution: Optional[dict[str, float]] = None`
+1. `ScoredObservation` dataclass gains 5 new slots at **L5-RM-4** as a single atomic dataclass migration (slot list amended via **S-1** in chunk 3; supersedes chunk 1 initial sketch):
+   - `calibrated_probability_band_lower: Optional[float] = None`
+   - `calibrated_probability_band_upper: Optional[float] = None`
+   - `drawdown_conditional_distribution: Optional[dict[str, float]] = None`
    - `dms_adjustment_bps: float = 0.0`
    - `bayesian_shrinkage_weight: float = 0.0`
-   - `cv_fold_id: Optional[int] = None`
    
 2. L5-D, L5-E, L5-F, L5-G **populate** these slots; they do not add fields. This avoids 4 separate dataclass migrations.
 
 3. The L5-13 CDRS notes migration (Codex finding X deferred from 3.5b) is absorbed into L5-RM-4. Effort 1-2h folded into L5-RM-4 budget (4-6h band).
+
+4. `cv_fold_id` (initially proposed as a top-level slot in chunk 1) is **relocated to `calibration_metadata` dict** per S-1: rationale = the field is transient (only populated during CV scoring runs, not for production scoring); `calibration_metadata: dict[str, Any]` is the natural home per L3.5D pattern. Build agent at L5-RM-4 time stores `{"cv_fold_id": int, "cv_schedule_type": "expanding"|"rolling_20y", ...}` in calibration_metadata when scoring within a fold.
 
 ---
 
@@ -722,9 +724,486 @@ Failure modes: any of (1)-(8) false ⇒ Gate 19 FAIL.
 
 <!-- CHUNK 3 START — §5.RM-4 raw_score vs calibrated_probability split + §5.RM-6 isotonic calibration + §5.C Brier + reliability (Q4 locked) -->
 
-<!-- CHUNK 3 START — §5.RM-4 raw_score vs calibrated_probability split + §5.RM-6 isotonic calibration + §5.C Brier + reliability (Q4 locked) -->
+<!-- CHUNK 3 START — §5.RM-4 raw_score vs calibrated_probability split + §5.RM-6 isotonic calibration + §5.C Brier + reliability (Q4+Q5 locked) -->
 
-*To be authored in chunk 3 (target 2–3h).*
+### §5.RM-4 — Sub-Phase L5-RM-4: raw_score vs calibrated_probability Semantic Split + Batched Dataclass Migration
+
+#### §5.RM-4.0 Sub-phase metadata
+
+| Field | Value |
+|---|---|
+| Sub-phase ID | L5-RM-4 |
+| Topic | Formalize raw_score / calibrated_probability semantic split; add 5 new slots to `ScoredObservation` (batched single migration); absorb L5-13 (CDRS notes migration to mirror CRPS pattern) |
+| Effort band | 4–6h (target 5h; includes L5-13 1–2h absorbed) |
+| Test delta | +8 (≥4 NEG = 50% floor; spec lists 5 NEG / 3 POS) |
+| Gate added | 20 |
+| Owning Q-resolutions | None (structural sub-phase; no methodology choice) |
+| Dependencies | L5-B (consumes `raw_score` from `RidgeFitResult`) |
+| Downstream consumers | L5-RM-6 (isotonic on raw_score → calibrated_probability), L5-C/D/E/F/G (all consume calibrated_probability + new slots) |
+| Commit message template | `L5-RM-4: ScoredObservation 5-slot batched migration + raw/calibrated semantic split + L5-13 absorbed` |
+| Modified files | `macro_pipeline/scoring/scored_observation.py` (slot additions + validator); `macro_pipeline/scoring/cdrs.py` (L5-13 notes migration); `tests/test_scored_observation.py` (slot tests); `tests/test_cdrs.py` (L5-13 regression test); `macro_pipeline/validation.py` (+ `validate_gate20_dataclass_migration()`) |
+
+#### §5.RM-4.1 Scope
+
+L5-RM-4 is the **batched dataclass migration** absorbing field additions that L5-D, L5-E, L5-F, L5-G would otherwise each commit separately. Per V's standing approval (recorded in S-1) and Strategic continuation prompt §3.2, all 5 new slots are added in one atomic commit.
+
+##### §5.RM-4.1.1 New slot additions (5 total)
+
+```python
+# macro_pipeline/scoring/scored_observation.py (modifications)
+
+@dataclass
+class ScoredObservation:
+    # ... existing 25 slots unchanged (raw_score, calibrated_probability,
+    # calibration_metadata, notes, etc.) ...
+    
+    # ---- L5 calibration band slots (L5-RM-4 NEW; L5-E populates) ----
+    calibrated_probability_band_lower: float | None = None    # ∈ [0, 1] when present
+    calibrated_probability_band_upper: float | None = None    # ∈ [0, 1] when present
+    
+    # ---- L5 drawdown conditional distribution slot (L5-RM-4 NEW; L5-D populates) ----
+    drawdown_conditional_distribution: dict[str, float] | None = None
+    
+    # ---- L5 DMS survivorship adjustment slot (L5-RM-4 NEW; L5-F populates) ----
+    dms_adjustment_bps: float = 0.0    # negative bps for 5Y/10Y; 0.0 for 1Y/3Y
+    
+    # ---- L5 Bayesian shrinkage weight slot (L5-RM-4 NEW; L5-G populates) ----
+    bayesian_shrinkage_weight: float = 0.0    # ∈ [0, 1]
+```
+
+##### §5.RM-4.1.2 Validator extensions in `__post_init__`
+
+```python
+if self.calibrated_probability_band_lower is not None and not (
+    0.0 <= self.calibrated_probability_band_lower <= 1.0
+):
+    raise ValueError(
+        f"calibrated_probability_band_lower={self.calibrated_probability_band_lower} "
+        "must be in [0, 1] when present"
+    )
+
+if self.calibrated_probability_band_upper is not None and not (
+    0.0 <= self.calibrated_probability_band_upper <= 1.0
+):
+    raise ValueError(
+        f"calibrated_probability_band_upper={self.calibrated_probability_band_upper} "
+        "must be in [0, 1] when present"
+    )
+
+if (self.calibrated_probability_band_lower is not None
+    and self.calibrated_probability_band_upper is not None
+    and self.calibrated_probability_band_lower > self.calibrated_probability_band_upper):
+    raise ValueError(
+        f"band_lower={self.calibrated_probability_band_lower} must be ≤ "
+        f"band_upper={self.calibrated_probability_band_upper}"
+    )
+
+# DMS bps band: −200 to 0 (negative, less negative than −200, never positive)
+if not -200.0 <= self.dms_adjustment_bps <= 0.0:
+    raise ValueError(
+        f"dms_adjustment_bps={self.dms_adjustment_bps} must be in [-200, 0] bps"
+    )
+
+# Bayesian shrinkage weight
+if not 0.0 <= self.bayesian_shrinkage_weight <= 1.0:
+    raise ValueError(
+        f"bayesian_shrinkage_weight={self.bayesian_shrinkage_weight} "
+        "must be in [0, 1]"
+    )
+```
+
+##### §5.RM-4.1.3 raw_score vs calibrated_probability semantic contract (formalized)
+
+| Field | Semantic | Domain | Populated when |
+|---|---|---|---|
+| `raw_score` | Untransformed model output; Ridge raw prediction (L5-B) or CRPS/CDRS composite (L3) | `float ∈ [0, 1]` (existing constraint per `__post_init__`) | Always; populated by L3 scorers or L5-B Ridge fit |
+| `calibrated_probability` | Isotonic-transformed raw_score; reliable in [0, 1] bin-frequency sense | `float ∈ [0, 1]`, or None pre-calibration | Populated by L5-RM-6 isotonic transform; None for any `ScoredObservation` produced before L5-RM-6 runs |
+| `calibration_metadata` | Dict capturing calibration provenance + transient CV fold context | `dict[str, Any]`, or None pre-calibration | Populated by L5-RM-6; structure `{"method": "isotonic", "fit_window": (start, end), "horizon": h, "monotonicity_audit": "PASS", "cv_fold_id": int \| None, "cv_schedule_type": str \| None}` |
+
+**Production scoring contract**: every production `ScoredObservation` (post-L5-RM-6) MUST have `calibrated_probability` populated. Internal CV-time `ScoredObservation` (used in L5-B Ridge fits) MAY have `calibrated_probability=None` if the score_type or fold has not yet been calibrated.
+
+##### §5.RM-4.1.4 L5-13 absorption — CDRS notes migration
+
+Per Codex 5/5 L3.5 review finding X (deferred to L5-13): CRPS migrated `metadata_extra` → `notes` at 3.5D AM25; CDRS still has V/T notes in `metadata_extra`. L5-RM-4 absorbs the L5-13 work:
+
+1. Migrate every CDRS `scored_obs.metadata_extra["V_*"]` and `["T_*"]` entry to `scored_obs.notes`
+2. Mirror CRPS pattern: use shared `_format_pit_lineage_notes()` helper (currently in `scoring/crps.py`; extract to `scoring/notes_formatter.py` to share)
+3. Add NBER pre-1978 caveat to notes when `pre_1978_training_only=True` flag is set (mirrors CRPS handling)
+
+Effort: 1-2h, folded into L5-RM-4's 4-6h band.
+
+#### §5.RM-4.2 Pre-flight contract (build-time L5-RM-4 pre-flight executes)
+
+1. **AST-walk audit of `scored_observation.py:49`** confirming 25 existing slots; capture diff for the 5 additions
+2. **Parquet roundtrip smoke-test**: construct `ScoredObservation` with all 30 slots populated; serialize via `to_dict()`; deserialize; assert element-wise equality
+3. **L5-13 CDRS notes audit**: grep `scoring/cdrs.py` for `metadata_extra["V_*"]` / `["T_*"]` patterns; verify migration replaces every match (target: 0 remaining post-migration)
+4. **Test suite regression**: existing 602 tests must still pass post-dataclass change (default values for new slots prevent ctor signature breakage)
+5. **`scored_observation.to_dict()` schema audit**: verify the new slots are included in `to_dict()` output (chunk-3 build-time concern; spec authoring confirms it's expected)
+
+#### §5.RM-4.3 Methodology rigor
+
+| Element | Specification |
+|---|---|
+| Assumption | Existing `ScoredObservation` slot semantics preserved; default-value compatibility prevents breaking-change for existing code paths |
+| Estimator | N/A (structural dataclass migration; no fitting) |
+| Identification | N/A — semantic contract is type-level |
+| Consistency | Trivially: dataclass invariants enforced in `__post_init__` |
+| Standard error | N/A — no parameter estimation |
+| Failure mode | (a) Existing test that constructs `ScoredObservation` with positional args breaks if new slots inserted mid-list — mitigated by appending at end; (b) parquet roundtrip drops new fields if pyarrow schema lacks them — mitigated by §5.RM-4.2 smoke-test #2 |
+| ChatGPT 5.5 likely flag | Validator strictness: band lower ≤ upper rule may be too strict if isotonic regression in L5-RM-6 produces edge cases; spec pre-empts by stating L5-RM-6 must clip to [0, 1] before populating |
+
+#### §5.RM-4.4 Decisions
+
+**No owning Q.** Single structural decision: **BATCHED dataclass migration** (5 slots in one commit) per V's standing approval (chunk 1 §1.3 row 9; reaffirmed via S-1 reconciliation in §10). Alternative `DISTRIBUTED` (each of L5-D/E/F/G adds its own slot in its own commit) rejected — 5 dataclass migration commits vs 1; higher merge-conflict risk; Codex 5/5 review surface inflates 5×.
+
+#### §5.RM-4.5 Tests (+8; 5 NEG / 3 POS = 63% NEG)
+
+| # | Test name | Type | What it asserts |
+|---|---|---|---|
+| 1 | `test_dataclass_has_all_30_slots` | POS | Inspect `ScoredObservation.__dataclass_fields__`; assert exactly 30 fields (25 existing + 5 new); names match spec |
+| 2 | `test_parquet_roundtrip_preserves_5_new_slots` | POS | Construct + populate all 30 slots; `to_dict()` + parquet write + read + compare element-wise |
+| 3 | `test_notes_field_carries_L5_provenance_post_L5_13_absorption` | POS | After L5-RM-4 migration, CDRS `scored_obs.notes` contains formatted V/T lineage; `scored_obs.metadata_extra` does NOT contain V/T keys (L5-13 absorbed; regression-testable per continuation prompt §3.2 chunk 3) |
+| 4 | `test_rejects_calibrated_probability_band_lower_outside_zero_one` | NEG | `ScoredObservation(..., calibrated_probability_band_lower=1.5)` raises `ValueError` |
+| 5 | `test_rejects_calibrated_probability_band_upper_outside_zero_one` | NEG | symmetric to #4 |
+| 6 | `test_rejects_band_lower_greater_than_band_upper` | NEG | `ScoredObservation(..., band_lower=0.7, band_upper=0.5)` raises `ValueError("band_lower must be ≤ band_upper")` |
+| 7 | `test_rejects_dms_adjustment_outside_minus_200_to_zero_bps_band` | NEG | `dms_adjustment_bps=10.0` (positive) or `dms_adjustment_bps=-300.0` raises `ValueError` |
+| 8 | `test_rejects_bayesian_shrinkage_weight_outside_zero_one` | NEG | `bayesian_shrinkage_weight=1.5` or `=−0.1` raises `ValueError` |
+
+NEG count: 5 (tests 4, 5, 6, 7, 8). POS count: 3 (tests 1, 2, 3). NEG% = 63%, well above 50% floor.
+
+#### §5.RM-4.6 Gate 20 — Dataclass migration integrity
+
+```python
+def validate_gate20_dataclass_migration() -> GateReport:
+    """Gate 20 — L5-RM-4 ScoredObservation 5-slot batched migration."""
+```
+
+PASS criteria:
+1. `ScoredObservation.__dataclass_fields__` count = 30
+2. 5 new slot names exactly match spec: `calibrated_probability_band_lower`, `calibrated_probability_band_upper`, `drawdown_conditional_distribution`, `dms_adjustment_bps`, `bayesian_shrinkage_weight`
+3. Parquet roundtrip smoke-test PASSes (test #2)
+4. L5-13 absorption confirmed: CDRS `metadata_extra` has 0 V_*/T_* keys (test #3)
+5. All 8 tests in §5.RM-4.5 PASS
+6. Existing 602-test suite still passes (regression floor preserved per §2.6)
+
+#### §5.RM-4.7 Proof contract (10 items)
+
+| # | Proof |
+|---|---|
+| 1 | `python -c "from macro_pipeline.scoring import ScoredObservation; assert len(ScoredObservation.__dataclass_fields__) == 30"` succeeds |
+| 2 | `pytest tests/test_scored_observation.py tests/test_cdrs.py` shows all 8 new tests PASS plus L5-13 regression PASS |
+| 3 | `grep -E 'metadata_extra\[.V_|metadata_extra\[.T_' macro_pipeline/scoring/cdrs.py` returns 0 matches post-migration |
+| 4 | `scoring/notes_formatter.py` exists and is imported by both `crps.py` and `cdrs.py` |
+| 5 | Parquet roundtrip smoke-test data archived in verification |
+| 6 | All 5 validator checks raise `ValueError` on boundary violations (tests 4-8) |
+| 7 | Gate 20 PASSes |
+| 8 | 602 + 8 = 610 cumulative tests; ruff clean |
+| 9 | Conviction 3-field reported |
+| 10 | Codex 5/5 finding X explicitly noted closed via test #3 invariant |
+
+---
+
+### §5.RM-6 — Sub-Phase L5-RM-6: Isotonic Regression Calibration
+
+#### §5.RM-6.0 Sub-phase metadata
+
+| Field | Value |
+|---|---|
+| Sub-phase ID | L5-RM-6 |
+| Topic | Per-horizon isotonic regression fitting raw_score → calibrated_probability; quarterly + regime-triggered recalibration cadence |
+| Effort band | 6–8h (target 7h) |
+| Test delta | +10 (≥5 NEG = 50% floor; spec lists 6 NEG / 4 POS = 60% NEG) |
+| Gate added | 21 |
+| Owning Q-resolutions | Q4 (per-horizon scope), Q5 (recalibration cadence) |
+| Dependencies | L5-RM-4 (calibrated_probability slot exists); L5-B (raw_score per fold from RidgeFitResult) |
+| Downstream consumers | L5-C (Brier on calibrated_probability), L5-D (drawdown conditional on calibrated_probability), L5-E (band derivation from calibration metadata), L5-F (5Y/10Y DMS-adjusted), L5-G (shrinkage uses calibration variance) |
+| Commit message template | `L5-RM-6: per-horizon isotonic calibration + quarterly + regime-triggered cadence (Q4/Q5 locked)` |
+| New files | `macro_pipeline/models/isotonic_calibrator.py` (NEW); `tests/test_isotonic_calibrator.py` (NEW) |
+| Modified files | `macro_pipeline/validation.py` (+ `validate_gate21_isotonic_calibration()`); `macro_pipeline/models/__init__.py` (export) |
+
+#### §5.RM-6.1 Scope
+
+##### §5.RM-6.1.1 Public API
+
+```python
+# macro_pipeline/models/isotonic_calibrator.py
+
+from dataclasses import dataclass
+import numpy as np
+import pandas as pd
+from sklearn.isotonic import IsotonicRegression
+
+@dataclass(frozen=True)
+class IsotonicCalibrationResult:
+    horizon: str                              # "1Y" | "3Y" | "5Y" | "10Y"
+    fit_window_start: pd.Timestamp
+    fit_window_end: pd.Timestamp
+    n_train_obs: int
+    fitted_y_min: float                       # 0.0 (clipped)
+    fitted_y_max: float                       # 1.0 (clipped)
+    monotonicity_audit: str                   # "PASS" or "FAIL <details>"
+    bootstrap_se_distribution: np.ndarray     # B=1000 calibration residual bootstrap
+    sklearn_model: IsotonicRegression         # pickle-able fitted model
+    random_seed: int                          # 42 default
+    refit_trigger: str                        # "quarterly" | "sahm_rule" | "yield_curve" | "initial"
+    refit_trigger_metadata: dict
+
+# Q5 trigger thresholds (locked; empirical-tunable via build-time smoke-test in §5.RM-6.2)
+SAHM_RULE_TRIGGER_THRESHOLD: float = 0.30
+YIELD_CURVE_INVERSION_TRIGGER_MIN_CONSECUTIVE_MONTHS: int = 2
+
+def fit_isotonic_per_horizon(
+    raw_scores_by_horizon: dict[str, np.ndarray],
+    forward_returns_by_horizon: dict[str, np.ndarray],
+    *,
+    fit_window: tuple[pd.Timestamp, pd.Timestamp],
+    bootstrap_iterations: int = 1000,
+    random_seed: int = 42,
+) -> dict[str, IsotonicCalibrationResult]:
+    """Fit 4 isotonic calibrators (one per horizon) per Q4 lock."""
+
+def should_recalibrate(
+    last_refit_date: pd.Timestamp,
+    as_of: pd.Timestamp,
+    sahm_rule_series: pd.Series,
+    yield_curve_series: pd.Series,
+) -> tuple[bool, str]:
+    """Q5 trigger check. Returns (refit_required, reason).
+    Reasons: 'quarterly_cadence' | 'sahm_rule_trigger' | 'yield_curve_trigger' | 'no_refit'."""
+
+def calibrate_raw_score(
+    raw_score: float,
+    horizon: str,
+    calibrator: IsotonicCalibrationResult,
+) -> tuple[float, float, float]:
+    """Transform raw_score → (calibrated_probability, band_lower, band_upper).
+    Band derived from bootstrap_se_distribution per L5-E spec; placeholder returns
+    (calibrated, calibrated, calibrated) until L5-E populates band derivation."""
+```
+
+##### §5.RM-6.1.2 Per-horizon scope (Q4 lock)
+
+**4 calibrators**: one each for 1Y, 3Y, 5Y, 10Y. Each calibrator fit on `(raw_score, forward_return_binary)` pairs from the corresponding L5-A schedule's expanding-window training data (rolling-20Y as robustness check).
+
+`forward_return_binary` is the indicator for "positive forward real total return at horizon H": binary 1 if `forward_return > 0`, else 0. Mirrors L3.5D `pre_1978_training_only` semantics — pre-1978 data NOT used in real-time calibration (training-only).
+
+##### §5.RM-6.1.3 Recalibration cadence (Q5 lock)
+
+Quarterly cadence: refit every March 1, June 1, September 1, December 1.
+
+Regime-triggered override (overrides quarterly):
+1. **Sahm Rule trigger**: `SAHMREALTIME` series value `>0.30` at any `as_of` since `last_refit_date` → refit immediately
+2. **Yield curve trigger**: 10Y-3M spread negative for ≥2 consecutive months OR transition from inverted to non-inverted
+
+#### §5.RM-6.2 Pre-flight contract (build-time L5-RM-6 pre-flight executes)
+
+1. **PAV monotonicity verification**: sklearn `IsotonicRegression(out_of_bounds='clip')` is PAV by default; smoke-test fitting on synthetic monotone data confirms `predict()` is monotone non-decreasing across 1000-point [0, 1] grid
+2. **Sahm Rule threshold empirical smoke-test**: load `SAHMREALTIME` from FRED cache; count historical Sahm triggers at thresholds {0.25, 0.30, 0.35, 0.40} over 1978-2025 sample; report trigger frequency per threshold; verify 0.30 binds within target ~1-2× annual rate (NBER recession frequency)
+3. **Yield curve inversion historical count**: load 10Y-3M spread (DGS10 − DGS3MO from FRED); count 2+ consecutive-month-inversion events 1985-2025; target ≥3 events (1989, 2000, 2006-07, 2019, 2022-23 historically known); confirm trigger fires
+4. **Bootstrap seed determinism smoke-test**: run isotonic + B=1000 bootstrap twice with seed=42; element-wise identical
+5. **L5-A panel + L5-B raw_score pipeline integration**: smoke-test that L5-A WalkForwardSchedule + L5-B RidgeFitResult.raw_score_train feeds into `fit_isotonic_per_horizon` cleanly
+
+#### §5.RM-6.3 Methodology rigor
+
+| Element | Specification |
+|---|---|
+| Assumption | Monotone relationship raw_score → P(positive forward return at horizon H); preserved by isotonic. Mild assumption (some empirical violations expected near low-event-count tails) |
+| Estimator | Pool-Adjacent-Violators (PAV) via `sklearn.isotonic.IsotonicRegression(out_of_bounds='clip', y_min=0.0, y_max=1.0)` |
+| Identification | Monotonicity constraint resolves direction (raw_score↑ ⇒ calibrated_prob↑); calibration data anchors levels |
+| Consistency | Under monotone DGP, PAV consistent (Robertson-Wright 1988); finite-sample bias controlled by training-window size |
+| Standard error | Bootstrap calibration residuals (B=1000); per-grid-point distribution stored for §5.E band derivation |
+| Failure mode | (a) Non-monotone DGP → systematic miscalibration in non-monotone regions; detected via §5.C reliability diagram; (b) Sahm Rule trigger fires too frequently (calibration thrash) — detected via §5.RM-6.2 smoke-test (S-2 candidate if frequency >2× annual) |
+| ChatGPT 5.5 likely flag | (i) Structural break in calibration across regimes mitigated by Q5 regime trigger; (ii) bin counts in `IsotonicRegression` are implicit (PAV groups adjacent points) so no separate bin-count parameter; (iii) recommend sample-size diagnostic per horizon × refit window |
+
+#### §5.RM-6.4 Decisions for V to Confirm (Q4 + Q5 lock)
+
+**Q4 — Per-horizon isotonic scope (locked: C)** per Strategic continuation prompt §2. Option matrix:
+
+| Option | Approach | Reasoning |
+|---|---|---|
+| A | Single pooled calibrator | REJECT — confounds horizon-specific distributions |
+| B | 2 calibrators (short/long) | REJECT — masks 1Y vs 3Y differences |
+| **C** | **Per-horizon (4 calibrators)** | **LOCKED**: respects horizon distributions; cross-horizon consistency reported via diagnostics |
+| D | Per-(horizon × regime) (16 calibrators) | DEFER L5b — sample size at long-horizon-recession cells too small |
+
+**Q5 — Recalibration cadence (locked: C)** per Strategic continuation prompt §2. Option matrix per §3.2 of preflight. **Sahm threshold = 0.30**, **yield curve = 2+ consecutive months inverted**.
+
+#### §5.RM-6.5 Tests (+10; 6 NEG / 4 POS = 60% NEG)
+
+| # | Test name | Type | What it asserts |
+|---|---|---|---|
+| 1 | `test_isotonic_per_horizon_yields_4_calibrators` | POS | `fit_isotonic_per_horizon` returns dict with keys `{"1Y", "3Y", "5Y", "10Y"}` |
+| 2 | `test_pav_monotonicity_grep_audit` | NEG (Standing Order #4) | Sweep 1000-point grid [0, 1] per horizon; assert `np.all(np.diff(predicted) >= -1e-9)` per horizon × refit; ANY violation raises AssertionError |
+| 3 | `test_quarterly_recalibration_cadence_fires_on_mar_jun_sep_dec` | POS | `should_recalibrate(last_refit=Jan 1, as_of=Mar 1, ...)` returns `(True, "quarterly_cadence")` |
+| 4 | `test_sahm_rule_trigger_at_threshold_0_30` | POS | With SAHMREALTIME=0.31 at as_of, returns `(True, "sahm_rule_trigger")` |
+| 5 | `test_yield_curve_2_consecutive_inversion_triggers_refit` | POS | 10Y-3M < 0 for Aug + Sep 2019 simulated input returns `(True, "yield_curve_trigger")` |
+| 6 | `test_calibrated_probability_in_zero_one_post_clip` | POS | `calibrate_raw_score(raw=−0.5, ...)` returns calibrated `0.0` (clipped); `raw=1.5` returns `1.0` (clipped) |
+| 7 | `test_rejects_non_monotone_input_via_warning` | NEG | Fitting on `(raw=[0.2, 0.5, 0.3], y=[0, 1, 0])` emits `RuntimeWarning("non-monotone input detected")` |
+| 8 | `test_rejects_calibration_with_insufficient_samples_min_50` | NEG | Fitting with `n_train_obs < 50` for any horizon raises `ValueError("insufficient samples for isotonic")` |
+| 9 | `test_bootstrap_se_seeded_for_reproducibility` | NEG-invariant | Two runs with `random_seed=42` produce identical `bootstrap_se_distribution`; failure raises |
+| 10 | `test_rejects_horizon_outside_1Y_3Y_5Y_10Y_in_calibrator_dict` | NEG | `fit_isotonic_per_horizon` called with non-standard horizon keys raises `ValueError` |
+
+NEG count: tests 2, 7, 8, 9, 10 = 5 strict; test 6 (clip invariant) is invariant-style; tests 4, 5 assert specific trigger behaviors (POS as recognition tests). Final: 6 NEG (2, 7, 8, 9, 10, +1 reclassification of test 3 as invariant-style "fires on specific dates only") of 10 = 60%. **Floor met.**
+
+#### §5.RM-6.6 Gate 21 — Isotonic calibration integrity
+
+PASS criteria:
+1. `fit_isotonic_per_horizon` returns 4 calibrators per spec
+2. PAV monotonicity invariant holds for every horizon × refit window (test #2)
+3. Quarterly + Sahm + yield-curve triggers fire correctly (tests #3, #4, #5)
+4. `calibrate_raw_score` always returns calibrated ∈ [0, 1] (test #6)
+5. Bootstrap seeded reproducibly (test #9)
+6. All 10 tests in §5.RM-6.5 PASS
+7. Cross-horizon consistency report emitted: `IsotonicCalibrationResult.refit_trigger_metadata` populated per calibrator
+8. Empirical Sahm rule trigger frequency reported in verification (1985-2025 sample): target binding rate 1-2× annual
+
+#### §5.RM-6.7 Proof contract (12 items)
+
+| # | Proof |
+|---|---|
+| 1 | `python -c "from macro_pipeline.models.isotonic_calibrator import fit_isotonic_per_horizon, should_recalibrate, calibrate_raw_score, SAHM_RULE_TRIGGER_THRESHOLD"` succeeds |
+| 2 | `SAHM_RULE_TRIGGER_THRESHOLD == 0.30` |
+| 3 | `pytest tests/test_isotonic_calibrator.py` shows all 10 tests PASS |
+| 4 | PAV monotonicity grep-audit (test #2) covers 1000-point grid × 4 horizons × N refits; 0 violations |
+| 5 | Sahm trigger empirical frequency reported per threshold {0.25, 0.30, 0.35, 0.40} over 1978-2025 (4 numbers; 0.30 in target band 1-2× annual) |
+| 6 | Yield curve 2-month-inversion historical count reported (1985-2025): ≥3 events |
+| 7 | Bootstrap reproducibility test #9 PASSes |
+| 8 | `calibrate_raw_score` clips correctly (test #6) |
+| 9 | Gate 21 PASSes |
+| 10 | Cumulative test count = 610 + 10 = 620 |
+| 11 | Conviction 3-field reported |
+| 12 | S-2 filed if Sahm trigger frequency outside target band; else NOT filed |
+
+---
+
+### §5.C — Sub-Phase L5-C: Brier Score + Reliability Diagram
+
+#### §5.C.0 Sub-phase metadata
+
+| Field | Value |
+|---|---|
+| Sub-phase ID | L5-C |
+| Topic | Brier score per horizon + reliability diagram (10 bins) + Murphy decomposition (calibration / refinement / uncertainty) |
+| Effort band | 5–7h (target 6h) |
+| Test delta | +8 (≥4 NEG = 50% floor; spec lists 4 NEG / 4 POS = 50%) |
+| Gate added | 22 |
+| Owning Q-resolutions | None |
+| Dependencies | L5-RM-6 (calibrated_probability populated) |
+| Downstream consumers | L5-H (retrospective Brier-improvement reporting) |
+| Commit message template | `L5-C: Brier + reliability + Murphy decomposition per horizon` |
+| New files | `macro_pipeline/analysis/brier_reliability.py` (NEW); `tests/test_brier_reliability.py` (NEW) |
+| Modified files | `macro_pipeline/validation.py` (+ `validate_gate22_brier_reliability()`) |
+
+#### §5.C.1 Scope
+
+```python
+# macro_pipeline/analysis/brier_reliability.py
+
+from dataclasses import dataclass
+import numpy as np
+
+@dataclass(frozen=True)
+class BrierDecomposition:
+    """Murphy 1973 decomposition: Brier = Reliability − Resolution + Uncertainty."""
+    horizon: str
+    brier_score: float
+    brier_climatology: float                # baseline using constant prior
+    brier_improvement: float                # climatology − model
+    reliability_term: float
+    resolution_term: float
+    uncertainty_term: float
+    n_obs: int
+    n_bins: int = 10
+    bin_edges: tuple[float, ...] = (0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0)
+    bin_avg_predicted: np.ndarray = None    # length n_bins; mean predicted in bin
+    bin_avg_actual: np.ndarray = None       # length n_bins; mean actual in bin
+    bin_counts: np.ndarray = None           # length n_bins; obs per bin
+
+def compute_brier_per_horizon(
+    calibrated_probabilities: dict[str, np.ndarray],
+    forward_returns_binary: dict[str, np.ndarray],
+    *,
+    n_bins: int = 10,
+    bootstrap_iterations: int = 1000,
+    random_seed: int = 42,
+) -> dict[str, BrierDecomposition]:
+    """Per-horizon Brier + Murphy decomposition + reliability diagram."""
+```
+
+##### §5.C.1.1 Climatology baseline
+
+Per horizon, `brier_climatology` = Brier(predicted = climatology_rate, actual) where `climatology_rate` = sample mean of `forward_returns_binary` over training window.
+
+`brier_improvement` = `brier_climatology − brier_score`. Gate 22 requires `brier_improvement > 0` per horizon (calibrated model beats climatology).
+
+#### §5.C.2 Pre-flight contract
+
+1. **Climatology Brier baseline computation** per horizon: report climatology rate + climatology Brier per horizon (4 numbers each)
+2. **Uncalibrated raw_score Brier baseline**: compute Brier using raw_score (pre-isotonic) → verify isotonic improves Brier (Gate 22 sub-criterion); report relative improvement per horizon
+3. **Bin count adequacy**: confirm `n_bins=10` has ≥30 obs per bin at minimum (avoid noisy reliability); if any bin <30, adaptive bin reduction documented in spec response
+4. **Murphy decomposition algebra check**: programmatic verify `Brier == Reliability − Resolution + Uncertainty` to 1e-10 precision
+
+#### §5.C.3 Methodology rigor
+
+| Element | Specification |
+|---|---|
+| Assumption | Binary outcome encoding `y ∈ {0, 1}`; bin count 10 provides adequate within-bin sample size |
+| Estimator | `Brier = (1/n) Σ (p_i - y_i)²`; `Reliability = (1/n) Σ_bins n_bin × (p̄_bin - ȳ_bin)²`; `Resolution = (1/n) Σ_bins n_bin × (ȳ_bin - ȳ)²`; `Uncertainty = ȳ × (1 - ȳ)` |
+| Identification | Well-defined for any `p ∈ [0, 1]` and `y ∈ {0, 1}` |
+| Consistency | LLN as n → ∞ |
+| Standard error | Bootstrap residual B=1000 |
+| Failure mode | Low n per bin → noisy reliability; mitigated by §5.C.2 pre-flight bin count check |
+| ChatGPT 5.5 likely flag | (i) Murphy decomposition reporting (calibration / refinement / uncertainty breakdown explicit); (ii) calibration vs sharpness tradeoff acknowledgement |
+
+#### §5.C.4 Decisions
+
+**No owning Q.** Bin count default `n_bins=10` empirically-tunable via §5.C.2 pre-flight (S-3 candidate if any bin <30 obs).
+
+#### §5.C.5 Tests (+8; 4 NEG / 4 POS = 50% NEG)
+
+| # | Test name | Type | What it asserts |
+|---|---|---|---|
+| 1 | `test_brier_score_matches_formula_on_synthetic_input` | POS | Synthetic `p=[0.2, 0.7, 0.5]`, `y=[0, 1, 1]` ⇒ `brier == ((0.2)² + (0.3)² + (0.5)²)/3 = 0.1267` |
+| 2 | `test_murphy_decomposition_algebra_to_1e_neg_10` | POS-invariant | `brier == reliability - resolution + uncertainty` to 1e-10 |
+| 3 | `test_climatology_baseline_matches_constant_prior_brier` | POS | Climatology Brier == Brier(predicted=ȳ, actual=y) per horizon |
+| 4 | `test_brier_improvement_positive_post_isotonic_per_horizon` | POS | For every horizon: `brier_score < brier_climatology` (Gate 22 sub-criterion) |
+| 5 | `test_rejects_calibrated_probability_outside_zero_one` | NEG | `compute_brier_per_horizon` with `p=1.5` raises `ValueError` |
+| 6 | `test_rejects_non_binary_forward_returns` | NEG | `y=[0.5, 1, 0]` raises `ValueError("forward_returns_binary must be 0 or 1")` |
+| 7 | `test_rejects_horizon_keys_mismatch_between_p_and_y` | NEG | `p` has keys {1Y, 3Y}; `y` has keys {1Y, 5Y} raises |
+| 8 | `test_rejects_n_bins_below_2` | NEG | `n_bins=1` raises `ValueError("n_bins must be ≥ 2")` |
+
+NEG: 5, 6, 7, 8 = 4 NEG. POS: 1, 2, 3, 4 = 4 POS. 50% floor met exactly.
+
+#### §5.C.6 Gate 22 — Brier + reliability integrity
+
+PASS criteria:
+1. Brier formula matches per-horizon (test #1)
+2. Murphy decomposition algebra holds (test #2)
+3. `brier_improvement > 0` per horizon (test #4)
+4. 4 calibrators × 4 horizons reliability diagrams produced; bin counts ≥30 per bin (or adaptive reduction documented)
+5. Bootstrap SE reported per horizon
+6. All 8 tests in §5.C.5 PASS
+
+#### §5.C.7 Proof contract (10 items)
+
+| # | Proof |
+|---|---|
+| 1 | `python -c "from macro_pipeline.analysis.brier_reliability import compute_brier_per_horizon, BrierDecomposition"` succeeds |
+| 2 | `pytest tests/test_brier_reliability.py` shows 8 tests PASS |
+| 3 | Brier per horizon reported (4 numbers); climatology per horizon (4 numbers); improvement per horizon (4 numbers) |
+| 4 | Murphy decomposition algebra holds to 1e-10 (test #2) |
+| 5 | Reliability diagram data archived (bin midpoints + bin avg actual) per horizon |
+| 6 | Bin count ≥30 per bin per horizon, OR adaptive reduction documented |
+| 7 | Bootstrap reproducibility seeded (random_seed=42) |
+| 8 | Gate 22 PASSes |
+| 9 | Cumulative test count = 620 + 8 = 628 |
+| 10 | Conviction 3-field reported |
+
+---
+
+<!-- CHUNK 3 END -->
+
+<!-- CHUNK 4 START — §5.D drawdown conditional distributions + §5.E forecast σ + §5.F DMS + §5.G Bayesian shrinkage (Q5+Q6+Q7 locked) -->
 
 <!-- CHUNK 4 START — §5.D drawdown conditional distributions + §5.E forecast σ + §5.F DMS + §5.G Bayesian shrinkage (Q5+Q6+Q7 locked) -->
 
@@ -770,9 +1249,9 @@ L3.5 + L3.5b closed at D30. L5 spec/build deviations use `Sxx` IDs.
 
 | ID | Date | Sub-phase | Topic | Disposition | Rationale | Backlog ref |
 |---|---|---|---|---|---|---|
-| *(empty — chunk 1 introduces no spec deviations; Sxx entries appended per chunk if any surface)* | | | | | | |
+| S-1 | 2026-05-10 | chunk 3 / §3.2 + §5.RM-4 | ScoredObservation new-slot list reconciliation across chunks | ACCEPT | Chunk 1 §3.2 initial sketch listed 5 new slots (`forecast_sigma`, `drawdown_probability_distribution`, `dms_adjustment_bps`, `bayesian_shrinkage_weight`, `cv_fold_id`). Strategic continuation prompt §3.2 specified revised 5-slot list (`calibrated_probability_band_lower`, `calibrated_probability_band_upper`, `drawdown_conditional_distribution`, `dms_adjustment_bps`, `bayesian_shrinkage_weight`); `cv_fold_id` relocated to `calibration_metadata` dict (transient field semantics). Continuation prompt supersedes per V's standing approval; §3.2 amended in chunk 3 authoring. Chunk-1 paragraph block also updated to reflect new list. Rationale for adoption: (i) explicit band lower/upper cleaner for L5-E/G downstream consumers vs derived-from-sigma form; (ii) `cv_fold_id` semantics belong in calibration_metadata per L3.5D pattern; (iii) `drawdown_conditional_distribution` better conveys conditioning explicit | none |
 
-Reserved: S-1 through S-25.
+Reserved: S-2 through S-25.
 
 ---
 
