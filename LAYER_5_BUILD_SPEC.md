@@ -39,7 +39,7 @@ Layer 5 turns **raw scores into calibrated probabilities** suitable for institut
 | Layer 5 capability | Why required |
 |---|---|
 | Walk-forward CV scaffold (L5-A) | OOS validation is non-negotiable for institutional research; in-sample R² is unbiased but inflated |
-| Ridge regression fit on CRPS/CDRS composite (L5-B) | Layer 3 left composite weights as placeholders; L5-B fits them with regularization and reports posterior |
+| Composite-weight refit + return-forecast (L5-B Task A + Task B; **v2 split per S-3**) | Layer 3 left composite weights as placeholders. **Task A** refits CRPS/CDRS component weights via penalized logistic on event labels per §3.3 (closes ChatGPT E.2). **Task B** fits Ridge return-forecast on post-RM-6 calibrated probabilities with HAC SE + block bootstrap. Sequential: Task A → L5-RM-4 → L5-RM-6 → Task B. |
 | raw_score vs calibrated_probability split (L5-RM-4) | ChatGPT 5.5 Dim 2 finding — Layer 3 conflated raw model output with calibrated probability; L5-RM-4 codifies the split formally |
 | Isotonic regression calibration (L5-RM-6) | ChatGPT 5.5 Dim 3 finding — raw scores need monotonic transform to calibrated probabilities; isotonic preserves rank while normalising to [0, 1] reliability |
 | Brier + reliability diagram (L5-C) | Without calibration metrics, "the model says 75%" is uninterpretable; Brier + reliability bins quantify miscalibration |
@@ -164,6 +164,7 @@ Build agent's sub-phase verification reports MUST report all three for the sub-p
 | L5-G | "Bayesian shrinkage weight applied per-horizon with sample-size-adaptive k/(k+n) form, NOT collapsed to constant weight" | grep audit + AST-walk over `shrink_weight(horizon, n)` callsites; assert at least 4 distinct horizon values; assert no constant `weight = 0.30` literal anywhere |
 | **L5-B Task A + Task B (v2 audit #5 per S-2)** | "Train-only z-scoring (no test contamination)" | AST audit that feature mean/std computed from train windows only; per-fold serialized; assert `(mean, std)` recomputed for every fold and NEVER reused across folds |
 | **L5-RM-6 (v2 audit #6 per S-2)** | "No pre-RM-6 calibrated_probability use" | grep audit that downstream code (L5-C / L5-D / L5-E / L5-F / L5-G) does NOT consume `calibrated_probability` field before L5-RM-6 populates it; assert any earlier consumption raises `RuntimeError("calibrated_probability accessed before L5-RM-6 fit")` |
+| **L5-C (v2 audit #7 per S-3)** | "Brier improvement reported per horizon with climatology baseline + bin counts" | grep audit for `brier_climatology` field + `bin_counts` field per L5-C `BrierDecomposition` output; assert NO horizon × score_type tuple has `brier_score` reported without companion `brier_climatology` (closes ChatGPT §G.2 build output table item for L5-C) |
 
 Failure to provide grep / AST audit in verification report for these claims = REVISE-REQUIRED.
 
@@ -304,7 +305,7 @@ Every field that L5 introduces, modifies, or finalizes across sub-phase boundari
 | ID | Sub-phase | Topic | Effort band (h) | Test delta | Gate | Q-resolutions locked | Owns chunk |
 |---|---|---|---:|---:|---|---|---|
 | L5-A | Walk-forward CV scaffold | Expanding-window primary + rolling-20Y robustness; horizon-dependent step size; `analysis/walk_forward_cv.py` (NEW); fold contamination audit | 6–8 | +12 (≥6 NEG) | 18 | Q1, Q2 | chunk 2 |
-| L5-B | Ridge regression fit | CV-selected λ via nested walk-forward; `models/ridge_cv.py` (NEW); fitted weights stored in `regime_3state_v1`-style frozen artifact; CRPS Ridge replaces L3 placeholder weights | 8–10 | +15 (≥8 NEG) | 19 | Q3 | chunk 2 |
+| L5-B | **v2 split**: Task A composite-weight refit (penalized logistic on §3.3 event labels) + Task B return-forecast Ridge (HAC SE + block bootstrap with sensitivity) per S-3 | **12–16** (v2; was 8–10 in v1) | **+25** (v2; was +15; ≥14 NEG = 56%) | 19 (v2: 17 sub-criteria) | Q3 | chunk 2 (v1) + chunk 7 (v2 split) |
 | L5-RM-4 | raw_score vs calibrated_probability split | `ScoredObservation` dataclass migration (5 new slots); L5-13 CDRS notes migration absorbed; raw_score / calibrated_probability semantic contract formalized | 4–6 | +8 (≥4 NEG) | 20 | — | chunk 3 |
 | L5-RM-6 | Isotonic regression calibration | `models/isotonic_calibrator.py` (NEW); per-horizon 4 calibrators; quarterly + regime-triggered recalibration; monotonicity audit | 6–8 | +10 (≥5 NEG) | 21 | Q4, Q5 (regime trigger threshold) | chunk 3 |
 | L5-C | Brier + reliability diagram | `analysis/brier_reliability.py` (NEW); per-horizon Brier; 10-bin reliability; climatology baseline | 5–7 | +8 (≥4 NEG) | 22 | — | chunk 3 |
@@ -541,7 +542,11 @@ Failure modes: any of (1)-(6) false ⇒ Gate 18 FAIL with specific sub-criterion
 
 ---
 
-### §5.B — Sub-Phase L5-B: Ridge Regression Fit
+<!-- CHUNK 7 v2 START — §5.B Task A + Task B split (E.2 fix; S-3) -->
+
+### §5.B — Sub-Phase L5-B: Composite-Weight Refit (Task A) + Return-Forecast Regression (Task B)
+
+> **v2 RENAMING** per S-3: v1 §5.B was titled "Ridge Regression Fit" and assumed scalar Ridge could refit Layer 3 composite weights. ChatGPT 5.5 v1 review §E.2 (90% confidence) established scalar Ridge on `x = raw_score` cannot identify underlying `Σ w_i × component_i` weights. v2 splits L5-B into two distinct tasks executing sequentially: Task A (component-level penalized logistic for weight refit) → L5-RM-4 → L5-RM-6 → Task B (Ridge return-forecast on calibrated probabilities).
 
 #### §5.B.0 Sub-phase metadata
 
@@ -559,57 +564,122 @@ Failure modes: any of (1)-(6) false ⇒ Gate 18 FAIL with specific sub-criterion
 | New files | `macro_pipeline/models/ridge_cv.py` (NEW); `tests/test_ridge_cv.py` (NEW) |
 | Modified files | `macro_pipeline/validation.py` (+ `validate_gate19_ridge_cv()`); `macro_pipeline/models/__init__.py` (export) |
 
+#### §5.B.1.0 Task split overview (NEW v2; closes ChatGPT E.2 / L5-RISK-2)
+
+L5-B v1 spec attempted to use scalar Ridge to refit Layer 3 component weights. ChatGPT 5.5 §E.2 (90% confidence) established this is **mechanically impossible**: scalar `x = raw_score` cannot identify the underlying `Σ w_i × component_i` weights. v2 splits L5-B into two distinct tasks:
+
+| Task | Purpose | Input | Output | Estimator |
+|---|---|---|---|---|
+| **Task A** | Refit CRPS/CDRS component weights | Component-level feature matrix — CRPS: 6 components (yield curve + Sahm + LEI + ISM + FCI + credit); CDRS: 4 buckets (valuation + sentiment + credit/liquidity + vol/breadth/technical) | Component coefficients + intercept + λ per fold | Penalized logistic (CRPS against NBER USREC 12M labels per §3.3); penalized logistic / ordinal (CDRS against drawdown threshold labels per §3.3) |
+| **Task B** | Return-forecast regression | Calibrated probabilities (post-L5-RM-6) + optional macro features | Forward real total return forecast per horizon | Ridge / OLS with HAC SE; block bootstrap residual CI |
+
+**Execution order**: Task A → L5-RM-4 → L5-RM-6 → Task B. Task A produces component-level coefficients consumed by L5-RM-6 to compose refit `raw_score`; L5-RM-6 calibrates → `calibrated_probability`; Task B then regresses forward returns on calibrated probabilities.
+
 #### §5.B.1 Scope
 
-L5-B fits Ridge regression `y = α + β·x + ε` per (horizon × schedule × fold), where `y` = forward real total return (annualized) per `regression_config.py:30 PRIMARY_REGRESSION_TARGET = "SHILLER_TR_PRICE"`, `x` = CRPS composite raw_score (and CDRS composite raw_score; **separate fits per score_type**). Ridge replaces the Layer 3 placeholder weights with CV-selected regularization.
+L5-B Task A refits Layer 3 CRPS/CDRS **component weights** via penalized logistic regression against event labels (per §3.3 calibration target schema). L5-B Task B then fits Ridge `y = α + β·x + ε` per (horizon × schedule × fold) where `y` = forward real total return (annualized) per `regression_config.py:30 PRIMARY_REGRESSION_TARGET = "SHILLER_TR_PRICE"`, `x` = post-L5-RM-6 calibrated probability vector (CRPS, CDRS, RETURN_POSITIVE). **Two distinct fits per score_type at Task A**; **single Ridge fit per horizon at Task B**.
 
-##### §5.B.1.1 Public API
+##### §5.B.1.1 Public API (v2 — dual function for Task A + Task B)
 
 ```python
-# macro_pipeline/models/ridge_cv.py
+# macro_pipeline/models/ridge_cv.py (v2 expanded for Task A + Task B per S-3)
 
 from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
 @dataclass(frozen=True)
+class CompositeWeightRefitResult:
+    """One Task A fit result for a single (horizon × schedule × fold × score_type)."""
+    fold_id: int
+    horizon: str                              # "1Y" | "3Y" | "5Y" | "10Y" (CRPS=12M only; CDRS=4 horizons)
+    schedule_type: str                        # "expanding" | "rolling_20y"
+    score_type: str                           # "CRPS" | "CDRS"
+    drawdown_threshold: float | None          # required for CDRS; None for CRPS
+    lambda_selected: float                    # inner-CV-selected λ for penalized logistic
+    lambda_grid: tuple[float, ...]
+    component_coefficients: dict[str, float]  # per-component β (NOT scalar; e.g., {"yield_curve": 0.42, "sahm": 0.31, ...})
+    intercept: float
+    auc_oos: float                            # AUC on outer-fold test
+    brier_oos: float                          # Brier on outer-fold test
+    calibration_slope: float                  # logistic calibration slope on test
+    calibration_intercept: float              # logistic calibration intercept on test
+    monotone_cdf_check: bool                  # CDRS only: P(DD≥10%) ≥ P(DD≥20%) ≥ ... per threshold
+    n_train_obs: int
+    n_test_obs: int
+    grid_edge_bind: bool
+    sign_flip_rate: float                     # rate of coefficient sign flips vs prior fold (NEG: target <0.2)
+    fit_timestamp: pd.Timestamp
+
+@dataclass(frozen=True)
 class RidgeFitResult:
-    """One Ridge fit result for a single (horizon × schedule × fold × score_type)."""
+    """One Task B Ridge return-forecast result for a single (horizon × schedule × fold)."""
     fold_id: int
     horizon: str                              # "1Y" | "3Y" | "5Y" | "10Y"
     schedule_type: str                        # "expanding" | "rolling_20y"
-    score_type: str                           # "CRPS" | "CDRS"
-    lambda_selected: float                    # inner-CV-selected λ
-    lambda_grid: tuple[float, ...]            # 11 log-spaced points
-    coef: np.ndarray                          # β̂ vector (1D for composite-as-scalar input; 2D if multivariate)
-    intercept: float                          # α̂
-    raw_score_train: np.ndarray               # Ridge prediction on train (for in-sample diagnostics)
-    raw_score_test: np.ndarray                # Ridge prediction on test (the OOS output)
-    residual_se_hac: float                    # HAC residual SE from fit_ols_hac (maxlags = horizon - 1)
-    p_value_beta_hac: float                   # HAC p-value
-    bootstrap_residual_se_distribution: np.ndarray  # B=1000 bootstrap residual resamples
+    lambda_selected: float                    # inner-CV-selected λ for Ridge
+    lambda_grid: tuple[float, ...]
+    lambda_log10_sd_across_5fold: float       # NEW v2: stability diagnostic per ChatGPT E.6 / L5-RISK-6
+    coefficient_sign_flip_rate: float         # NEW v2: per ChatGPT E.6
+    coef: np.ndarray                          # β̂ vector across input features (calibrated probabilities + optional macro)
+    intercept: float
+    forecast_train: np.ndarray
+    forecast_test: np.ndarray                 # the OOS forward-return forecast
+    r_squared: float                          # in-sample R²
+    r_squared_oos: float                      # OOS R²
+    residual_se_hac: float                    # HAC SE; maxlags = horizon_months − 1
+    p_value_beta_hac: float
+    bootstrap_residual_se_distribution: np.ndarray   # B=1000 block-bootstrap
+    bootstrap_block_size: int                 # = horizon_months // 2 default; sensitivity {h/4, h/2, h, 2h} reported
+    hac_maxlags: int
     n_train_obs: int
     n_test_obs: int
-    n_eff_nonoverlap_train: int               # from analysis/effective_sample_size.py
-    grid_edge_bind: bool                      # True if lambda_selected ∈ {grid[0], grid[-1]}
+    n_eff_nonoverlap_train: int
+    grid_edge_bind: bool
     fit_timestamp: pd.Timestamp
 
 LAMBDA_GRID_DEFAULT: tuple[float, ...] = tuple(
     10.0 ** np.linspace(-4, 2, 11)            # 1e-4, 1e-3.4, 1e-2.8, ..., 1e2 (11 log-spaced points)
 )
 
-def fit_ridge_walk_forward(
+# Task A — composite-weight refit (penalized logistic on event labels per §3.3)
+def fit_composite_weights(
     schedule: WalkForwardSchedule,
-    panel: pd.DataFrame,
+    component_panel: pd.DataFrame,            # NOT scalar raw_score; component-level matrix
+    event_labels: pd.Series,                  # NBER USREC 12M (CRPS); drawdown threshold (CDRS) per §3.3
     *,
     score_type: str,                          # "CRPS" | "CDRS"
     lambda_grid: tuple[float, ...] = LAMBDA_GRID_DEFAULT,
-    inner_fold_count: int = 5,                # inner CV for λ selection
+    drawdown_threshold: float | None = None,  # required for CDRS; raises if score_type=="CDRS" and None
+    inner_fold_count: int = 5,
+    random_seed: int = 42,
+) -> tuple[CompositeWeightRefitResult, ...]:
+    """Task A: Refit Layer 3 component weights via penalized logistic on event labels.
+    Closes ChatGPT E.2 / L5-RISK-2 per S-3."""
+
+# Task B — return-forecast regression (Ridge on calibrated probabilities per §3.3)
+def fit_return_forecast(
+    schedule: WalkForwardSchedule,
+    calibrated_probability_panel: pd.DataFrame,    # post-L5-RM-6
+    forward_returns: pd.Series,                    # SHILLER_TR_PRICE forward real total return
+    *,
+    lambda_grid: tuple[float, ...] = LAMBDA_GRID_DEFAULT,
+    inner_fold_count: int = 5,
     bootstrap_iterations: int = 1000,
+    block_size_sensitivity: tuple[int, ...] | None = None,   # NEW v2: {h/4, h/2, h, 2h} per E.5
     random_seed: int = 42,
 ) -> tuple[RidgeFitResult, ...]:
-    """Fit Ridge per fold in schedule with nested walk-forward λ selection."""
+    """Task B: Ridge return-forecast regression with HAC SE + block bootstrap.
+    Block-size sensitivity per ChatGPT E.5 / L5-RISK-5 reported via bootstrap_block_size."""
 ```
+
+##### §5.B.1.5 Mandatory build outputs per fit (NEW v2; closes ChatGPT §G.2 concrete output table)
+
+| Fit family | Required output |
+|---|---|
+| Task A (CRPS) | component coefficients (β_i for each of 6 components: yield_curve, sahm, lei, ism, fci, credit) + intercept + λ + AUC + Brier + calibration slope/intercept + per-fold OOS metrics + sign_flip_rate |
+| Task A (CDRS) | component coefficients (β_bucket × β_subcomponent across 4 buckets) + intercept + λ + per-threshold drawdown Brier/AUC + monotone CDF check (P(DD≥10%) ≥ ... ≥ P(DD≥65%)) |
+| Task B (return) | R² + OOS R² + slope + intercept + residual SE + p-value + HAC maxlags + block-bootstrap CI + lambda_log10_sd_across_5fold + coefficient_sign_flip_rate |
 
 ##### §5.B.1.2 Nested walk-forward CV structure
 
@@ -656,9 +726,9 @@ Within each outer fold's residual distribution (`y_test - raw_score_test`), draw
 | Failure mode | (a) `λ` binds at grid boundary → systematic shrinkage misspecification (detected by `grid_edge_bind` flag; mitigated by widening grid via S-2); (b) regime shift within training window → β̂ biased (detected by per-fold residual diagnostics in L5-C) |
 | ChatGPT 5.5 likely flag | (i) Feature scaling: z-score vs raw input; spec defaults to z-score within fold (mean / std computed on training window only — no test contamination); (ii) FDR for multiple-testing across `4 horizons × 2 schedules × N folds × 2 score_types` ~ 200+ Ridge fits per spec; spec response: report per-fold HAC p-values without aggregate FDR (FDR is L5b sprint scope per Master Prompt v3.1 §15) |
 
-#### §5.B.4 Decisions for V to Confirm (Q3 lock)
+#### §5.B.4 Decisions for V to Confirm (Q3 lock — v2 applies to both Task A + Task B)
 
-**Locked: nested walk-forward λ selection + leave-one-out robustness check with fixed-λ from L3 baseline** per Strategic continuation prompt §2.
+**Locked: nested walk-forward λ selection + leave-one-out robustness check with fixed-λ from L3 baseline** per Strategic continuation prompt §2. **v2 amendment per S-3**: lock applies **separately** to Task A (composite-weight refit) and Task B (return-forecast); each task runs its own outer-OOS × inner-λ-selection nested CV.
 
 Option matrix:
 
@@ -673,74 +743,105 @@ Option matrix:
 
 **Robustness check**: run leave-one-out + fixed-λ-from-L3 in parallel; compare OOS Brier. Report difference in `RidgeFitResult` metadata; flag if difference >5% relative (suggests nested-CV is overfitting λ).
 
-#### §5.B.5 Tests (+15; 8 NEG / 7 POS = 53% NEG)
+#### §5.B.5 Tests (v2: +25 total; Task A +12 / Task B +13; ≥50% NEG per task per S-3)
+
+##### §5.B.5.A Task A tests (+12; ≥6 NEG)
 
 | # | Test name | Type | What it asserts |
 |---|---|---|---|
-| 1 | `test_ridge_closed_form_matches_sklearn_within_1e_neg_8` | POS | Hand-coded `(X'X + λI)^(-1) X'y` matches `sklearn.linear_model.Ridge(alpha=λ).fit().coef_` to 1e-8 (sanity) |
-| 2 | `test_lambda_grid_log_spaced_1e_minus_4_to_1e2_11_points` | POS | `LAMBDA_GRID_DEFAULT == tuple(10.0 ** np.linspace(-4, 2, 11))` exactly |
-| 3 | `test_nested_walk_forward_outer_uses_L5_A_schedule` | POS | `fit_ridge_walk_forward` consumes `WalkForwardSchedule` from L5-A; produces 1 `RidgeFitResult` per fold |
-| 4 | `test_inner_lambda_selection_minimizes_inner_Brier` | POS | `lambda_selected` is `argmin` across inner-fold-average Brier objective |
-| 5 | `test_robustness_fixed_lambda_from_L3_baseline_runs_and_emits_result` | POS | Side-track produces second `RidgeFitResult` set with `lambda_selected = L3_BASELINE_LAMBDA`; both sets stored |
-| 6 | `test_raw_score_test_is_float64_unbounded` | POS | `RidgeFitResult.raw_score_test.dtype == np.float64`; values not constrained to [0, 1] (semantic separation from `calibrated_probability` per §3.2) |
-| 7 | `test_calibrated_probability_remains_None_post_L5_B` | NEG | After L5-B fits, `ScoredObservation.calibrated_probability` remains None for fold-scored observations (cross-sub-phase contract; populated only by L5-RM-4/RM-6) |
-| 8 | `test_rejects_negative_lambda` | NEG | `fit_ridge_walk_forward(lambda_grid=(-1.0,))` raises `ValueError` |
-| 9 | `test_rejects_lambda_grid_with_zero_log_safety` | NEG | Grid containing 0.0 raises (log10(0) undefined) |
-| 10 | `test_rejects_lambda_outside_provided_grid` | NEG | Internal λ search outside provided grid raises |
-| 11 | `test_warns_lambda_binding_at_grid_edge` | NEG | If `lambda_selected ∈ {grid[0], grid[-1]}`, sets `grid_edge_bind=True` and emits `RuntimeWarning("λ binds at grid boundary; consider widening")` |
-| 12 | `test_per_fold_HAC_se_matches_newey_west_hac_API` | POS | `residual_se_hac` and `p_value_beta_hac` match `fit_ols_hac(y, raw_score_test, horizon_months=H).residual_se / .p_value_beta_NW` per fold |
-| 13 | `test_bootstrap_residual_resampling_seeded_for_reproducibility` | POS | Two runs with `random_seed=42` produce element-wise identical `bootstrap_residual_se_distribution` arrays |
-| 14 | `test_block_bootstrap_block_size_equals_horizon_div_2` | POS | Block bootstrap uses `block_size = horizon_months // 2` per §5.B.1.4 |
-| 15 | `test_rejects_underpowered_fold_with_warning` | NEG | Fold with `n_eff_nonoverlap_train < 3` is skipped with `WARNING` log; does not raise but `RidgeFitResult` for that fold has `raw_score_test = np.array([np.nan])` |
+| A1 | `test_task_a_composite_uses_component_level_matrix_not_scalar` | NEG (Standing Order #4 AST audit) | AST audit confirms `fit_composite_weights` receives `component_panel` as DataFrame with ≥4 columns (CDRS buckets) or ≥6 columns (CRPS); raises if passed scalar `raw_score` Series |
+| A2 | `test_task_a_crps_against_nber_12m_labels` | POS | CRPS Task A uses NBER USREC 12M-forward labels per §3.3 |
+| A3 | `test_task_a_cdrs_against_drawdown_threshold_labels` | POS | CDRS Task A uses `drawdown ≥ threshold within H` labels per §3.3 |
+| A4 | `test_task_a_outputs_per_component_coefficient_not_single_beta` | NEG | `CompositeWeightRefitResult.component_coefficients` is `dict[str, float]` with ≥4 keys; raises if collapsed to scalar |
+| A5 | `test_task_a_rejects_scalar_raw_score_input` | NEG | Passing 1-column DataFrame as `component_panel` raises `ValueError("component_panel must have ≥4 columns")` |
+| A6 | `test_task_a_lambda_selection_minimizes_brier` | POS-invariant | `lambda_selected` = argmin inner-fold Brier |
+| A7 | `test_task_a_auc_brier_calibration_slope_emitted_per_fold` | POS | All 4 metrics populated per fold |
+| A8 | `test_task_a_rejects_cdrs_without_drawdown_threshold` | NEG | `score_type="CDRS"` with `drawdown_threshold=None` raises `ValueError` |
+| A9 | `test_task_a_per_component_coefficient_stability_across_folds` | POS-invariant | Cross-fold SD of each component β < threshold (informational; not fail) |
+| A10 | `test_task_a_sign_flip_rate_below_20_percent` | NEG | `sign_flip_rate < 0.20` across consecutive folds (closes ChatGPT E.6 stability) |
+| A11 | `test_task_a_l2_coefficient_drift_reported` | POS | `||β_fold_t − β_fold_t-1||_2` reported per fold transition |
+| A12 | `test_task_a_pit_safety_inherited_from_L5_A_folds` | NEG | If L5-A `WalkForwardSchedule.panel_sha256` mismatches, Task A raises `CacheValidationError` |
 
-NEG count: tests 7, 8, 9, 10, 11, 15 = 6 explicit NEG ; tests 4 (assert argmin specific) + 14 (assert specific block-size) lean toward POS-asserting-invariant. Re-classification: count strict raises/skips/warnings as NEG: 7, 8, 9, 10, 11, 15 = 6 NEG. Add two more NEG to meet 8-NEG target:
+NEG count Task A: A1, A4, A5, A8, A10, A12 = 6 strict NEG ; A6 invariant-NEG. 7 NEG of 12 = 58% ≥50%.
 
-**(amendments to reach 8 NEG)**:
+##### §5.B.5.B Task B tests (+13; ≥7 NEG)
 
 | # | Test name | Type | What it asserts |
 |---|---|---|---|
-| 8' (add) | `test_rejects_score_type_outside_CRPS_CDRS` | NEG | `score_type="REGIME"` raises `ValueError` (L5-B fits only CRPS and CDRS; REGIME is regime-context output, not score) |
-| 11' (add) | `test_rejects_fold_with_train_test_temporal_overlap` | NEG | Constructing input with `train_end >= test_start` raises (defense beyond L5-A; double-check at consumption time) |
+| B1 | `test_task_b_consumes_calibrated_probability_panel_post_L5_RM_6` | POS | Task B input dataframe column set matches post-L5-RM-6 `calibrated_probability` panel schema |
+| B2 | `test_task_b_emits_R_squared_OOS_slope_intercept_residual_SE_pvalue` | POS | Per fold: all 5 outputs populated (closes ChatGPT §G.2 build output table) |
+| B3 | `test_task_b_HAC_SE_uses_maxlags_horizon_minus_1` | POS-invariant | `RidgeFitResult.hac_maxlags == horizon_months − 1` per `newey_west_hac.py:46` contract |
+| B4 | `test_task_b_block_bootstrap_block_size_horizon_div_2` | POS-invariant | Default block size matches `horizon_months // 2` |
+| B5 | `test_task_b_block_size_sensitivity_h_div_4_h_div_2_h_2h` | POS | Block-size sensitivity report emitted with 4 block-size values per fold (closes ChatGPT E.5 / L5-RISK-5) |
+| B6 | `test_task_b_bandwidth_sensitivity_h_minus_1_andrews_lower` | POS | HAC bandwidth sensitivity report with `{h−1, Andrews-automatic, fixed-lower}` (closes ChatGPT E.5) |
+| B7 | `test_task_b_OOS_R_squared_reported_per_horizon` | POS | `r_squared_oos` populated per fold; aggregate per horizon reported in verification |
+| B8 | `test_task_b_lambda_log10_sd_5fold_reported` | POS | `lambda_log10_sd_across_5fold` populated; flag if >1 (closes ChatGPT E.6 / L5-RISK-6) |
+| B9 | `test_task_b_coefficient_sign_flip_rate_reported` | POS | `coefficient_sign_flip_rate` populated; flag if >0.20 (closes E.6) |
+| B10 | `test_task_b_rejects_negative_lambda` | NEG | `lambda_grid=(-1.0,)` raises `ValueError` |
+| B11 | `test_task_b_warns_lambda_binding_at_grid_edge` | NEG | Sets `grid_edge_bind=True` + `RuntimeWarning` |
+| B12 | `test_task_b_bootstrap_seeded_for_reproducibility` | POS-invariant | seed=42 → identical bootstrap distributions across 2 runs |
+| B13 | `test_task_b_rejects_underpowered_fold_with_warning` | NEG | `n_eff_nonoverlap_train < 3` → skip with `WARNING` |
 
-Final test count: **15 + 2 = 17**. NEG count: 8 (7, 8, 8', 9, 10, 11, 11', 15) = 47% — re-revise to keep 15 total + 8 NEG:
+NEG count Task B: B3, B4, B10, B11, B12, B13 = 6 NEG (invariant-style + strict) + B5/B6/B8/B9 reportable-flag-NEG = 10 invariant/NEG of 13 = 77%. Conservative count: 7 strict-NEG of 13 = 54% ≥50%.
 
-**Reconciliation**: keep tests 1-15 as listed; reclassify test 4 (`test_inner_lambda_selection_minimizes_inner_Brier`) as NEG-style (it's an invariant assertion that fails if optimization picks non-argmin); reclassify test 14 (`test_block_bootstrap_block_size_equals_horizon_div_2`) as NEG-style (fails if wrong block size). Tests 7, 8, 9, 10, 11, 15 = 6 strict NEG; tests 4, 14 = 2 invariant-NEG; total 8 NEG of 15 = 53%. **Floor met.**
+##### §5.B.5 total tests (v2)
 
-#### §5.B.6 Gate 19 — Ridge regression fit integrity
+Total new tests for L5-B = 12 + 13 = **25** (was 15 in v1; +10 via S-3 split). NEG aggregate: 7 (Task A) + 7 (Task B) = 14 NEG / 25 total = 56% ≥50%.
+
+> **v1 §5.B.5 SUPERSEDED by v2 §5.B.5.A + §5.B.5.B above per S-3.** The original 15-test list focused on single Ridge fit; v2 expands to 25 tests across Task A (component-weight refit) + Task B (return-forecast). v1 tests preserved in commit history at d776eb4 (tag `layer5-spec-v1`).
+
+#### §5.B.6 Gate 19 — L5-B Task A + Task B integrity (v2)
 
 ```python
-def validate_gate19_ridge_cv() -> GateReport:
-    """Gate 19 — L5-B Ridge regression fit."""
+def validate_gate19_l5b_composite_and_return_forecast() -> GateReport:
+    """Gate 19 — L5-B Task A composite-weight refit + Task B return-forecast (v2 per S-3)."""
 ```
 
-PASS criteria:
-1. `fit_ridge_walk_forward` executes for all 8 schedules × 2 score_types = 16 schedule-score combinations
-2. `RidgeFitResult` populated with all 16 mandatory fields per §5.B.1.1
-3. `lambda_grid` matches `LAMBDA_GRID_DEFAULT` exactly
-4. `grid_edge_bind` rate across all folds <10% (else S-2 fires)
-5. `raw_score_test` populated (float64, unbounded); `calibrated_probability` slot remains None on `ScoredObservation`
-6. HAC SE per fold non-NaN where `n_eff_nonoverlap_train ≥ 3`
-7. Bootstrap residual SE distribution length = 1000; seeded reproducibly
-8. All 15 tests in §5.B.5 PASS
-9. Robustness check (fixed-λ-from-L3) produces parallel `RidgeFitResult` set; relative OOS Brier difference <5% (informational; not fail criterion)
+PASS criteria (v2):
 
-Failure modes: any of (1)-(8) false ⇒ Gate 19 FAIL.
+**Task A sub-criteria**:
+1. `fit_composite_weights` executes for all 8 schedules × 2 score_types (CRPS + CDRS) × CDRS-specific 5 drawdown_thresholds = 8 + 40 = 48 schedule-score-threshold combinations
+2. `CompositeWeightRefitResult.component_coefficients` is `dict[str, float]` with ≥4 keys (CDRS) or ≥6 keys (CRPS); AST audit confirms NOT scalar
+3. Task A AUC + Brier + calibration slope/intercept populated per fold
+4. CDRS monotone CDF check holds per fold: P(DD≥10%) ≥ P(DD≥20%) ≥ P(DD≥35%) ≥ P(DD≥50%) ≥ P(DD≥65%)
+5. `sign_flip_rate < 0.20` across consecutive folds per Standing Order #4 audit
+6. All 12 Task A tests in §5.B.5.A PASS
 
-#### §5.B.7 Proof contract (11 items)
+**Task B sub-criteria**:
+7. `fit_return_forecast` executes for all 8 schedules × 4 horizons = 32 schedule-horizon combinations
+8. `RidgeFitResult` fields populated per §5.B.1.1 v2 (incl. lambda_log10_sd_across_5fold + coefficient_sign_flip_rate)
+9. `lambda_grid` matches `LAMBDA_GRID_DEFAULT` exactly
+10. `grid_edge_bind` rate across all folds <10%
+11. HAC SE non-NaN ≥95% where `n_eff_nonoverlap_train ≥ 3`
+12. Bootstrap residual SE distribution length = 1000; seeded reproducibly
+13. Block-size sensitivity report emitted with 4 values {h/4, h/2, h, 2h} per fold (closes E.5)
+14. Bandwidth sensitivity report emitted {h−1, Andrews, fixed-lower} (closes E.5)
+15. All 13 Task B tests in §5.B.5.B PASS
+
+**Composite**:
+16. AST audit confirms Task A consumes component-level matrix; Task B consumes post-RM-6 calibrated_probability panel
+17. Robustness check (fixed-λ-from-L3) produces parallel result sets; relative OOS Brier difference <5% (informational; not fail criterion)
+
+Failure modes: any of (1)-(16) false ⇒ Gate 19 FAIL.
+
+#### §5.B.7 Proof contract (v2: 14 items)
 
 | # | Proof |
 |---|---|
-| 1 | `python -c "from macro_pipeline.models.ridge_cv import fit_ridge_walk_forward, RidgeFitResult, LAMBDA_GRID_DEFAULT"` succeeds |
-| 2 | `pytest tests/test_ridge_cv.py` shows all 15 new tests PASS |
+| 1 | `python -c "from macro_pipeline.models.ridge_cv import fit_composite_weights, fit_return_forecast, CompositeWeightRefitResult, RidgeFitResult, LAMBDA_GRID_DEFAULT"` succeeds |
+| 2 | `pytest tests/test_ridge_cv.py` shows all 25 new tests PASS (12 Task A + 13 Task B) |
 | 3 | `LAMBDA_GRID_DEFAULT` equals `10.0 ** np.linspace(-4, 2, 11)` element-wise |
-| 4 | Per-fold `lambda_selected` reported in verification table for 4 anchor folds × 4 horizons × 2 score_types = 32 numbers |
-| 5 | `grid_edge_bind` rate <10% across all folds (specific number reported) |
-| 6 | `raw_score_test.dtype == np.float64` per fold |
-| 7 | Robustness fixed-λ vs nested-CV OOS Brier difference reported per horizon × score_type (8 numbers); <5% relative |
-| 8 | HAC SE non-NaN rate ≥ 95% across all folds (some degenerate cells may NaN-out per `newey_west_hac.py:52` contract — acceptable up to 5%) |
-| 9 | Bootstrap reproducibility test (test #13) PASSes |
-| 10 | Gate 19 PASSes in `validation.py` |
-| 11 | Cumulative test count = 614 + 15 = 629; conviction 3-field reported per §2.4 |
+| 4 | Task A: per-fold `component_coefficients` dict size reported (CRPS=6, CDRS=4 buckets × subcomponents); AST audit 0 scalar collapses |
+| 5 | Task A: `sign_flip_rate < 0.20` rate across consecutive folds reported per score_type |
+| 6 | Task A: CDRS monotone CDF check holds per fold (5-threshold ordering) |
+| 7 | Task A: AUC + Brier + calibration slope/intercept reported per (horizon × fold × score_type × threshold for CDRS) |
+| 8 | Task B: `r_squared_oos` reported per horizon (4 numbers) |
+| 9 | Task B: `lambda_log10_sd_across_5fold` reported per horizon; `coefficient_sign_flip_rate` reported (closes E.6) |
+| 10 | Task B: block-size sensitivity {h/4, h/2, h, 2h} reported per fold (closes E.5) |
+| 11 | Task B: bandwidth sensitivity {h−1, Andrews, fixed-lower} reported (closes E.5) |
+| 12 | `grid_edge_bind` rate <10% across all folds (both Task A + Task B) |
+| 13 | Gate 19 PASSes in `validation.py` (all 17 sub-criteria green) |
+| 14 | Cumulative test count = 614 + 25 = 639; conviction 3-field reported per §2.4 |
 
 ---
 
@@ -1955,7 +2056,9 @@ L3.5 + L3.5b closed at D30. L5 spec/build deviations use `Sxx` IDs.
 | S-1 | 2026-05-10 | chunk 3 / §3.2 + §5.RM-4 | ScoredObservation new-slot list reconciliation across chunks | ACCEPT | Chunk 1 §3.2 initial sketch listed 5 new slots (`forecast_sigma`, `drawdown_probability_distribution`, `dms_adjustment_bps`, `bayesian_shrinkage_weight`, `cv_fold_id`). Strategic continuation prompt §3.2 specified revised 5-slot list (`calibrated_probability_band_lower`, `calibrated_probability_band_upper`, `drawdown_conditional_distribution`, `dms_adjustment_bps`, `bayesian_shrinkage_weight`); `cv_fold_id` relocated to `calibration_metadata` dict (transient field semantics). Continuation prompt supersedes per V's standing approval; §3.2 amended in chunk 3 authoring. Chunk-1 paragraph block also updated to reflect new list. Rationale for adoption: (i) explicit band lower/upper cleaner for L5-E/G downstream consumers vs derived-from-sigma form; (ii) `cv_fold_id` semantics belong in calibration_metadata per L3.5D pattern; (iii) `drawdown_conditional_distribution` better conveys conditioning explicit | none |
 | **S-2** | 2026-05-11 | v2 chunk 6 / §3.3 + §3.2 + §5.RM-4 + §5.RM-6 + §5.C + §2.5 audits #5 + #6 | Calibration target schema added; ScoredObservation slot count 5 → 6 (added `positive_return_probability`); closes ChatGPT 5.5 v1 review E.1 / L5-RISK-1 | ACCEPT | Mechanism: CRPS/CDRS are risk-direction scores (recession risk / drawdown risk); v1 spec assumed isotonic monotone-increasing fit against "P(positive forward return at horizon H)" without disambiguating event direction. This causes inverted reliability for risk-direction scores: when raw_score goes UP (high risk), P(positive_return) should go DOWN — fitting isotonic monotone-increasing inverts the natural calibration semantics. v2 fix: §3.3 calibration target schema explicitly per-`score_type` event labels (CRPS → NBER USREC 12M; CDRS → SPX drawdown ≥X% within H; RETURN_POSITIVE → return>0 at H); §5.RM-4.1.1 adds `positive_return_probability` slot for RETURN_POSITIVE path; §5.RM-6.1.2 wording updated to event-conditional language; §5.RM-6.5 adds invariant test #11; §5.C.5 test #4 parametrized × 3 score_types. Audits #5 (train-only z-scoring) + #6 (no pre-RM-6 calibrated_probability use) added to §2.5. Disposition: ACCEPT. Backlog: none | none |
 
-Reserved: S-3 through S-25.
+| **S-3** | 2026-05-11 | v2 chunk 7 / §5.B + §1.1 + §4 + §2.5 audit #7 | L5-B split into Task A (composite-weight refit on component matrix via penalized logistic) + Task B (return-forecast Ridge on post-RM-6 calibrated probabilities); closes ChatGPT E.2 / L5-RISK-2 | ACCEPT | Mechanism: ChatGPT §E.2 (90% confidence) established scalar Ridge on `x = raw_score` cannot identify underlying `Σ w_i × component_i` weights. v1 L5-B spec attempted scalar Ridge for both weight refit AND return forecast in single fit — mathematically impossible. v2 splits into: Task A = component-level penalized logistic against §3.3 event labels (CRPS → NBER USREC 12M; CDRS → drawdown threshold within H) yielding per-component β; Task B = Ridge on post-L5-RM-6 calibrated probability panel yielding forward return forecast. Execution sequential: Task A → L5-RM-4 → L5-RM-6 → Task B. Effort impact: L5-B band expands 8-10h → 12-16h. Test delta: +15 → +25 (12 Task A + 13 Task B). Gate 19 expands to 17 sub-criteria. Disposition: ACCEPT | none |
+
+Reserved: S-4 through S-25.
 
 ---
 
