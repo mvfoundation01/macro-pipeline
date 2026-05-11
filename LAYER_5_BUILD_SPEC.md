@@ -1205,9 +1205,470 @@ PASS criteria:
 
 <!-- CHUNK 4 START — §5.D drawdown conditional distributions + §5.E forecast σ + §5.F DMS + §5.G Bayesian shrinkage (Q5+Q6+Q7 locked) -->
 
-<!-- CHUNK 4 START — §5.D drawdown conditional distributions + §5.E forecast σ + §5.F DMS + §5.G Bayesian shrinkage (Q5+Q6+Q7 locked) -->
+<!-- CHUNK 4 START — §5.D drawdown conditional distributions + §5.E forecast σ + §5.F DMS + §5.G Bayesian shrinkage (Q6+Q7 locked) -->
 
-*To be authored in chunk 4 (target 2–3h).*
+### §5.D — Sub-Phase L5-D: Drawdown Probability Conditional Distributions
+
+#### §5.D.0 Sub-phase metadata
+
+| Field | Value |
+|---|---|
+| Sub-phase ID | L5-D |
+| Topic | Per-horizon × regime_state conditional CDF over drawdown thresholds; populates `drawdown_conditional_distribution` slot |
+| Effort band | 5–7h (target 6h) |
+| Test delta | +8 (≥4 NEG = 50% floor; 5 NEG / 3 POS = 63% NEG) |
+| Gate added | 23 |
+| Owning Q | None |
+| Dependencies | L5-RM-6 (calibrated_probability + regime state input) |
+| Downstream consumers | L5-G (shrinkage uses drawdown empirical for prior anchor cross-validation); L6 reports (drawdown band display) |
+| Commit message template | `L5-D: drawdown probability conditional distributions per horizon × regime` |
+| New files | `macro_pipeline/analysis/drawdown_conditionals.py`; `tests/test_drawdown_conditionals.py` |
+| Modified files | `macro_pipeline/validation.py` (+ `validate_gate23_drawdown_conditionals()`) |
+
+#### §5.D.1 Scope
+
+```python
+# macro_pipeline/analysis/drawdown_conditionals.py
+
+from dataclasses import dataclass
+import numpy as np
+
+DRAWDOWN_THRESHOLDS: tuple[float, ...] = (0.10, 0.20, 0.35, 0.50, 0.65)
+
+@dataclass(frozen=True)
+class DrawdownConditionalResult:
+    horizon: str                                  # "1Y" | "3Y" | "5Y" | "10Y"
+    regime_state: str                             # "expansion" | "late-cycle" | "recession" | "indeterminate"
+    n_obs: int                                    # historical analog count
+    drawdown_thresholds: tuple[float, ...]        # DRAWDOWN_THRESHOLDS
+    exceedance_probability: dict[str, float]      # {"DD≥10%": p, "DD≥20%": p, ..., "DD≥65%": p}
+    bootstrap_se: dict[str, float]                # SE per threshold from B=1000 bootstrap
+    historical_anchor_dates: tuple[pd.Timestamp, ...]  # anchor dates (e.g., recession troughs) feeding empirical
+
+def fit_drawdown_conditionals(
+    forward_drawdowns_by_horizon: dict[str, np.ndarray],
+    regime_states: pd.Series,
+    *,
+    bootstrap_iterations: int = 1000,
+    random_seed: int = 42,
+) -> dict[tuple[str, str], DrawdownConditionalResult]:
+    """Fit conditional drawdown CDF per (horizon, regime_state) cell.
+    Returns dict keyed by (horizon, regime_state); 4 × 4 = 16 cells.
+    Cells with n_obs < 5 return None entry with `np.nan` exceedance probabilities."""
+```
+
+##### §5.D.1.1 Historical drawdown computation
+
+For horizon H months, drawdown computed as `(min_price_over_H_months − price_at_start) / price_at_start` from `SHILLER_TR_PRICE` series per `regression_config.py:30`. Negative drawdown = price decline magnitude.
+
+Regime state at start of window assigned via `derive_regime_state()` (Layer 3A); 4 cells per horizon (`expansion` / `late-cycle` / `recession` / `indeterminate`).
+
+##### §5.D.1.2 Exceedance probability
+
+`exceedance_probability["DD≥X%"] = P(drawdown ≤ −X% | regime, horizon)` = `n_drawdowns_meeting_threshold / n_obs`. Bootstrapped SE per cell via B=1000 resamples.
+
+#### §5.D.2 Pre-flight contract
+
+1. **Anchor cycle verification**: confirm 4-cycle anchor set (1990, 2001, 2008, 2020 troughs) presents non-zero drawdowns at all 5 thresholds for `recession` cell at all 4 horizons
+2. **Sample size verification**: report n_obs per (horizon × regime_state) cell; cells with n_obs < 5 flagged for `nan` output (informational; not Gate 23 fail)
+3. **Bootstrap seed determinism**: same seed → identical SE
+4. **Drawdown computation grep-audit**: verify drawdown formula uses min over window (not endpoint) per spec
+
+#### §5.D.3 Methodology rigor
+
+| Element | Specification |
+|---|---|
+| Assumption | Historical analog regime → forward analog regime; conditional distribution stable within regime |
+| Estimator | Empirical exceedance frequency per cell |
+| Identification | Conditioning on regime_state at fold start |
+| Consistency | LLN within regime; per-cell consistency requires per-cell n_obs ≥ 5 (else `nan`) |
+| Standard error | Bootstrap B=1000 with seed=42 |
+| Failure mode | Regime-recession-10Y cell has historically ~5 observations (1929-33, 1937, 1973-75, 2007-09, 2020) — borderline; mitigated by widening to 65% bin |
+| ChatGPT 5.5 likely flag | Sample size at long-horizon-recession cells; recommend cross-horizon analog smoothing (defer L5b) |
+
+#### §5.D.4 Decisions
+
+**No owning Q.** Threshold set `(0.10, 0.20, 0.35, 0.50, 0.65)` from L1.5/L3 precedent (matches existing conviction bands). Bootstrap iterations B=1000 default.
+
+#### §5.D.5 Tests (+8; 5 NEG / 3 POS = 63% NEG)
+
+| # | Test name | Type | Asserts |
+|---|---|---|---|
+| 1 | `test_drawdown_thresholds_match_canonical_5_values` | POS | `DRAWDOWN_THRESHOLDS == (0.10, 0.20, 0.35, 0.50, 0.65)` |
+| 2 | `test_exceedance_probability_monotone_with_threshold` | POS-invariant | `P(DD≥10%) ≥ P(DD≥20%) ≥ ... ≥ P(DD≥65%)` per cell |
+| 3 | `test_per_horizon_regime_returns_16_cells` | POS | `fit_drawdown_conditionals` returns dict with 16 keys (4 horizon × 4 regime) |
+| 4 | `test_cells_with_n_below_5_return_nan` | NEG | n_obs < 5 cell has `exceedance_probability["DD≥X%"] == nan` per threshold |
+| 5 | `test_rejects_negative_drawdown_threshold_input` | NEG | `DRAWDOWN_THRESHOLDS = (−0.10, ...)` rejected |
+| 6 | `test_rejects_drawdown_threshold_above_one` | NEG | `(0.10, 1.5)` rejected |
+| 7 | `test_rejects_regime_state_outside_4_valid_states` | NEG | Unknown regime state rejected |
+| 8 | `test_bootstrap_seeded_for_reproducibility` | NEG-invariant | Two seed=42 runs produce identical bootstrap_se element-wise |
+
+#### §5.D.6 Gate 23 — Drawdown conditional integrity
+
+PASS: 16 cells returned; monotonicity invariant; bootstrap seeded; 8 tests pass; anchor cycles emit non-zero drawdowns at recession cell.
+
+#### §5.D.7 Proof contract (10 items)
+
+| # | Proof |
+|---|---|
+| 1 | `from macro_pipeline.analysis.drawdown_conditionals import fit_drawdown_conditionals, DRAWDOWN_THRESHOLDS` succeeds |
+| 2 | 8 tests PASS |
+| 3 | 16 cells × 5 thresholds = 80 numbers reported in verification table |
+| 4 | n_obs per cell reported; cells <5 flagged |
+| 5 | Bootstrap SE distribution archived |
+| 6 | Monotonicity invariant holds across all cells (test #2) |
+| 7 | Anchor cycle non-zero drawdowns confirmed |
+| 8 | Gate 23 PASS |
+| 9 | Cumulative tests = 628 + 8 = 636 |
+| 10 | Conviction 3-field |
+
+---
+
+### §5.E — Sub-Phase L5-E: Forecast σ Confidence Band
+
+#### §5.E.0 Sub-phase metadata
+
+| Field | Value |
+|---|---|
+| Sub-phase ID | L5-E |
+| Topic | Forecast σ derivation for `calibrated_probability_band_lower/upper` from bootstrap CV residuals + isotonic posterior spread |
+| Effort band | 4–6h (target 5h) |
+| Test delta | +6 (≥3 NEG; 3 NEG / 3 POS = 50% NEG) |
+| Gate added | 24 |
+| Owning Q | None |
+| Dependencies | L5-RM-6 (`IsotonicCalibrationResult.bootstrap_se_distribution`); L5-B (`RidgeFitResult.residual_se_hac`) |
+| Downstream consumers | L5-G (shrinkage band uses forecast σ for posterior variance); L6 reports (band display) |
+| Commit message template | `L5-E: forecast σ confidence band derivation` |
+| New files | `macro_pipeline/analysis/forecast_sigma.py`; `tests/test_forecast_sigma.py` |
+| Modified files | `macro_pipeline/validation.py` (+ `validate_gate24_forecast_sigma()`) |
+
+#### §5.E.1 Scope
+
+```python
+# macro_pipeline/analysis/forecast_sigma.py
+
+import numpy as np
+from dataclasses import dataclass
+
+@dataclass(frozen=True)
+class ForecastSigmaResult:
+    horizon: str
+    forecast_sigma: float                       # forecast uncertainty σ (annualized) — uncertainty about forecast itself
+    return_sigma: float                         # historical return σ (annualized) — uncertainty about realized returns
+    analog_dispersion_sigma: float              # cross-analog σ — uncertainty across analogous periods
+    calibrated_probability_band_lower: float    # ∈ [0, 1]; calibrated_p − 1.96 × forecast_sigma_in_prob_space (clipped)
+    calibrated_probability_band_upper: float    # ∈ [0, 1]; calibrated_p + 1.96 × forecast_sigma_in_prob_space (clipped)
+    z_value: float = 1.959963984540054          # 95% two-sided
+
+def derive_forecast_sigma(
+    ridge_residual_se_hac: float,
+    isotonic_bootstrap_se: float,
+    historical_return_sigma: float,
+    analog_period_dispersion_sigma: float,
+    calibrated_probability: float,
+    horizon: str,
+) -> ForecastSigmaResult:
+    """Combine Ridge HAC SE + isotonic bootstrap SE → forecast_sigma."""
+```
+
+##### §5.E.1.1 Forecast σ derivation
+
+`forecast_sigma² = ridge_residual_se_hac² + isotonic_bootstrap_se²` (assuming uncorrelated errors; conservative). Mapped to probability space via local linearization around the calibrated point.
+
+`band_lower = max(0, calibrated_probability − 1.96 × forecast_sigma_in_prob_space)`; `band_upper = min(1, calibrated_probability + 1.96 × forecast_sigma_in_prob_space)`. Per L5-RM-4 invariant `lower ≤ upper`.
+
+#### §5.E.2 Pre-flight contract
+
+1. **Triple-sigma disambiguation**: spec response explicit on forecast σ vs return σ vs analog dispersion σ per §5.E.3 methodology
+2. **Linearization smoke-test**: confirm probability-space mapping does not produce inverted band (lower > upper) on extreme inputs (calibrated=0.95 with high σ)
+3. **Clip behavior verification**: band_lower clipped at 0; band_upper at 1; per §5.RM-4.1.2 validator
+
+#### §5.E.3 Methodology rigor
+
+| Element | Specification |
+|---|---|
+| Assumption | Ridge HAC residual + isotonic bootstrap errors uncorrelated; local linearization of isotonic in probability space adequate |
+| Estimator | Quadrature combination `σ_forecast = sqrt(σ_ridge² + σ_isotonic²)` |
+| Identification | Decomposition of total forecast uncertainty into model-fit + calibration components |
+| Consistency | Both σ_ridge and σ_isotonic consistent → σ_forecast consistent |
+| Standard error | Bootstrap σ already, this is meta-σ; could add bootstrap-of-bootstrap (defer L5b) |
+| Failure mode | Correlated errors → underestimate σ; mitigated by conservatism + L5b structural break tests |
+| ChatGPT 5.5 likely flag | (i) triple-sigma decomposition complete? (ii) FDR for multiple-band-tests across horizons |
+
+##### §5.E.3.1 Triple-σ disambiguation
+
+| σ flavor | What it measures | Source |
+|---|---|---|
+| `forecast_sigma` | Uncertainty about the *forecast itself* (model uncertainty) | Ridge HAC SE + isotonic bootstrap SE quadrature |
+| `return_sigma` | Historical realized-return σ at horizon (volatility of actual returns) | sample std of historical forward returns at horizon |
+| `analog_dispersion_sigma` | σ across analogous historical periods (e.g., regime-conditional volatility) | std of historical-analog-period returns conditional on regime |
+
+Per Master Prompt v3.1 §4 Principle 2. All three reported.
+
+#### §5.E.4 Decisions
+
+No owning Q. Z-value default 1.96 (95% two-sided). Alternative (z=1.645 for 90% one-sided) deferred to L6 display layer.
+
+#### §5.E.5 Tests (+6; 3 NEG / 3 POS = 50% NEG)
+
+| # | Test name | Type | Asserts |
+|---|---|---|---|
+| 1 | `test_forecast_sigma_quadrature_combination` | POS | `forecast_sigma == sqrt(σ_ridge² + σ_isotonic²)` to 1e-10 |
+| 2 | `test_band_lower_le_calibrated_le_band_upper` | POS-invariant | for any input |
+| 3 | `test_band_clipped_to_zero_one` | POS | extreme `calibrated_probability=0.05` + high σ → `band_lower == 0.0` |
+| 4 | `test_triple_sigma_three_distinct_values_emitted` | NEG-invariant | `forecast_sigma`, `return_sigma`, `analog_dispersion_sigma` all populated and non-NaN |
+| 5 | `test_rejects_negative_sigma_input` | NEG | `ridge_residual_se_hac=−0.1` raises `ValueError` |
+| 6 | `test_rejects_z_value_below_one` | NEG | `z=0.5` raises |
+
+#### §5.E.6 Gate 24
+
+PASS: derive_forecast_sigma executes per horizon; triple-σ all emitted; band clipping holds; 6 tests pass.
+
+#### §5.E.7 Proof contract (10 items)
+
+(parallel to §5.D.7 pattern; brevity)
+
+---
+
+### §5.F — Sub-Phase L5-F: DMS Survivorship Adjustment
+
+#### §5.F.0 Sub-phase metadata
+
+| Field | Value |
+|---|---|
+| Sub-phase ID | L5-F |
+| Topic | Horizon-conditional DMS survivorship bps adjustment; populates `dms_adjustment_bps` for 5Y/10Y only |
+| Effort band | 3–5h (target 4h) |
+| Test delta | +5 (≥3 NEG; 3 NEG / 2 POS = 60% NEG) |
+| Gate added | 25 (sub-criterion 25.1) |
+| Owning Q | **Q6** (DMS bps horizon-conditional) |
+| Dependencies | L5-E (forecast σ already computed) |
+| Downstream consumers | L5-G (shrinkage uses DMS-adjusted return as prior anchor) |
+| Commit message template | `L5-F: DMS survivorship bps (5Y=-125, 10Y=-175, ±50 sensitivity) per Q6 lock` |
+| New files | `macro_pipeline/models/dms_adjustment.py`; `tests/test_dms_adjustment.py` |
+| Modified files | `macro_pipeline/validation.py` (+ `validate_gate25_dms_shrinkage_composite()` — Gate 25 composite stub; L5-G adds 25.2 sub-criterion) |
+
+#### §5.F.1 Scope
+
+```python
+# macro_pipeline/models/dms_adjustment.py
+
+from typing import Literal
+
+# Locked per Q6: horizon-conditional bps central + ±50 sensitivity
+DMS_BPS_CENTRAL: dict[str, float] = {
+    "1Y": 0.0,
+    "3Y": 0.0,
+    "5Y": -125.0,
+    "10Y": -175.0,
+}
+DMS_BPS_SENSITIVITY: float = 50.0    # ±50 bps band reported alongside central
+
+def apply_dms_adjustment(
+    raw_forecast_real_annualized_bps: float,
+    horizon: str,
+) -> tuple[float, float, float]:
+    """Apply Q6-locked DMS bps adjustment.
+    Returns (adjusted_central, adjusted_lower, adjusted_upper) in bps."""
+    if horizon not in DMS_BPS_CENTRAL:
+        raise ValueError(f"horizon {horizon!r} not in {set(DMS_BPS_CENTRAL.keys())}")
+    central_bps = DMS_BPS_CENTRAL[horizon]
+    adjusted_central = raw_forecast_real_annualized_bps + central_bps
+    if horizon in ("1Y", "3Y"):
+        # No adjustment; sensitivity band collapses to central
+        return adjusted_central, adjusted_central, adjusted_central
+    adjusted_lower = raw_forecast_real_annualized_bps + central_bps - DMS_BPS_SENSITIVITY
+    adjusted_upper = raw_forecast_real_annualized_bps + central_bps + DMS_BPS_SENSITIVITY
+    return adjusted_central, adjusted_lower, adjusted_upper
+```
+
+#### §5.F.2 Pre-flight contract + Standing Order #4 audit
+
+1. **Literature anchor**: Dimson-Marsh-Staunton (2002, 2020 update) Table 1.2 / 1.3 survivorship correction; build agent at L5-F pre-flight verifies citation
+2. **AST-walk audit (Standing Order #4)**: grep `dms_adjustment_bps` references across `macro_pipeline/`; AST-walk over horizon dispatcher to confirm:
+   - 5Y/10Y branches: `apply_dms_adjustment` called
+   - 1Y/3Y branches: `apply_dms_adjustment` NOT called (or called and returns 0)
+   - Failure ⇒ test #5 (audit) fails ⇒ Gate 25.1 FAIL
+3. **Empirical 5Y/10Y band verification**: DMS literature reports 5Y ∈ [−100, −150] and 10Y ∈ [−150, −200]; spec locks 5Y=−125 (midpoint) and 10Y=−175 (midpoint)
+
+#### §5.F.3 Methodology rigor
+
+| Element | Specification |
+|---|---|
+| Assumption | US equity returns 1900-present overstate global true returns by 100-200 bps annualized due to survivorship bias (DMS 2002) |
+| Estimator | Constant horizon-conditional bps subtraction |
+| Identification | DMS 2002 cross-country comparison + global market vs US delta |
+| Consistency | DMS is a population-parameter estimate; not data-dependent on our sample |
+| Standard error | ±50 bps sensitivity band per Q6 lock |
+| Failure mode | (a) DMS estimate dated (2002 + 2020 update; not 2025); mitigated by sensitivity band; (b) 5Y horizon survivorship correction smaller than 10Y but not zero — spec lock 5Y=−125 reflects this |
+| ChatGPT 5.5 likely flag | Literature freshness (DMS most recent ~2020); recommend monitoring updates; static for L5 |
+
+#### §5.F.4 Decisions for V (Q6 lock)
+
+**Locked: horizon-conditional** per Strategic continuation prompt §2. Option matrix per preflight §2.1.
+
+#### §5.F.5 Tests (+5; 3 NEG / 2 POS = 60% NEG)
+
+| # | Test name | Type | Asserts |
+|---|---|---|---|
+| 1 | `test_dms_bps_central_matches_Q6_lock_5Y_minus_125_10Y_minus_175` | POS | `DMS_BPS_CENTRAL == {"1Y": 0, "3Y": 0, "5Y": -125, "10Y": -175}` |
+| 2 | `test_dms_bps_sensitivity_band_plus_minus_50` | POS | `DMS_BPS_SENSITIVITY == 50.0` |
+| 3 | `test_dms_application_AST_walk_audit` | NEG (Standing Order #4) | AST audit over `macro_pipeline/` confirms `apply_dms_adjustment` called for 5Y/10Y horizons only; NEG-asserts NOT called for 1Y/3Y |
+| 4 | `test_rejects_horizon_outside_1Y_3Y_5Y_10Y` | NEG | `apply_dms_adjustment(0.0, "2Y")` raises |
+| 5 | `test_band_lower_equals_central_for_1Y_3Y_no_adjustment` | NEG | for 1Y, `adjusted_lower == adjusted_central` (no sensitivity for unadjusted horizons) |
+
+#### §5.F.6 Gate 25 sub-criterion 25.1 — DMS application integrity
+
+PASS: `DMS_BPS_CENTRAL` constants match Q6 lock; AST-walk audit (test #3) confirms 5Y/10Y exclusive application; 5 tests pass.
+
+#### §5.F.7 Proof contract (8 items)
+
+| # | Proof |
+|---|---|
+| 1 | `from macro_pipeline.models.dms_adjustment import apply_dms_adjustment, DMS_BPS_CENTRAL, DMS_BPS_SENSITIVITY` succeeds |
+| 2 | Constants match Q6 lock exactly |
+| 3 | AST-walk audit reports 0 violations (test #3) |
+| 4 | 5 tests PASS |
+| 5 | DMS literature citation in commit message + `dms_adjustment.py` docstring |
+| 6 | Gate 25 sub-criterion 25.1 PASS (composite gate 25 itself assembled at L5-G commit) |
+| 7 | Cumulative tests = 642 + 5 = 647 |
+| 8 | Conviction 3-field |
+
+---
+
+### §5.G — Sub-Phase L5-G: Bayesian Shrinkage to 6.5% Real Prior
+
+#### §5.G.0 Sub-phase metadata
+
+| Field | Value |
+|---|---|
+| Sub-phase ID | L5-G |
+| Topic | Horizon-dependent + sample-size-adaptive shrinkage toward DMS-anchored long-run real prior; populates `bayesian_shrinkage_weight` |
+| Effort band | 4–6h (target 5h) |
+| Test delta | +6 (≥3 NEG; 4 NEG / 2 POS = 67% NEG) |
+| Gate added | 25 (sub-criterion 25.2 + composite gate 25 sealed at L5-G commit) |
+| Owning Q | **Q7** (shrinkage weight + prior anchor) |
+| Dependencies | L5-F (DMS-adjusted forecast); L5-E (forecast σ for posterior combination) |
+| Downstream consumers | L5-H (retrospective summary); L6 reports (final shrunken estimate display) |
+| Commit message template | `L5-G: Bayesian shrinkage horizon-dependent + sample-size-adaptive (Q7 lock); seals Gate 25 composite` |
+| New files | `macro_pipeline/models/bayesian_shrinkage.py`; `tests/test_bayesian_shrinkage.py` |
+| Modified files | `macro_pipeline/validation.py` (+ `validate_gate25_composite()` finalized) |
+
+#### §5.G.1 Scope
+
+```python
+# macro_pipeline/models/bayesian_shrinkage.py
+
+import numpy as np
+
+# Locked per Q7: prior anchor (DMS long-run real annualized)
+DMS_PRIOR_REAL_ANNUALIZED_US: float = 0.065        # 6.5%; primary anchor
+DMS_PRIOR_REAL_ANNUALIZED_GLOBAL: float = 0.045    # 4.5%; robustness check
+
+# Locked per Q7: k_horizon = horizon_months × 15
+K_HORIZON: dict[str, int] = {
+    "1Y": 12 * 15,     # 180
+    "3Y": 36 * 15,     # 540
+    "5Y": 60 * 15,     # 900
+    "10Y": 120 * 15,   # 1800
+}
+
+# Locked per Q7: nominal shrinkage weights at canonical n_eff (for spec documentation)
+NOMINAL_SHRINKAGE_WEIGHTS_AT_REFERENCE_N: dict[str, float] = {
+    "1Y": 0.05,
+    "3Y": 0.15,
+    "5Y": 0.30,
+    "10Y": 0.50,
+}
+
+def compute_shrinkage_weight(
+    n_eff_nonoverlap: int,
+    horizon: str,
+) -> float:
+    """k/(k+n) Bayesian shrinkage weight per Q7 lock."""
+    if horizon not in K_HORIZON:
+        raise ValueError(f"horizon {horizon!r} not in {set(K_HORIZON.keys())}")
+    if n_eff_nonoverlap < 0:
+        raise ValueError(f"n_eff_nonoverlap must be ≥ 0, got {n_eff_nonoverlap}")
+    k = K_HORIZON[horizon]
+    return k / (k + n_eff_nonoverlap)
+
+def apply_shrinkage(
+    raw_forecast_real_annualized: float,
+    n_eff_nonoverlap: int,
+    horizon: str,
+    *,
+    use_global_prior: bool = False,
+) -> tuple[float, float]:
+    """Returns (shrunken_central, shrinkage_weight)."""
+    prior = DMS_PRIOR_REAL_ANNUALIZED_GLOBAL if use_global_prior else DMS_PRIOR_REAL_ANNUALIZED_US
+    w = compute_shrinkage_weight(n_eff_nonoverlap, horizon)
+    shrunken = w * prior + (1 - w) * raw_forecast_real_annualized
+    return shrunken, w
+```
+
+#### §5.G.2 Pre-flight contract + Standing Order #4 audit
+
+1. **DMS prior literature anchor**: confirm 6.5% real annualized US per Dimson-Marsh-Staunton long-run record (1900-present)
+2. **Empirical shrinkage weights at reference n**: build agent computes `compute_shrinkage_weight` at typical fold n_eff values per horizon; confirms 1Y ≈ 5%, 3Y ≈ 15%, 5Y ≈ 30%, 10Y ≈ 50% at reference n_eff per `n_eff_nonoverlap`
+3. **AST-walk audit (Standing Order #4)**: grep `bayesian_shrinkage_weight` callsites; AST-walk confirms 4 distinct horizon values used; assert no constant `weight = 0.30` literal anywhere; failure ⇒ test #6 (audit) ⇒ Gate 25.2 FAIL
+4. **Global prior robustness check smoke-test**: run apply_shrinkage with `use_global_prior=True` for cross-validation; report delta in shrunken estimate per horizon
+
+#### §5.G.3 Methodology rigor
+
+| Element | Specification |
+|---|---|
+| Assumption | DMS US-specific long-run real return 6.5% annualized representative for next 10Y; k/(k+n) Beta-Binomial conjugate analog appropriate for return shrinkage |
+| Estimator | `shrunken = w × prior + (1−w) × raw`; `w = k/(k+n_eff)` |
+| Identification | Prior + likelihood combine via posterior mean (conjugate analog); k = horizon × 15 ad-hoc but anchored to "prior worth 15 years of horizon-length observations" intuition |
+| Consistency | As n → ∞, w → 0, shrunken → raw (asymptotic unbiasedness) |
+| Standard error | shrunken σ² = w² × prior_σ² + (1−w)² × likelihood_σ² (independence assumption); detailed in L5-E forecast σ derivation |
+| Failure mode | (a) prior anchor stale: mitigated by global prior robustness check; (b) k_horizon ad-hoc: documented + audited; (c) extreme regime (e.g., post-2008): shrinkage may be too aggressive — mitigated by L5-RM-6 regime trigger |
+| ChatGPT 5.5 likely flag | (i) US-specific 6.5% defensible given deliverable is US equity; (ii) k = horizon × 15 deserves sensitivity analysis at L5b; (iii) recommend disclosing Bayesian assumptions in L6 reports |
+
+#### §5.G.4 Decisions for V (Q7 lock)
+
+**Locked: horizon-dependent + sample-size-adaptive k/(k+n); US-specific DMS 6.5% primary + global 4.5% robustness** per Strategic continuation prompt §2. Option matrix per preflight §2.2.
+
+#### §5.G.5 Tests (+6; 4 NEG / 2 POS = 67% NEG)
+
+| # | Test name | Type | Asserts |
+|---|---|---|---|
+| 1 | `test_K_HORIZON_matches_Q7_lock_horizon_x_15` | POS | `K_HORIZON == {"1Y": 180, "3Y": 540, "5Y": 900, "10Y": 1800}` |
+| 2 | `test_DMS_priors_match_Q7_lock_6_5_pct_US_4_5_pct_global` | POS | constants match |
+| 3 | `test_shrinkage_weight_horizon_dependent_AST_walk_audit` | NEG (Standing Order #4) | AST audit: 4 distinct horizon values in shrinkage weight computations; NO constant literal `0.30` for shrinkage; assert NEG |
+| 4 | `test_shrinkage_weight_asymptotic_zero_at_large_n` | NEG-invariant | `compute_shrinkage_weight(n=1e8, "10Y") < 0.001` (asymptotic limit) |
+| 5 | `test_rejects_negative_n_eff` | NEG | `compute_shrinkage_weight(−1, "1Y")` raises |
+| 6 | `test_rejects_horizon_outside_1Y_3Y_5Y_10Y` | NEG | `compute_shrinkage_weight(100, "2Y")` raises |
+
+#### §5.G.6 Gate 25 (composite) — DMS + shrinkage sealed
+
+Composite gate 25 sub-criteria:
+- **25.1** (L5-F authored): DMS bps applied horizon-conditionally; AST-walk audit 0 violations
+- **25.2** (L5-G authored): Bayesian shrinkage horizon-dependent + sample-size-adaptive; AST-walk audit 0 violations; constants match Q7 lock
+
+Both sub-criteria PASS ⇒ Gate 25 PASS. L5-G commit seals the composite (mirrors L3.5b Gate 17 composite pattern).
+
+#### §5.G.7 Proof contract (10 items)
+
+| # | Proof |
+|---|---|
+| 1 | `from macro_pipeline.models.bayesian_shrinkage import compute_shrinkage_weight, apply_shrinkage, K_HORIZON, DMS_PRIOR_REAL_ANNUALIZED_US, DMS_PRIOR_REAL_ANNUALIZED_GLOBAL, NOMINAL_SHRINKAGE_WEIGHTS_AT_REFERENCE_N` succeeds |
+| 2 | All constants match Q7 lock |
+| 3 | AST-walk audit (test #3) reports 0 violations |
+| 4 | 6 tests PASS |
+| 5 | Shrinkage weights at reference n_eff reported per horizon (4 numbers) |
+| 6 | Global prior robustness check delta reported per horizon (4 numbers) |
+| 7 | Gate 25 (composite) PASS — both 25.1 + 25.2 green |
+| 8 | Cumulative tests = 647 + 6 = 653 |
+| 9 | Conviction 3-field |
+| 10 | Composite gate 25 seal noted in commit message |
+
+---
+
+<!-- CHUNK 4 END -->
+
+<!-- CHUNK 5 START — §5.H retrospective + §6 gate definitions + §7 backlog routing + §8 ChatGPT 5.5 handoff + §9 closure (Q8 locked) -->
 
 <!-- CHUNK 5 START — §5.H retrospective + Codex review prep (Q8 locked in chunk 5 closure) -->
 
