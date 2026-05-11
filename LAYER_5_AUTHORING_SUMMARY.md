@@ -1,11 +1,11 @@
-# LAYER 5 BUILD SPEC — Authoring Summary (v4)
+# LAYER 5 BUILD SPEC — Authoring Summary (v5)
 
 **Spec file**: `LAYER_5_BUILD_SPEC.md`
 **Branch**: `claude/layer-5-spec` (base: `590e4a5` = main = L3.5b merge commit)
-**Authoring agent**: Claude Code under V's role-widening directive (v1: 2026-05-10; v2: 2026-05-11; v3: 2026-05-11; **v4 cross-reference scrub: 2026-05-11**)
-**Status**: **v4 draft complete — closes ChatGPT 5.5 v3 review §C.1 HIGH + §C.2/§C.3 MED cross-reference scrub (consolidated §6 gate mirrors synced; Task B1/B2 propagated; §5.D residual prose cleaned); ready for V freeze + ChatGPT 5.5 v4 closure verification**
-**Predecessor tags preserved**: `layer5-spec-v1` @ `d776eb4`; `layer5-spec-v2` @ `76ca810`; `layer5-spec-v3` @ `362b71b` (all historical)
-**v4 tag**: `layer5-spec-v4` at chunk-12 closure SHA
+**Authoring agent**: Claude Code under V's role-widening directive (v1: 2026-05-10; v2/v3/v4: 2026-05-11; **v5 final scrub: 2026-05-11**)
+**Status**: **v5 draft complete — closes ChatGPT 5.5 v4 review §C.2 HIGH (RM-4 slot count) + §C.1 MED (§5.X.7 mirror integrity L5-D + L5-G) + §C.3 LOW/MED (cumulative arithmetic); ready for V freeze + ChatGPT 5.5 v5 closure verification (expected FREEZE-AS-IS)**
+**Predecessor tags preserved**: v1@`d776eb4` / v2@`76ca810` / v3@`362b71b` / v4@`5caf678` (all historical)
+**v5 tag**: `layer5-spec-v5` at chunk-13 closure SHA
 **Date**: 2026-05-11
 
 ---
@@ -31,6 +31,8 @@
 | **v1 + v2 + v3 grand total** | **~28.15** | combined budget 18.5-29.5 | within ceiling |
 | 12 (v4) | ~2.6 | 1.5-3 | cross-reference scrub: §6 consolidated gate sync + §5.B Task B1/B2 propagate + §5.D residual prose + mirror anchors + AP-AUTH-39 (0 Sxx) |
 | **v1 + v2 + v3 + v4 grand total** | **~30.75** | combined budget 20-32.5 | within ceiling |
+| 13 (v5) | ~1.65 | 0.75-1.5 | final scrub: RM-4 slot count (5→6 / 30→31) + §5.D.7/§5.G.7 mirror fix + global cumulative arithmetic → symbolic + AP-AUTH-40 + AP-AUTH-41 (0 Sxx) |
+| **v1 + v2 + v3 + v4 + v5 grand total** | **~32.4** | combined budget 20.75-34 | within ceiling |
 
 ---
 

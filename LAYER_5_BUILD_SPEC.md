@@ -320,7 +320,7 @@ Every field that L5 introduces, modifies, or finalizes across sub-phase boundari
 |---|---|---|---:|---:|---|---|---|
 | L5-A | Walk-forward CV scaffold | Expanding-window primary + rolling-20Y robustness; horizon-dependent step size; `analysis/walk_forward_cv.py` (NEW); fold contamination audit | 6–8 | +12 (≥6 NEG) | 18 | Q1, Q2 | chunk 2 |
 | L5-B | **v2 split**: Task A composite-weight refit (penalized logistic on §3.3 event labels) + Task B return-forecast Ridge (HAC SE + block bootstrap with sensitivity) per S-3 | **12–16** (v2; was 8–10 in v1) | **+25** (v2; was +15; ≥14 NEG = 56%) | 19 (v2: 17 sub-criteria) | Q3 | chunk 2 (v1) + chunk 7 (v2 split) |
-| L5-RM-4 | raw_score vs calibrated_probability split | `ScoredObservation` dataclass migration (5 new slots); L5-13 CDRS notes migration absorbed; raw_score / calibrated_probability semantic contract formalized | 4–6 | +8 (≥4 NEG) | 20 | — | chunk 3 |
+| L5-RM-4 | raw_score vs calibrated_probability split | `ScoredObservation` dataclass migration (**6 new slots** v3 per S-2 propagated to v5; 31 slots total); L5-13 CDRS notes migration absorbed; raw_score / calibrated_probability semantic contract formalized | 4–6 | +8 (≥4 NEG) | 20 | — | chunk 3 (v5 slot-count anchor fix per C.2) |
 | L5-RM-6 | Isotonic regression calibration | `models/isotonic_calibrator.py` (NEW); per-horizon 4 calibrators; quarterly + regime-triggered recalibration; monotonicity audit | 6–8 | +10 (≥5 NEG) | 21 | Q4, Q5 (regime trigger threshold) | chunk 3 |
 | L5-C | Brier + reliability diagram | `analysis/brier_reliability.py` (NEW); per-horizon Brier; 10-bin reliability; climatology baseline | 5–7 | +8 (≥4 NEG) | 22 | — | chunk 3 |
 | L5-D | Drawdown probability conditional distributions | `analysis/drawdown_conditionals.py` (NEW); per-horizon × regime_state conditional CDF; populates `drawdown_probability_distribution` slot | 5–7 | +8 (≥4 NEG) | 23 | — | chunk 4 |
@@ -551,7 +551,7 @@ Failure modes: any of (1)-(6) false ⇒ Gate 18 FAIL with specific sub-criterion
 | 6 | `WalkForwardSchedule.panel_sha256 == panel_meta["data_sha256"]` (test #10) |
 | 7 | Corrupting `r_squared_panel.parquet` sidecar causes `generate_schedule` to raise `CacheValidationError` (test #11) |
 | 8 | Gate 18 PASSes in `validation.py` |
-| 9 | Cumulative test count = 602 + 12 = 614; ruff clean; mypy clean |
+| 9 (v5 symbolic per C.3) | Cumulative test count = main baseline (602) + L5-A delta (**+12**); ruff clean; mypy clean (symbolic to prevent future drift per AP-AUTH-40) |
 | 10 | Conviction 3-field reported; binding constraint identified per §2.4 |
 
 ---
@@ -918,7 +918,7 @@ Failure modes: any of (1)-(22) false ⇒ Gate 19 FAIL with specific sub-criterio
 | Field | Value |
 |---|---|
 | Sub-phase ID | L5-RM-4 |
-| Topic | Formalize raw_score / calibrated_probability semantic split; add 5 new slots to `ScoredObservation` (batched single migration); absorb L5-13 (CDRS notes migration to mirror CRPS pattern) |
+| Topic | Formalize raw_score / calibrated_probability semantic split; add **6 new slots** to `ScoredObservation` (batched single migration; v3 expanded 5→6 per S-2 propagated to v5 per C.2 anchor fix); absorb L5-13 (CDRS notes migration to mirror CRPS pattern) |
 | Effort band | 4–6h (target 5h; includes L5-13 1–2h absorbed) |
 | Test delta | +8 (≥4 NEG = 50% floor; spec lists 5 NEG / 3 POS) |
 | Gate added | 20 |
@@ -930,7 +930,7 @@ Failure modes: any of (1)-(22) false ⇒ Gate 19 FAIL with specific sub-criterio
 
 #### §5.RM-4.1 Scope
 
-L5-RM-4 is the **batched dataclass migration** absorbing field additions that L5-D, L5-E, L5-F, L5-G would otherwise each commit separately. Per V's standing approval (recorded in S-1) and Strategic continuation prompt §3.2, all 5 new slots are added in one atomic commit.
+L5-RM-4 is the **batched dataclass migration** absorbing field additions that L5-D, L5-E, L5-F, L5-G would otherwise each commit separately. Per V's standing approval (recorded in S-1) and Strategic continuation prompt §3.2, all **6 new slots** (v3 expanded from 5 per S-2 propagated v5 per C.2 anchor fix) are added in one atomic commit.
 
 ##### §5.RM-4.1.1 New slot additions (5 total)
 
@@ -1068,7 +1068,7 @@ def validate_gate20_dataclass_migration() -> GateReport:
 
 PASS criteria:
 1. `ScoredObservation.__dataclass_fields__` count = 30
-2. 5 new slot names exactly match spec: `calibrated_probability_band_lower`, `calibrated_probability_band_upper`, `drawdown_conditional_distribution`, `dms_adjustment_bps`, `bayesian_shrinkage_weight`
+2. **6 new slot names** (v5 anchor fix per C.2) exactly match spec: `calibrated_probability_band_lower`, `calibrated_probability_band_upper`, `drawdown_conditional_distribution`, `dms_adjustment_bps`, `bayesian_shrinkage_weight`, `positive_return_probability` (v3 added per S-2; v5 propagated to all anchors)
 3. Parquet roundtrip smoke-test PASSes (test #2)
 4. L5-13 absorption confirmed: CDRS `metadata_extra` has 0 V_*/T_* keys (test #3)
 5. All 8 tests in §5.RM-4.5 PASS
@@ -1321,7 +1321,7 @@ PASS criteria (v3):
 | 7 | Bootstrap reproducibility test #9 PASSes |
 | 8 | `calibrate_raw_score` clips correctly (test #6) |
 | 9 | Gate 21 PASSes (9 sub-criteria green per v3) |
-| 10 | Cumulative test count = 610 + 14 = 624 (v2: 620; v3 +4 via S-8 hardening + S-9 Task B2 tests) |
+| 10 (v5 symbolic per C.3) | Cumulative test count = previous baseline + L5-RM-6 delta (**+14**; was +10 in v1; +4 in v2/v3 via S-2 + S-7 + S-8 hardening; symbolic to prevent future drift per AP-AUTH-40) |
 | 11 | Conviction 3-field reported |
 | 12 | S-2 filed if Sahm trigger frequency outside target band; else NOT filed |
 
@@ -1447,7 +1447,7 @@ PASS criteria:
 | 6 | Bin count ≥30 per bin per horizon, OR adaptive reduction documented |
 | 7 | Bootstrap reproducibility seeded (random_seed=42) |
 | 8 | Gate 22 PASSes |
-| 9 | Cumulative test count = 620 + 8 = 628 |
+| 9 (v5 symbolic per C.3) | Cumulative test count = previous baseline + L5-C delta (**+8**; symbolic to prevent future drift per AP-AUTH-40) |
 | 10 | Conviction 3-field reported |
 
 ---
@@ -1602,14 +1602,14 @@ PASS (v2): 16 cells returned; monotonicity invariant; bootstrap seeded; **every 
 | # | Proof |
 |---|---|
 | 1 | `from macro_pipeline.analysis.drawdown_conditionals import fit_drawdown_conditionals, DRAWDOWN_THRESHOLDS` succeeds |
-| 2 | 8 tests PASS |
+| 2 (v5 amended per C.1) | `pytest tests/test_drawdown_conditional.py` shows all **12 tests** PASS (8 v2/v3 baseline + 4 v3/v4 cell_label taxonomy: #9 Wilson interval + #10 diagnostic_only label + #11 hierarchical pooling v4 amended + #12 no-raw-nan v3 taxonomy) |
 | 3 | 16 cells × 5 thresholds = 80 numbers reported in verification table |
 | 4 | `n_eff_nonoverlap` per cell reported; cells with `n_eff < 10` OR `interval_width ≥ 0.50` labeled `"diagnostic_only"` or `"pooled"` per v3 taxonomy (v4 scrub: replaces stale "cells <5 flagged" wording) |
 | 5 | Bootstrap SE distribution archived |
 | 6 | Monotonicity invariant holds across all cells (test #2) |
 | 7 | Anchor cycle non-zero drawdowns confirmed |
 | 8 | Gate 23 PASS |
-| 9 | Cumulative tests = 628 + 8 = 636 |
+| 9 (v5 symbolic per C.3) | Cumulative test count = previous baseline + L5-D delta (**+12**; symbolic to prevent future drift per AP-AUTH-40) |
 | 10 | Conviction 3-field |
 
 ---
@@ -1840,7 +1840,7 @@ PASS: `DMS_BPS_CENTRAL` constants match Q6 lock; AST-walk audit (test #3) confir
 | 4 | 5 tests PASS |
 | 5 | DMS literature citation in commit message + `dms_adjustment.py` docstring |
 | 6 | Gate 25 sub-criterion 25.1 PASS (composite gate 25 itself assembled at L5-G commit) |
-| 7 | Cumulative tests = 642 + 5 = 647 |
+| 7 (v5 symbolic per C.3) | Cumulative test count = previous baseline + L5-F delta (**+5**; symbolic to prevent future drift per AP-AUTH-40) |
 | 8 | Conviction 3-field |
 
 ---
@@ -1997,11 +1997,11 @@ Both sub-criteria PASS ⇒ Gate 25 PASS. L5-G commit seals the composite (mirror
 | 1 | `from macro_pipeline.models.bayesian_shrinkage import compute_shrinkage_weight, apply_shrinkage, K_HORIZON, DMS_PRIOR_REAL_ANNUALIZED_US, DMS_PRIOR_REAL_ANNUALIZED_GLOBAL, NOMINAL_SHRINKAGE_WEIGHTS_AT_REFERENCE_N` succeeds |
 | 2 | All constants match Q7 lock |
 | 3 | AST-walk audit (test #3) reports 0 violations |
-| 4 | 6 tests PASS |
+| 4 (v5 amended per C.1) | `pytest tests/test_bayesian_shrinkage.py` shows all **8 tests** PASS (5 v2 baseline + 3 v2/v3 K_HORIZON backsolve verification: #6 + #7 W_REF_TARGET match within ±2pp + #8 k_h sensitivity 0.5×/1×/2×) |
 | 5 | Shrinkage weights at reference n_eff reported per horizon (4 numbers) |
 | 6 | Global prior robustness check delta reported per horizon (4 numbers) |
 | 7 | Gate 25 (composite) PASS — both 25.1 + 25.2 green |
-| 8 | Cumulative tests = 647 + 6 = 653 |
+| 8 (v5 symbolic per C.3) | Cumulative test count = previous baseline + L5-G delta (**+8**; symbolic to prevent future drift per AP-AUTH-40) |
 | 9 | Conviction 3-field |
 | 10 | Composite gate 25 seal noted in commit message |
 
@@ -2140,7 +2140,18 @@ Failure modes: any of (1)-(14) false ⇒ Gate 19 FAIL with specific sub-criterio
 
 ### §6.3 Gate 20 — Dataclass migration integrity (owner: L5-RM-4)
 
-PASS criteria per §5.RM-4.6: 30 slots total; 5 new slot names exact; parquet roundtrip; L5-13 absorbed (CDRS `metadata_extra` empty for V_*/T_* keys); 8 tests pass; 602-test regression floor preserved.
+<!-- CHUNK 13 v5 START — §6.3 Gate 20 slot count anchor fix (closes ChatGPT v4 C.2 HIGH) -->
+
+PASS criteria per §5.RM-4.6 v5 (31 slots / 6 new slots; v5 anchor fix per C.2):
+
+1. `ScoredObservation` dataclass has **31 total slots** (25 base + 6 new)
+2. **6 new slot names** exact: `calibrated_probability_band_lower`, `calibrated_probability_band_upper`, `drawdown_conditional_distribution`, `dms_adjustment_bps`, `bayesian_shrinkage_weight`, `positive_return_probability` (v3 added per S-2; v5 propagated to all anchors per C.2 anchor fix)
+3. All 6 new slots default to `Optional[None]`
+4. AST audit confirms 6 new fields added in single batched migration (no piecemeal commits)
+5. `positive_return_probability` field validated to exist BEFORE Task B2 executes (cross-gate dependency per §3.3 + S-9)
+6. Parquet roundtrip preserves all 31 slots; L5-13 absorbed (CDRS `metadata_extra` empty for V_*/T_* keys); 8 tests pass; 602-test regression floor preserved
+
+Failure modes: any of (1)-(6) false ⇒ Gate 20 FAIL.
 
 ### §6.4 Gate 21 — Isotonic calibration integrity (owner: L5-RM-6 v3 25-calibrator topology)
 
@@ -2383,6 +2394,8 @@ Cumulative AP-1 through AP-15 from prior layers apply. L5-specific additions:
 | **AP-20 NEW** | Bayesian shrinkage weight as a constant (e.g., `weight = 0.30` literal anywhere); spec mandates horizon-dependent + sample-size-adaptive; detected via §2.5 audit |
 | **AP-21 NEW** | `score_value` references re-introduced post-3.5D rename; 3.5D D24 deprecation warning preserved through L5; full removal at L4-L5 boundary deferred to L5-RM-4 absorbing the boundary |
 | **AP-AUTH-39 NEW v4** | Updating gate PASS criteria in owning §5.X.6 sub-phase WITHOUT updating the consolidated §6.N gate mirror (dual-anchor synchronization miss); detected by grep audit comparing §5.X.6 vs §6.N test counts + API names + literal values; v3 missed Gate 19/21/23/25 sync in §6.2/§6.4/§6.6/§6.8 → ChatGPT v3 §C.1 HIGH flag → v4 fixed all 4 plus added defensive mirror-anchor summary lines per §5.B.5/§5.RM-6.5/§5.D.5/§5.G.5. **Mitigation discipline**: when patching any §5.X.6 PASS criterion or API name or test count, the build agent MUST also grep-audit §6 consolidated mirror for matching anchor and update in same commit; LAYER_5_AUTHORING_SUMMARY mirror integrity table per chunk verification report enforces 4-anchor check (§5.X.5 == §5.X.6 == §5.X.7 == §6.N). |
+| **AP-AUTH-40 NEW v5** | Filing Sxx that documents a change to spec methodology/structure WITHOUT propagating the change to spec body sections AND consolidated mirrors AND proof contracts (Sxx-to-spec-body propagation miss); detected by grep audit comparing Sxx register entry intent vs spec body anchors; **v3 S-2 said "5 → 6 new slots"** but §5.RM-4 metadata (.0) + intro (.1 intro paragraph) + Gate 20 PASS criterion (.6) + proof (.7) + §6.3 consolidated mirror + §4 decomp ALL still said "5 new / 30 total"; v4 AP-AUTH-39 dual-anchor caught §5.X.6/§6.N pairs but NOT the Sxx-to-body propagation because it's a third anchor pattern; ChatGPT v4 §C.2 HIGH flagged → v5 fixed all 5 propagation anchors + added defensive mirror-anchor verification. **Mitigation discipline**: when filing any Sxx documenting a change to spec methodology, structure, or numbers, the build agent MUST grep-audit FOR every spec section that references the changed item (use Sxx topic keywords) AND update each propagation anchor in same commit; verification report MUST verify Sxx-to-body propagation per anchor with verbatim grep output. Cumulative test count proof contracts MUST use symbolic wording (`previous + L5-X delta`) NOT hard-coded arithmetic to prevent recurrence. |
+| **AP-AUTH-41 NEW v5** | Claiming mirror integrity "verified" in verification report without verbatim grep output per anchor pair (v4 self-audit claimed 16/16 alignment but ChatGPT v4 §C.1 found §5.D.7 and §5.G.7 anchors still stale — actually 14/16 because §5.X.7 anchors were enumerated in claim but not grepped). **Mitigation discipline**: verification report mirror integrity table MUST include `grep -nE "<expected_count>" <section>` output verbatim per anchor; bare assertion "ALIGNED" without grep proof is REVISE-REQUIRED. |
 
 ---
 
