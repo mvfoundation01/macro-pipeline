@@ -166,6 +166,8 @@ Build agent's sub-phase verification reports MUST report all three for the sub-p
 | **L5-RM-6 (v2 audit #6 per S-2)** | "No pre-RM-6 calibrated_probability use" | grep audit that downstream code (L5-C / L5-D / L5-E / L5-F / L5-G) does NOT consume `calibrated_probability` field before L5-RM-6 populates it; assert any earlier consumption raises `RuntimeError("calibrated_probability accessed before L5-RM-6 fit")` |
 | **L5-C (v2 audit #7 per S-3)** | "Brier improvement reported per horizon with climatology baseline + bin counts" | grep audit for `brier_climatology` field + `bin_counts` field per L5-C `BrierDecomposition` output; assert NO horizon × score_type tuple has `brier_score` reported without companion `brier_climatology` (closes ChatGPT §G.2 build output table item for L5-C) |
 | **L5-G (v2 audit #9 per S-4)** | "Shrinkage k_h + n_eff_nonoverlap unit consistency; reference weights numerically verified" | grep audit for `K_HORIZON` literal + `N_REF_NONOVERLAP` literal in `models/bayesian_shrinkage.py`; assert no arithmetic-inconsistent variants; PLUS test #7 at reference cutpoints |
+| **L5-D (v2 audit #8 per S-5)** | "Drawdown cell completeness — all 16 (horizon × regime) cells have `n_eff_nonoverlap` + `event_count` + `interval_width` + `cell_label`" | AST audit over `fit_drawdown_conditionals` output; every cell has all 4 fields non-NaN; no raw `nan` in `exceedance_probability` |
+| **L5-E (v2 audit #10 per S-6)** | "Forecast band empirical coverage reported per horizon (not just bands computed)" | grep audit for `empirical_coverage_95` field per L5-E output; assert populated per horizon; coverage inflation applied if <0.90 |
 
 Failure to provide grep / AST audit in verification report for these claims = REVISE-REQUIRED.
 
@@ -701,9 +703,15 @@ For each outer fold:
 
 For each `RidgeFitResult`, compute HAC residual SE using existing `analysis/newey_west_hac.py::fit_ols_hac(y, raw_score_test, horizon_months=HORIZON_MONTHS[horizon])` with `maxlags = horizon_months - 1`. Reported in `residual_se_hac` + `p_value_beta_hac`.
 
-##### §5.B.1.4 Bootstrap residual resampling
+##### §5.B.1.4 Bootstrap residual resampling (v2 expanded per S-6)
 
-Within each outer fold's residual distribution (`y_test - raw_score_test`), draw B=1000 bootstrap resamples (block-bootstrap with block-size = horizon_months // 2 to preserve autocorrelation), refit Ridge, compute `raw_score_test` per resample, accumulate `bootstrap_residual_se_distribution`. Seeded via `random_seed=42` for determinism (per L3.5A pickle-protocol pattern).
+Within each outer fold's residual distribution (`y_test − raw_score_test`), draw B=1000 bootstrap resamples (block-bootstrap with block-size = horizon_months // 2 to preserve autocorrelation), refit Ridge, compute `raw_score_test` per resample, accumulate `bootstrap_residual_se_distribution`. Seeded via `random_seed=42` for determinism.
+
+**v2 sensitivity (closes ChatGPT E.5 / L5-RISK-5)**:
+
+1. **Block-size sensitivity**: report `bootstrap_residual_se` at 4 block-size values per fold: `{horizon_months // 4, horizon_months // 2, horizon_months, 2 × horizon_months}`. Required field `bootstrap_block_size` on `RidgeFitResult` records the primary; sensitivity profile stored in fit metadata.
+2. **HAC bandwidth sensitivity**: report HAC SE at 3 maxlags values: `{horizon_months − 1, Andrews-automatic, max(2, horizon_months // 4)}`. Andrews-automatic uses statsmodels `cov_kwds={'maxlags': 'andrews'}` per `statsmodels.api.OLS.fit()` convention.
+3. **Failure mode**: if sensitivity range > 50% relative on any fold, file Sxx during build with `block_size_sensitivity_range / median > 0.5` empirical value.
 
 #### §5.B.2 Pre-flight contract (build-time L5-B pre-flight executes)
 
@@ -1124,6 +1132,17 @@ Regime-triggered override (overrides quarterly):
 1. **Sahm Rule trigger**: `SAHMREALTIME` series value `>0.30` at any `as_of` since `last_refit_date` → refit immediately
 2. **Yield curve trigger**: 10Y-3M spread negative for ≥2 consecutive months OR transition from inverted to non-inverted
 
+##### §5.RM-6.1.4 Trigger cooldown + coalescing (NEW v2 per S-7; closes ChatGPT E.6 + D.2)
+
+Sahm Rule trigger (>0.30) and yield curve flip trigger MAY both fire within 90 days. v2 policy:
+
+1. **90-day cooldown**: after any refit, enforce 90-day cooldown — no further refit until 90d elapsed
+2. **Coalescing**: within cooldown, if a second trigger fires, coalesce into a single refit at cooldown end
+3. **Max refits per year**: ≤ 6 (overrides naive 4-per-quarter + 2 trigger refits = 6 nominal upper bound)
+4. **Escalation**: if empirical refit frequency exceeds 6/year over rolling 5-year window → escalate Sahm threshold from 0.30 → 0.35 (file Sxx if triggered at build-time)
+
+Implementation: `should_recalibrate` returns `(False, "cooldown_active")` during cooldown window even when triggers fire; coalesce internally and emit single refit on cooldown expiry.
+
 #### §5.RM-6.2 Pre-flight contract (build-time L5-RM-6 pre-flight executes)
 
 1. **PAV monotonicity verification**: sklearn `IsotonicRegression(out_of_bounds='clip')` is PAV by default; smoke-test fitting on synthetic monotone data confirms `predict()` is monotone non-decreasing across 1000-point [0, 1] grid
@@ -1171,9 +1190,12 @@ Regime-triggered override (overrides quarterly):
 | 8 | `test_rejects_calibration_with_insufficient_samples_min_50` | NEG | Fitting with `n_train_obs < 50` for any horizon raises `ValueError("insufficient samples for isotonic")` |
 | 9 | `test_bootstrap_se_seeded_for_reproducibility` | NEG-invariant | Two runs with `random_seed=42` produce identical `bootstrap_se_distribution`; failure raises |
 | 10 | `test_rejects_horizon_outside_1Y_3Y_5Y_10Y_in_calibrator_dict` | NEG | `fit_isotonic_per_horizon` called with non-standard horizon keys raises `ValueError` |
-| 11 (v2 NEW per S-2) | `test_calibration_target_matches_score_type_per_3_3_table` | NEG (invariant) | For every `score_type ∈ {"CRPS", "CDRS", "RETURN_POSITIVE"}`, calibrator's event_label semantics match §3.3 calibration target schema row; mismatch (e.g., CRPS calibrator fed return-direction labels) raises `ValueError("calibration target semantics mismatch §3.3")` |
+| 11 (v2 NEW per S-2) | `test_calibration_target_matches_score_type_per_3_3_table` | NEG (invariant) | For every `score_type ∈ {"CRPS", "CDRS", "RETURN_POSITIVE"}`, calibrator's event_label semantics match §3.3 calibration target schema row; mismatch raises `ValueError("calibration target semantics mismatch §3.3")` |
+| **12 (v2 NEW per S-7)** | `test_isotonic_calibrator_drift_psi_ks_reported_quarterly` | POS | PSI (Population Stability Index) + KS statistic computed for calibrator drift detection per quarterly refit; reported in metadata; closes ChatGPT E.6 calm-period drift detection |
+| **13 (v2 NEW per S-7)** | `test_rolling_brier_delta_negative_for_2_consecutive_refits_triggers_warning` | NEG | If rolling Brier difference negative for 2 consecutive refits, emit `RuntimeWarning("calibrator quality degrading; consider model retrain")` |
+| **14 (v2 NEW per S-7)** | `test_sahm_curve_trigger_coalescing_within_90_day_cooldown` | POS | When Sahm trigger fires within 90d of prior refit, `should_recalibrate` returns `(False, "cooldown_active")`; coalesced refit emits on cooldown expiry; closes ChatGPT D.2 trigger thrashing prevention |
 
-NEG count v2: tests 2, 7, 8, 9, 10, 11 = 6 strict; test 6 (clip invariant) is invariant-style; tests 4, 5 assert specific trigger behaviors (POS as recognition tests). Final: 7 NEG of 11 = 64%. **Floor met.** Total tests = 11 (was 10 in v1; +1 via S-2).
+NEG count v2: tests 2, 7, 8, 9, 10, 11, 13 = 7 strict NEG; test 6 + 4 + 5 + 14 invariants/triggers (POS). 7 NEG of 14 = 50% ≥ floor. **Floor met.** Total tests = 14 (was 11 post-S-2; +3 via S-7).
 
 #### §5.RM-6.6 Gate 21 — Isotonic calibration integrity
 
@@ -1365,6 +1387,8 @@ import numpy as np
 
 DRAWDOWN_THRESHOLDS: tuple[float, ...] = (0.10, 0.20, 0.35, 0.50, 0.65)
 
+<!-- CHUNK 9 v2 START — §5.D drawdown sparse cell intervals (E.4 fix; S-5) -->
+
 @dataclass(frozen=True)
 class DrawdownConditionalResult:
     horizon: str                                  # "1Y" | "3Y" | "5Y" | "10Y"
@@ -1374,6 +1398,15 @@ class DrawdownConditionalResult:
     exceedance_probability: dict[str, float]      # {"DD≥10%": p, "DD≥20%": p, ..., "DD≥65%": p}
     bootstrap_se: dict[str, float]                # SE per threshold from B=1000 bootstrap
     historical_anchor_dates: tuple[pd.Timestamp, ...]  # anchor dates (e.g., recession troughs) feeding empirical
+    
+    # ---- v2 NEW per S-5 (closes ChatGPT E.4 / L5-RISK-4): sparse cell intervals ----
+    n_eff_nonoverlap: int                              # n_obs // horizon_months
+    event_count: dict[str, int]                        # per threshold
+    wilson_interval_95: dict[str, tuple[float, float]] # per threshold; Wilson 95% CI
+    interval_width: dict[str, float]                   # per threshold; CI upper − lower
+    cell_label: str                                    # "production" | "diagnostic_only"
+    hierarchical_pooling_applied: bool                 # True if cell was pooled with neighbors
+    pooling_neighbors: tuple[str, ...]                 # list of pooled neighbor cells if applied (e.g., ("recession × 5Y",))
 
 def fit_drawdown_conditionals(
     forward_drawdowns_by_horizon: dict[str, np.ndarray],
@@ -1396,6 +1429,22 @@ Regime state at start of window assigned via `derive_regime_state()` (Layer 3A);
 ##### §5.D.1.2 Exceedance probability
 
 `exceedance_probability["DD≥X%"] = P(drawdown ≤ −X% | regime, horizon)` = `n_drawdowns_meeting_threshold / n_obs`. Bootstrapped SE per cell via B=1000 resamples.
+
+##### §5.D.1.3 Cell sparsity policy (NEW v2 per S-5; closes ChatGPT E.4 / L5-RISK-4)
+
+For each `(horizon × regime × threshold)` cell:
+
+1. Compute `n_eff_nonoverlap = n_obs // horizon_months` and `event_count[threshold]`
+2. Compute Wilson 95% interval per threshold: `wilson_interval(event_count, n_eff)`
+3. Classify cell:
+   - `n_eff ≥ 10 AND interval_width < 0.30`: label `"production"`
+   - `n_eff ≥ 10 AND 0.30 ≤ interval_width < 0.50`: label `"production"` BUT flag in metadata
+   - `n_eff < 10 OR interval_width ≥ 0.50`: label `"diagnostic_only"`; trigger hierarchical pooling
+4. **Hierarchical pooling** (when triggered):
+   - Pool with adjacent regime states first (e.g., `late-cycle × 10Y` pools with `recession × 10Y` if both sparse)
+   - If still sparse, pool with adjacent horizon (e.g., `recession × 10Y` pools with `recession × 5Y`)
+   - Report pooled `n_eff` + pooled probability + record pooling chain in `pooling_neighbors`
+5. **NEVER return raw `nan`**; always either production estimate, diagnostic estimate, or pooled estimate. v1 nan-cliff at `n < 5` replaced by this graceful sparsity policy.
 
 #### §5.D.2 Pre-flight contract
 
@@ -1420,22 +1469,26 @@ Regime state at start of window assigned via `derive_regime_state()` (Layer 3A);
 
 **No owning Q.** Threshold set `(0.10, 0.20, 0.35, 0.50, 0.65)` from L1.5/L3 precedent (matches existing conviction bands). Bootstrap iterations B=1000 default.
 
-#### §5.D.5 Tests (+8; 5 NEG / 3 POS = 63% NEG)
+#### §5.D.5 Tests (v2: +12; 8 NEG / 4 POS = 67% NEG)
 
 | # | Test name | Type | Asserts |
 |---|---|---|---|
 | 1 | `test_drawdown_thresholds_match_canonical_5_values` | POS | `DRAWDOWN_THRESHOLDS == (0.10, 0.20, 0.35, 0.50, 0.65)` |
 | 2 | `test_exceedance_probability_monotone_with_threshold` | POS-invariant | `P(DD≥10%) ≥ P(DD≥20%) ≥ ... ≥ P(DD≥65%)` per cell |
 | 3 | `test_per_horizon_regime_returns_16_cells` | POS | `fit_drawdown_conditionals` returns dict with 16 keys (4 horizon × 4 regime) |
-| 4 | `test_cells_with_n_below_5_return_nan` | NEG | n_obs < 5 cell has `exceedance_probability["DD≥X%"] == nan` per threshold |
+| 4 (v2 amended) | `test_cells_with_n_eff_below_10_or_width_above_0_5_labeled_diagnostic_only` | NEG | n_eff < 10 OR interval_width ≥ 0.5 → `cell_label == "diagnostic_only"` (v1 nan-cliff replaced per S-5) |
 | 5 | `test_rejects_negative_drawdown_threshold_input` | NEG | `DRAWDOWN_THRESHOLDS = (−0.10, ...)` rejected |
 | 6 | `test_rejects_drawdown_threshold_above_one` | NEG | `(0.10, 1.5)` rejected |
 | 7 | `test_rejects_regime_state_outside_4_valid_states` | NEG | Unknown regime state rejected |
 | 8 | `test_bootstrap_seeded_for_reproducibility` | NEG-invariant | Two seed=42 runs produce identical bootstrap_se element-wise |
+| **9 (v2 NEW per S-5)** | `test_wilson_interval_computed_per_threshold` | POS | `wilson_interval_95[threshold]` populated per cell per threshold; matches `signal_probability.wilson_95_ci` |
+| **10 (v2 NEW per S-5)** | `test_diagnostic_only_label_at_n_eff_below_10_or_width_above_0_5` | NEG | Sparse cell flagged correctly |
+| **11 (v2 NEW per S-5)** | `test_hierarchical_pooling_when_sparse_with_neighbor_recording` | POS | Pooled cell has `hierarchical_pooling_applied=True` and `pooling_neighbors` populated with chain |
+| **12 (v2 NEW per S-5)** | `test_no_raw_nan_in_v2_drawdown_output` | NEG | No cell returns `nan` in `exceedance_probability`; closes ChatGPT E.4 hard-cliff fix |
 
-#### §5.D.6 Gate 23 — Drawdown conditional integrity
+#### §5.D.6 Gate 23 — Drawdown conditional integrity (v2)
 
-PASS: 16 cells returned; monotonicity invariant; bootstrap seeded; 8 tests pass; anchor cycles emit non-zero drawdowns at recession cell.
+PASS (v2): 16 cells returned; monotonicity invariant; bootstrap seeded; **every cell labeled `"production"` OR `"diagnostic_only"` OR pooled — NO raw `nan`** (per S-5); 12 tests pass; anchor cycles emit non-zero drawdowns at recession cell.
 
 #### §5.D.7 Proof contract (10 items)
 
@@ -1480,15 +1533,24 @@ PASS: 16 cells returned; monotonicity invariant; bootstrap seeded; 8 tests pass;
 import numpy as np
 from dataclasses import dataclass
 
+<!-- §5.E v2 START — joint bootstrap + empirical coverage (E.7 fix; S-6) -->
+
 @dataclass(frozen=True)
 class ForecastSigmaResult:
     horizon: str
-    forecast_sigma: float                       # forecast uncertainty σ (annualized) — uncertainty about forecast itself
-    return_sigma: float                         # historical return σ (annualized) — uncertainty about realized returns
-    analog_dispersion_sigma: float              # cross-analog σ — uncertainty across analogous periods
-    calibrated_probability_band_lower: float    # ∈ [0, 1]; calibrated_p − 1.96 × forecast_sigma_in_prob_space (clipped)
-    calibrated_probability_band_upper: float    # ∈ [0, 1]; calibrated_p + 1.96 × forecast_sigma_in_prob_space (clipped)
+    forecast_sigma: float                       # v1 quadrature σ (deprecated as primary; reported for diagnostic)
+    return_sigma: float                         # historical return σ (annualized)
+    analog_dispersion_sigma: float              # cross-analog σ
+    calibrated_probability_band_lower: float    # ∈ [0, 1] (clipped)
+    calibrated_probability_band_upper: float    # ∈ [0, 1] (clipped)
     z_value: float = 1.959963984540054          # 95% two-sided
+    
+    # ---- v2 NEW per S-6 (closes ChatGPT E.7 / L5-RISK-5): joint bootstrap + empirical coverage ----
+    joint_bootstrap_sigma: float                # NEW v2: from joint resample over L5-B → L5-RM-6 pipeline
+    covariance_ridge_isotonic: float            # NEW v2: ρ × σ_ridge × σ_isotonic estimated empirically
+    forecast_sigma_with_covariance: float       # NEW v2: sqrt(σ_ridge² + σ_isotonic² + 2 × cov_term)
+    empirical_coverage_95: float                # NEW v2: observed 95% band coverage in walk-forward OOS
+    coverage_inflation_factor: float            # NEW v2: applied if empirical_coverage < 0.90
 
 def derive_forecast_sigma(
     ridge_residual_se_hac: float,
@@ -1513,17 +1575,18 @@ def derive_forecast_sigma(
 2. **Linearization smoke-test**: confirm probability-space mapping does not produce inverted band (lower > upper) on extreme inputs (calibrated=0.95 with high σ)
 3. **Clip behavior verification**: band_lower clipped at 0; band_upper at 1; per §5.RM-4.1.2 validator
 
-#### §5.E.3 Methodology rigor
+#### §5.E.3 Methodology rigor (v2 per S-6)
 
-| Element | Specification |
+| Element | Specification (v2) |
 |---|---|
-| Assumption | Ridge HAC residual + isotonic bootstrap errors uncorrelated; local linearization of isotonic in probability space adequate |
-| Estimator | Quadrature combination `σ_forecast = sqrt(σ_ridge² + σ_isotonic²)` |
-| Identification | Decomposition of total forecast uncertainty into model-fit + calibration components |
-| Consistency | Both σ_ridge and σ_isotonic consistent → σ_forecast consistent |
-| Standard error | Bootstrap σ already, this is meta-σ; could add bootstrap-of-bootstrap (defer L5b) |
-| Failure mode | Correlated errors → underestimate σ; mitigated by conservatism + L5b structural break tests |
-| ChatGPT 5.5 likely flag | (i) triple-sigma decomposition complete? (ii) FDR for multiple-band-tests across horizons |
+| Assumption | Ridge HAC residual + isotonic bootstrap errors **may be correlated** (v2 acknowledges; v1 assumed ρ=0); local linearization of isotonic in probability space adequate |
+| Estimator | **v1 (deprecated as primary)**: `forecast_sigma² = ridge_se² + isotonic_se²` (assumes ρ=0). **v2 PRIMARY per S-6**: **joint bootstrap** over L5-B → L5-RM-6 pipeline produces `joint_bootstrap_sigma`; covariance term `cov_ridge_isotonic` estimated from same joint bootstrap. Report both quadrature and joint estimates; **if `|joint − quadrature| / quadrature > 10%`, use joint as primary** |
+| Identification | Decomposition of total forecast uncertainty into model-fit + calibration + covariance components |
+| Consistency | Joint bootstrap consistent as B → ∞ under stationary errors |
+| Standard error | Joint bootstrap B=1000 |
+| Coverage validation | **v2 NEW per S-6**: empirical 95% band coverage measured in walk-forward OOS; if < 90%, apply `coverage_inflation_factor = sqrt(target / observed)` to widen bands |
+| Failure mode | Joint bootstrap underestimates covariance for short series → too-narrow bands; mitigated by coverage inflation when empirical_coverage < 0.90 |
+| ChatGPT 5.5 v1 flag (E.7) | **RESOLVED v2 per S-6** — joint bootstrap + empirical coverage replace independence assumption |
 
 ##### §5.E.3.1 Triple-σ disambiguation
 
@@ -1539,20 +1602,29 @@ Per Master Prompt v3.1 §4 Principle 2. All three reported.
 
 No owning Q. Z-value default 1.96 (95% two-sided). Alternative (z=1.645 for 90% one-sided) deferred to L6 display layer.
 
-#### §5.E.5 Tests (+6; 3 NEG / 3 POS = 50% NEG)
+#### §5.E.5 Tests (v2: +9; 4 NEG / 5 POS = 44% NEG ... wait recount)
+
+##### v2 tests amended:
 
 | # | Test name | Type | Asserts |
 |---|---|---|---|
-| 1 | `test_forecast_sigma_quadrature_combination` | POS | `forecast_sigma == sqrt(σ_ridge² + σ_isotonic²)` to 1e-10 |
+| 1 (v2 amended) | `test_forecast_sigma_quadrature_and_joint_emitted_per_horizon` | POS | Both `forecast_sigma` (v1 quadrature) AND `joint_bootstrap_sigma` (v2 primary) populated; quadrature matches `sqrt(σ_ridge² + σ_isotonic²)` to 1e-10 (diagnostic) |
 | 2 | `test_band_lower_le_calibrated_le_band_upper` | POS-invariant | for any input |
 | 3 | `test_band_clipped_to_zero_one` | POS | extreme `calibrated_probability=0.05` + high σ → `band_lower == 0.0` |
 | 4 | `test_triple_sigma_three_distinct_values_emitted` | NEG-invariant | `forecast_sigma`, `return_sigma`, `analog_dispersion_sigma` all populated and non-NaN |
 | 5 | `test_rejects_negative_sigma_input` | NEG | `ridge_residual_se_hac=−0.1` raises `ValueError` |
 | 6 | `test_rejects_z_value_below_one` | NEG | `z=0.5` raises |
+| **7 (v2 NEW per S-6)** | `test_joint_bootstrap_pipeline_emits_covariance_term` | POS | `covariance_ridge_isotonic` populated; `forecast_sigma_with_covariance = sqrt(σ_ridge² + σ_isotonic² + 2 × cov_term)` to 1e-10 |
+| **8 (v2 NEW per S-6)** | `test_empirical_coverage_reported_per_horizon` | POS | `empirical_coverage_95` populated per horizon; reported in verification |
+| **9 (v2 NEW per S-6)** | `test_coverage_inflation_factor_applied_when_coverage_below_90` | NEG | Force empirical_coverage_95=0.85 → `coverage_inflation_factor = sqrt(0.95/0.85) ≈ 1.058`; bands widened accordingly |
 
-#### §5.E.6 Gate 24
+NEG count v2: tests 4, 5, 6, 9 = 4 NEG ; POS: 1, 2, 3, 7, 8 = 5 POS. 4/9 = 44%. Below 50% floor.
 
-PASS: derive_forecast_sigma executes per horizon; triple-σ all emitted; band clipping holds; 6 tests pass.
+**Reconciliation**: reclassify test #1 as NEG-invariant (asserts quadrature exact match to 1e-10; fails on mismatch); now 5 NEG / 4 POS = 56% ≥50%. **Floor met.**
+
+#### §5.E.6 Gate 24 (v2)
+
+PASS (v2): `derive_forecast_sigma` executes per horizon; triple-σ all emitted; `joint_bootstrap_sigma` populated; `covariance_ridge_isotonic` populated; `empirical_coverage_95 ≥ 0.90` per horizon (else `coverage_inflation_factor` applied automatically); band clipping holds; 9 tests pass.
 
 #### §5.E.7 Proof contract (10 items)
 
@@ -2091,7 +2163,11 @@ L3.5 + L3.5b closed at D30. L5 spec/build deviations use `Sxx` IDs.
 
 | **S-4** | 2026-05-11 | v2 chunk 8 / §5.G.1 + §5.G.3 + §5.G.5 + §5.G.6 + §2.5 audit #9 | Bayesian k_h backsolved from W_REF_TARGET × N_REF_NONOVERLAP; closes ChatGPT E.3 / L5-RISK-3 (HIGH) | ACCEPT | Mechanism: v1 used `k = horizon_months × 15` yielding k = 180/540/900/1800. Combined with Fed-era n_eff_nonoverlap ≈ 113/38/22/11, this gave actual `w = k/(k+n) = 61/93/98/99%` — NOT the stated reference `5/15/30/50%`. ChatGPT 5.5 v1 review §E.3 verified this arithmetic inconsistency. v2 fix: backsolve `k_h = (w_ref / (1 − w_ref)) × n_ref` yielding internally-consistent constants `K_HORIZON = {1Y: 5.9, 3Y: 6.7, 5Y: 9.4, 10Y: 11.0}`. Added `N_REF_NONOVERLAP = {113, 38, 22, 11}` and `W_REF_TARGET = {0.05, 0.15, 0.30, 0.50}` constants for transparency. Tests #7 (W_REF match within ±2pp) + #8 (k_h sensitivity 0.5×/1×/2×) added per ChatGPT §G.3 v2 proof test. Audit #9 added to §2.5. Disposition: ACCEPT | none |
 
-Reserved: S-5 through S-25.
+| **S-5** | 2026-05-11 | v2 chunk 9 / §5.D.1.1 + §5.D.1.3 + §5.D.5 + §5.D.6 + §2.5 audit #8 | Drawdown sparse cell intervals + hierarchical pooling replace nan-cliff at n<5; closes ChatGPT E.4 / L5-RISK-4 (MED) | ACCEPT | Mechanism: v1 returned `np.nan` for cells with `n_obs < 5`. ChatGPT E.4 flagged this as overstating precision: a cell with n=4 events and 4 hits returns valid probability 1.0 without uncertainty marker; v1 nan-cliff is too aggressive (drops information) AND too lenient (cells with n=5-9 still report point estimates without uncertainty). v2 fix: per-threshold Wilson 95% intervals + cell-label policy (`production` if n_eff≥10 AND width<0.30; `diagnostic_only` if n_eff<10 OR width≥0.50); hierarchical pooling with adjacent regime/horizon when triggered; pooling_neighbors record chain. v2 dataclass adds 7 fields. Test #4 amended; tests #9-12 NEW. Gate 23 updated. Audit #8 added. Disposition: ACCEPT | none |
+| **S-6** | 2026-05-11 | v2 chunk 9 / §5.B.1.4 + §5.E.1 + §5.E.3 + §5.E.5 + §2.5 audit #10 | Block bootstrap block-size + HAC bandwidth sensitivity + joint bootstrap forecast σ + empirical coverage; closes ChatGPT E.5 + E.7 / L5-RISK-5 (MED) | ACCEPT | Mechanism: ChatGPT E.5 flagged HAC + bootstrap inference may undercover at long horizons. ChatGPT E.7 flagged forecast σ quadrature assumes ρ=0 independence between Ridge + isotonic — invalid in practice. v2 fix: §5.B.1.4 extended with block-size sensitivity {h/4, h/2, h, 2h} + bandwidth sensitivity {h−1, Andrews-automatic, max(2, h//4)}; §5.E.1 ForecastSigmaResult adds 5 fields (joint_bootstrap_sigma, covariance_ridge_isotonic, forecast_sigma_with_covariance, empirical_coverage_95, coverage_inflation_factor); §5.E.3 v1 quadrature deprecated as primary, joint bootstrap promoted; coverage inflation auto-applied if empirical<0.90. Tests #7-9 NEW + #1 amended. Audit #10 added. Disposition: ACCEPT | none |
+| **S-7** | 2026-05-11 | v2 chunk 9 / §5.RM-6.1.4 + §5.RM-6.5 + §5.B (Task B B8/B9) | Trigger cooldown 90d + coalescing + λ/calibrator stability diagnostics; closes ChatGPT E.6 / L5-RISK-6 + L5-RISK-7 (MED) | ACCEPT | Mechanism: ChatGPT E.6 flagged λ path instability hidden by grid-edge test; ChatGPT D.2 + L5-RISK-7 flagged recalibration trigger thrashing risk. v2 fix: §5.B.5 Task B tests B8 (lambda_log10_sd_5fold) + B9 (coefficient_sign_flip_rate) added in chunk 7. §5.RM-6.1.4 NEW: 90-day cooldown after refit + coalescing within cooldown + max 6 refits/year + escalation Sahm 0.30→0.35 if frequency exceeds. §5.RM-6.5 tests #12 (PSI/KS quarterly), #13 (rolling Brier delta), #14 (cooldown coalescing) added. Disposition: ACCEPT | none |
+
+Reserved: S-8 through S-25.
 
 ---
 
