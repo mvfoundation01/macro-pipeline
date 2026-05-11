@@ -1,11 +1,11 @@
-# LAYER 5 BUILD SPEC — Authoring Summary (v2)
+# LAYER 5 BUILD SPEC — Authoring Summary (v3)
 
 **Spec file**: `LAYER_5_BUILD_SPEC.md`
 **Branch**: `claude/layer-5-spec` (base: `590e4a5` = main = L3.5b merge commit)
-**Authoring agent**: Claude Code under V's role-widening directive (v1: 2026-05-10; v2 incorporation: 2026-05-11)
-**Status**: **v2 draft complete — closes ChatGPT 5.5 v1 review 3 HIGH + 4 MED + 8 risk items; ready for V freeze + ChatGPT 5.5 v2 review**
-**v1 predecessor**: tag `layer5-spec-v1` at `d776eb4` (preserved as historical snapshot)
-**v2 tag**: `layer5-spec-v2` at chunk-10 closure SHA
+**Authoring agent**: Claude Code under V's role-widening directive (v1: 2026-05-10; v2 incorporation: 2026-05-11; **v3 surgical patch: 2026-05-11**)
+**Status**: **v3 draft complete — closes ChatGPT 5.5 v2 review surgical findings (E.1 partial → closed; D.2 new MED; E.3/E.4/E.6 cleanup); ready for V freeze + ChatGPT 5.5 v3 closure verification**
+**Predecessor tags preserved**: `layer5-spec-v1` at `d776eb4`; `layer5-spec-v2` at `76ca810` (both historical)
+**v3 tag**: `layer5-spec-v3` at chunk-11 closure SHA
 **Date**: 2026-05-11
 
 ---
@@ -27,6 +27,8 @@
 | 10 (v2) | ~1.9 | 1-2 | closure + risk register + tag v2 |
 | **v2 total** | **~10.75** | **7.5-11.5** | v2 incorporation complete |
 | **v1 + v2 grand total** | **~24.75** | budget 9-14 (v1) + 7.5-11.5 (v2) = 16.5-25.5 | within ceiling |
+| 11 (v3) | ~3.4 | 2-4 | surgical patch: E.1 hardened + D.2 Task B split + E.3/E.4/E.6 cleanup (S-8 + S-9) |
+| **v1 + v2 + v3 grand total** | **~28.15** | combined budget 18.5-29.5 | within ceiling |
 
 ---
 
@@ -71,8 +73,10 @@
 | S-5 | 2026-05-11 | 9 (v2) | Drawdown sparse cell intervals (E.4) | ACCEPT |
 | S-6 | 2026-05-11 | 9 (v2) | Block bootstrap + forecast band coverage (E.5+E.7) | ACCEPT |
 | S-7 | 2026-05-11 | 9 (v2) | Calibrator stability + trigger cooldown (E.6) | ACCEPT |
+| **S-8** | 2026-05-11 | **11 (v3)** | **RM-6 calibration label semantics + 25-calibrator dispatch (closes E.1 partially-closed → CLOSED)** | ACCEPT |
+| **S-9** | 2026-05-11 | **11 (v3)** | **L5-B Task B split into B1 + B2 (closes D.2 RETURN_POSITIVE circularity)** | ACCEPT |
 
-**Total cumulative L5 Sxx: 7.** All ACCEPT. None require V override. Reserved S-8 through S-25 for L5 build deviations.
+**Total cumulative L5 Sxx: 9.** All ACCEPT. None require V override. Reserved S-10 through S-25 for L5 build deviations.
 
 ---
 

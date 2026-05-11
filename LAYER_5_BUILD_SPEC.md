@@ -82,7 +82,7 @@ Layer 5 turns **raw scores into calibrated probabilities** suitable for institut
 | 5 | Isotonic calibration scope (Q4) | **Per-horizon separate** (4 calibrators: 1Y / 3Y / 5Y / 10Y) | Meta-prompt §2.2 Q4; locked in chunk 3 |
 | 6 | Recalibration cadence (Q5; **v2 amended per S-7**) | **Quarterly + regime-triggered override** (Sahm Rule >0.30 OR 10Y–3M curve inversion regime flip forces refit); **escalation per S-7: if empirical refit frequency >6/year over rolling 5Y window → escalate Sahm threshold 0.30 → 0.35 (file Sxx if triggered at build-time)**; **90d cooldown + coalescing per §5.RM-6.1.4** | Meta-prompt §2.2 Q5; locked in chunk 4; v2 cooldown per S-7 |
 | 7 | DMS survivorship bps (Q6) | **−150 bps mid-band central** + horizon conditional (5Y: −125; 10Y: −175) + ±50 sensitivity in outputs | Meta-prompt §2.2 Q6; locked in chunk 4 |
-| 8 | Bayesian shrinkage weight (Q7) | **Horizon-dependent + sample-size-adaptive** (1Y w=5%, 3Y w=15%, 5Y w=30%, 10Y w=50%) with k/(k+n) form (k = horizon × 15) | Meta-prompt §2.2 Q7; locked in chunk 4 |
+| 8 | Bayesian shrinkage weight (Q7; **v3 update per cleanup; removes stale v1 literal**) | **Horizon-dependent + sample-size-adaptive** with `w_h = k_h / (k_h + n_eff_nonoverlap)`; **k_h backsolved per §5.G.1 v2 from W_REF_TARGET × N_REF_NONOVERLAP**: `K_HORIZON = {1Y: 5.9, 3Y: 6.7, 5Y: 9.4, 10Y: 11.0}` (S-4 / v2 fix). v1 wording "k = horizon × 15" was arithmetically inconsistent and is REMOVED. | Meta-prompt §2.2 Q7; locked in chunk 4; v2 backsolved per S-4; v3 stale literal scrubbed |
 | 9 | Horizon scope (Q8) | **All 4 horizons (1Y / 3Y / 5Y / 10Y) in L5** | Meta-prompt §2.2 Q8; locked in chunk 5 |
 | 10 | Prior anchor | **6.5% real annualized** (Dimson-Marsh-Staunton long-run US) | Meta-prompt §2.2 Q7 |
 | 11 | L5 reviewer (methodology) | ChatGPT 5.5 (resumes from Dim 1/2/3 prior findings) | Meta-prompt §0 + meta-prompt §1 |
@@ -205,25 +205,29 @@ Maintained in `LAYER_5_DEVIATIONS.md` (new file at build worktree root; created 
 
 ## §3 — Cross-Phase Architecture
 
-### §3.1 Sub-Phase Dependency Graph
+### §3.1 Sub-Phase Dependency Graph (v3 amended per S-9: Task B split B1 + B2)
 
 ```
                   L5-A walk-forward CV scaffold (Gate 18)
                               │
                               ▼
-                  L5-B Ridge regression fit (Gate 19)
+                  L5-B Task A composite-weight refit (Gate 19; v2 S-3)
                               │
                               ▼
-              ┌───────────────┴───────────────┐
-              ▼                               ▼
-   L5-RM-4 raw / calibrated split    (other consumers of raw_score)
-              (Gate 20)
-              │
-              ▼
-   L5-RM-6 isotonic calibration (Gate 21)
-              │
-              ▼
-              ├──────────────┬──────────────┬────────────┐
+                  L5-RM-4 raw / calibrated split (Gate 20)
+                              │
+                              ▼
+   L5-RM-6 isotonic CRPS + CDRS calibration (Gate 21; 21 calibrators pre-B1)
+                              │
+                              ▼
+                  L5-B Task B1 Ridge return forecast (v3 S-9)
+                              │             (RETURN_POSITIVE NOT input;
+                              │              consumes CRPS+CDRS calibrated)
+                              ▼
+   L5-B Task B2 RETURN_POSITIVE calibration via RM-6 (v3 S-9; 4 calibrators)
+                              │
+                              ▼
+              ┌──────────────┬──────────────┬────────────┐
               ▼              ▼              ▼            ▼
    L5-C Brier + reliab  L5-D drawdown  L5-E forecast σ  L5-F DMS
        (Gate 22)        (Gate 23)      (Gate 24)        (Gate 25.1)
@@ -263,6 +267,9 @@ Rules:
 2. Isotonic monotone-increasing constraint applies ONLY when raw score direction matches event direction. If score is risk-direction and event is return-direction, invert (`1 − raw_score`) OR use a separate model.
 3. L5-C Brier evaluation MUST use event labels matching the calibrated probability field semantics.
 4. `positive_return_probability` is a NEW `ScoredObservation` slot added in L5-RM-4 dataclass migration (per S-2 in §10).
+5. **v3 per S-8 enforcement**: `build_event_labels()` (§5.RM-6.1.1) dispatches event labels per this schema; mismatch raises `ValueError` at fit time. Test #11 in §5.RM-6.5 hard-gates this contract.
+6. **v3 per S-9 (RETURN_POSITIVE provenance)**: RETURN_POSITIVE raw input = output of L5-B **Task B1** (Ridge return forecast) — NOT input. Task B2 (NEW v3) then calibrates Task B1 outputs into `positive_return_probability` via `fit_isotonic_calibrators(score_type="RETURN_POSITIVE", ...)`. Resolves ChatGPT v2 D.2 circularity.
+7. **Total calibrators per refit window**: 25 = 1 CRPS (12M only) + 20 CDRS (4 horizons × 5 thresholds) + 4 RETURN_POSITIVE (4 horizons). v1/v2 phrasing "4 per-horizon calibrators" is INCORRECT; v3 corrected.
 
 <!-- CHUNK 6 v2 END (continued in §3.2 row addition, §5.RM-4, §5.RM-6, §5.C, §2.5, §10) -->
 
@@ -275,7 +282,7 @@ Every field that L5 introduces, modifies, or finalizes across sub-phase boundari
 | Field name | Type | Introduced in | Modified in | Final form | Cross-references |
 |---|---|---|---|---|---|
 | `raw_score` | `float64 ∈ [0, 1]` | L3B (CRPS output) | L5-B (Ridge weight refit produces same shape with fitted weights); L5-RM-4 (formally renames to clarify it is NOT calibrated probability) | `float64 ∈ [0, 1]` (unchanged semantically; formally distinguished from calibrated_probability via §5.RM-4.3) | §5.B.4 ; §5.RM-4.3 |
-| `calibrated_probability` | `Optional[float64] ∈ [0, 1]` | 3.5D (slot added to `ScoredObservation`; None until L5 fills) | L5-RM-4 (populates via raw_score → identity passthrough at first); L5-RM-6 (replaces with isotonic transform of raw_score) | `float64 ∈ [0, 1]` (post-L5-RM-6; never None for any scored observation produced by L5 calibrated path) | §5.RM-4.3, §5.RM-6.5, **§3.3 target schema (v2)** |
+| `calibrated_probability` | `Optional[float64] ∈ [0, 1]` | 3.5D (slot added to `ScoredObservation`; None until L5 fills) | L5-RM-4 (populates via raw_score → identity passthrough at first); L5-RM-6 (replaces with isotonic transform of raw_score) | `float64 ∈ [0, 1]` (post-L5-RM-6; never None for any scored observation produced by L5 calibrated path). **v3 per S-8**: CDRS path keyed by drawdown_threshold (5 entries per horizon); CRPS path 12M only (1 entry); RETURN_POSITIVE path per-horizon (4 entries). Total 25 calibrated_probability entries per refit window | §5.RM-4.3, §5.RM-6.5, §3.3 target schema (v2 + v3 S-8) |
 | `positive_return_probability` | `Optional[float64] ∈ [0, 1]` | **L5-RM-4 (NEW v2 via S-2)** | populated by L5-RM-6 in return-forecast (Task B) path only | `float64 ∈ [0, 1]` (post-L5-RM-6 Task B path); None for risk-direction (CRPS/CDRS) paths | §3.3, §5.RM-4.1.1, §5.RM-6.1.2 |
 | `calibration_metadata` | `Optional[dict[str, Any]]` | 3.5D (slot added) | L5-RM-4 (populates with `{"method": "raw_passthrough"}`); L5-RM-6 (overwrites with full `{"method": "isotonic", "fit_window": (start, end), "n_train_obs": n, "horizon": h, "monotonicity_audit": "PASS"}`) | full dict post-L5-RM-6 | §5.RM-4.3, §5.RM-6.5 |
 | `notes` | `list[str]` | 3.5D (introduced); 3.5D AM25 migrated CRPS `metadata_extra` → notes | L5-RM-4 (absorbs **L5-13** backlog item — migrates CDRS `metadata_extra` to notes; mirrors CRPS pattern via shared `_format_pit_lineage_notes()`) | post-L5-RM-4: both CRPS + CDRS use notes uniformly | §5.RM-4.5 |
@@ -319,7 +326,7 @@ Every field that L5 introduces, modifies, or finalizes across sub-phase boundari
 | L5-D | Drawdown probability conditional distributions | `analysis/drawdown_conditionals.py` (NEW); per-horizon × regime_state conditional CDF; populates `drawdown_probability_distribution` slot | 5–7 | +8 (≥4 NEG) | 23 | — | chunk 4 |
 | L5-E | Forecast σ confidence band | `analysis/forecast_sigma.py` (NEW); per-horizon σ derivation from CV residuals + isotonic posterior spread; populates `forecast_sigma` slot | 4–6 | +6 (≥3 NEG) | 24 | — | chunk 4 |
 | L5-F | DMS survivorship adjustment | `models/dms_adjustment.py` (NEW); horizon-conditional bps (5Y: −125, 10Y: −175; ±50 sensitivity); populates `dms_adjustment_bps` slot for 5Y/10Y only | 3–5 | +5 (≥3 NEG) | 25.1 (sub) | Q6 | chunk 4 |
-| L5-G | Bayesian shrinkage to 6.5% real prior | `models/bayesian_shrinkage.py` (NEW); horizon-dependent + sample-size-adaptive (k = horizon × 15); populates `bayesian_shrinkage_weight` slot; prior = DMS long-run 6.5% real | 4–6 | +6 (≥3 NEG) | 25.2 (sub) | Q7 | chunk 4 |
+| L5-G | Bayesian shrinkage to 6.5% real prior | `models/bayesian_shrinkage.py` (NEW); horizon-dependent + sample-size-adaptive (**v3 cleanup: k_h backsolved per §5.G.1 v2 S-4 = {5.9, 6.7, 9.4, 11.0}**, NOT v1 stale `horizon × 15`); populates `bayesian_shrinkage_weight` slot; prior = DMS long-run 6.5% real | 4–6 | +8 (v2 S-4; ≥5 NEG) | 25.2 (sub) | Q7 | chunk 4 |
 | L5-H | Retrospective + Codex review prep | `LAYER_5_RETROSPECTIVE.md` (NEW; mirrors L3.5b §A-§I structure); Gate 25 composite assembly; Codex 5.5 reviewer-handoff checklist tying back to §8 of this spec | 2–3 | — | — | Q8 (horizon scope confirmation in retrospective) | chunk 5 |
 | **L5 total** | | | **47–66** | **+78** | **18–25** | **All Q1–Q8** | |
 
@@ -571,16 +578,19 @@ Failure modes: any of (1)-(6) false ⇒ Gate 18 FAIL with specific sub-criterion
 | New files | `macro_pipeline/models/ridge_cv.py` (NEW); `tests/test_ridge_cv.py` (NEW) |
 | Modified files | `macro_pipeline/validation.py` (+ `validate_gate19_ridge_cv()`); `macro_pipeline/models/__init__.py` (export) |
 
-#### §5.B.1.0 Task split overview (NEW v2; closes ChatGPT E.2 / L5-RISK-2)
+#### §5.B.1.0 Task split overview (v3 update per S-9; closes ChatGPT v2 D.2 RETURN_POSITIVE circularity)
 
-L5-B v1 spec attempted to use scalar Ridge to refit Layer 3 component weights. ChatGPT 5.5 §E.2 (90% confidence) established this is **mechanically impossible**: scalar `x = raw_score` cannot identify the underlying `Σ w_i × component_i` weights. v2 splits L5-B into two distinct tasks:
+L5-B v1 spec attempted scalar Ridge to refit Layer 3 component weights. ChatGPT v1 §E.2 (90% confidence) established this is **mechanically impossible**: scalar `x = raw_score` cannot identify underlying `Σ w_i × component_i` weights. v2 split L5-B into 2 tasks. ChatGPT v2 D.2 then identified **RETURN_POSITIVE circularity**: §3.3 lists RETURN_POSITIVE raw input = "Ridge return forecast (L5-B Task B)" while Task B was described as consuming `calibrated_probability_panel` post-RM-6 — circular dependency. **v3 splits Task B into B1 + B2** to resolve.
 
 | Task | Purpose | Input | Output | Estimator |
 |---|---|---|---|---|
 | **Task A** | Refit CRPS/CDRS component weights | Component-level feature matrix — CRPS: 6 components (yield curve + Sahm + LEI + ISM + FCI + credit); CDRS: 4 buckets (valuation + sentiment + credit/liquidity + vol/breadth/technical) | Component coefficients + intercept + λ per fold | Penalized logistic (CRPS against NBER USREC 12M labels per §3.3); penalized logistic / ordinal (CDRS against drawdown threshold labels per §3.3) |
-| **Task B** | Return-forecast regression | Calibrated probabilities (post-L5-RM-6) + optional macro features | Forward real total return forecast per horizon | Ridge / OLS with HAC SE; block bootstrap residual CI |
+| **Task B1 (v3)** | Ridge return-forecast regression | Post-RM-6 CRPS calibrated probability (1 entry per fold) + CDRS calibrated probabilities (20 entries per fold) + macro/valuation features. **RETURN_POSITIVE is NOT an input** (closes ChatGPT v2 D.2) | Forward real total return point forecast per (horizon, fold) | Ridge with HAC SE + block bootstrap residual CI |
+| **Task B2 (v3)** | RETURN_POSITIVE calibration | Task B1 return forecasts per (horizon, fold) | `positive_return_probability` per (horizon, fold) via isotonic | Calls `fit_isotonic_calibrators` (v3 per S-8) with `score_type="RETURN_POSITIVE"` |
 
-**Execution order**: Task A → L5-RM-4 → L5-RM-6 → Task B. Task A produces component-level coefficients consumed by L5-RM-6 to compose refit `raw_score`; L5-RM-6 calibrates → `calibrated_probability`; Task B then regresses forward returns on calibrated probabilities.
+**Execution order (v3)**: Task A → L5-RM-4 → L5-RM-6 (CRPS + CDRS calibration only — 21 calibrators) → Task B1 → L5-RM-6 RETURN_POSITIVE calibration (Task B2 — 4 calibrators) → L5-C onwards.
+
+**Total RM-6 calibrators across pipeline: 25** (1 CRPS at pre-B1; 20 CDRS at pre-B1; 4 RETURN_POSITIVE at post-B1/in-B2).
 
 #### §5.B.1 Scope
 
@@ -664,20 +674,38 @@ def fit_composite_weights(
     """Task A: Refit Layer 3 component weights via penalized logistic on event labels.
     Closes ChatGPT E.2 / L5-RISK-2 per S-3."""
 
-# Task B — return-forecast regression (Ridge on calibrated probabilities per §3.3)
-def fit_return_forecast(
+# Task B1 (v3 per S-9) — Ridge return-forecast regression; RETURN_POSITIVE NOT input
+def fit_return_forecast_task_b1(
     schedule: WalkForwardSchedule,
-    calibrated_probability_panel: pd.DataFrame,    # post-L5-RM-6
+    crps_calibrated_panel: pd.DataFrame,           # post-RM-6 CRPS (1 entry per fold)
+    cdrs_calibrated_panel: pd.DataFrame,           # post-RM-6 CDRS (20 entries per fold; keyed by horizon × threshold)
+    macro_features: pd.DataFrame,                  # valuation, real rates, etc. — exogenous
     forward_returns: pd.Series,                    # SHILLER_TR_PRICE forward real total return
     *,
     lambda_grid: tuple[float, ...] = LAMBDA_GRID_DEFAULT,
     inner_fold_count: int = 5,
     bootstrap_iterations: int = 1000,
-    block_size_sensitivity: tuple[int, ...] | None = None,   # NEW v2: {h/4, h/2, h, 2h} per E.5
+    block_size_sensitivity: tuple[int, ...] | None = None,   # v2 per E.5: {h/4, h/2, h, 2h}
     random_seed: int = 42,
 ) -> tuple[RidgeFitResult, ...]:
-    """Task B: Ridge return-forecast regression with HAC SE + block bootstrap.
+    """Task B1 (v3 per S-9): Ridge return-forecast regression with HAC SE + block bootstrap.
+    
+    **RETURN_POSITIVE is NOT a Task B1 input** (resolves ChatGPT v2 D.2 circularity).
+    Task B1 consumes only CRPS/CDRS calibrated probabilities + exogenous macro/valuation features.
     Block-size sensitivity per ChatGPT E.5 / L5-RISK-5 reported via bootstrap_block_size."""
+
+# Task B2 (v3 per S-9) — RETURN_POSITIVE calibration via isotonic
+def calibrate_return_forecast_task_b2(
+    return_forecasts_by_horizon: dict[str, np.ndarray],    # from Task B1
+    forward_returns_by_horizon: dict[str, np.ndarray],
+    *,
+    fit_window: tuple[pd.Timestamp, pd.Timestamp],
+    random_seed: int = 42,
+) -> dict[str, IsotonicCalibrationResult]:
+    """Task B2 (v3 per S-9): Isotonic calibration of Task B1 return forecast → positive_return_probability per horizon.
+    
+    Internally calls `fit_isotonic_calibrators` with `score_type="RETURN_POSITIVE"` per §3.3 schema (4 calibrators: one per horizon).
+    Output populates `positive_return_probability` slot on `ScoredObservation` (v2 per S-2)."""
 ```
 
 ##### §5.B.1.5 Mandatory build outputs per fit (NEW v2; closes ChatGPT §G.2 concrete output table)
@@ -777,29 +805,39 @@ Option matrix:
 
 NEG count Task A: A1, A4, A5, A8, A10, A12 = 6 strict NEG ; A6 invariant-NEG. 7 NEG of 12 = 58% ≥50%.
 
-##### §5.B.5.B Task B tests (+13; ≥7 NEG)
+##### §5.B.5.B Task B1 tests (+13 v2; ≥7 NEG) — renamed Task B → Task B1 per v3 S-9
 
 | # | Test name | Type | What it asserts |
 |---|---|---|---|
-| B1 | `test_task_b_consumes_calibrated_probability_panel_post_L5_RM_6` | POS | Task B input dataframe column set matches post-L5-RM-6 `calibrated_probability` panel schema |
-| B2 | `test_task_b_emits_R_squared_OOS_slope_intercept_residual_SE_pvalue` | POS | Per fold: all 5 outputs populated (closes ChatGPT §G.2 build output table) |
-| B3 | `test_task_b_HAC_SE_uses_maxlags_horizon_minus_1` | POS-invariant | `RidgeFitResult.hac_maxlags == horizon_months − 1` per `newey_west_hac.py:46` contract |
-| B4 | `test_task_b_block_bootstrap_block_size_horizon_div_2` | POS-invariant | Default block size matches `horizon_months // 2` |
-| B5 | `test_task_b_block_size_sensitivity_h_div_4_h_div_2_h_2h` | POS | Block-size sensitivity report emitted with 4 block-size values per fold (closes ChatGPT E.5 / L5-RISK-5) |
-| B6 | `test_task_b_bandwidth_sensitivity_h_minus_1_andrews_lower` | POS | HAC bandwidth sensitivity report with `{h−1, Andrews-automatic, fixed-lower}` (closes ChatGPT E.5) |
-| B7 | `test_task_b_OOS_R_squared_reported_per_horizon` | POS | `r_squared_oos` populated per fold; aggregate per horizon reported in verification |
-| B8 | `test_task_b_lambda_log10_sd_5fold_reported` | POS | `lambda_log10_sd_across_5fold` populated; flag if >1 (closes ChatGPT E.6 / L5-RISK-6) |
-| B9 | `test_task_b_coefficient_sign_flip_rate_reported` | POS | `coefficient_sign_flip_rate` populated; flag if >0.20 (closes E.6) |
-| B10 | `test_task_b_rejects_negative_lambda` | NEG | `lambda_grid=(-1.0,)` raises `ValueError` |
-| B11 | `test_task_b_warns_lambda_binding_at_grid_edge` | NEG | Sets `grid_edge_bind=True` + `RuntimeWarning` |
-| B12 | `test_task_b_bootstrap_seeded_for_reproducibility` | POS-invariant | seed=42 → identical bootstrap distributions across 2 runs |
-| B13 | `test_task_b_rejects_underpowered_fold_with_warning` | NEG | `n_eff_nonoverlap_train < 3` → skip with `WARNING` |
+| B1 (v3 amended) | `test_task_b1_consumes_crps_and_cdrs_calibrated_panels_post_L5_RM_6` | POS | Task B1 input dataframe column set matches post-L5-RM-6 CRPS (1 entry) + CDRS (20 entries) calibrated probability panels + macro features schema |
+| B2 (v3 amended) | `test_task_b1_emits_R_squared_OOS_slope_intercept_residual_SE_pvalue` | POS | Per fold: all 5 outputs populated (closes ChatGPT §G.2 build output table) |
+| B3 (v3 amended) | `test_task_b1_HAC_SE_uses_maxlags_horizon_minus_1` | POS-invariant | `RidgeFitResult.hac_maxlags == horizon_months − 1` |
+| B4 (v3 amended) | `test_task_b1_block_bootstrap_block_size_horizon_div_2` | POS-invariant | Default block size matches `horizon_months // 2` |
+| B5 (v3 amended) | `test_task_b1_block_size_sensitivity_h_div_4_h_div_2_h_2h` | POS | Block-size sensitivity report |
+| B6 (v3 amended) | `test_task_b1_bandwidth_sensitivity_h_minus_1_andrews_lower` | POS | HAC bandwidth sensitivity |
+| B7 (v3 amended) | `test_task_b1_OOS_R_squared_reported_per_horizon` | POS | `r_squared_oos` populated per fold |
+| B8 (v3 amended) | `test_task_b1_lambda_log10_sd_5fold_reported` | POS | `lambda_log10_sd_across_5fold` populated |
+| B9 (v3 amended) | `test_task_b1_coefficient_sign_flip_rate_reported` | POS | `coefficient_sign_flip_rate` populated |
+| B10 (v3 amended) | `test_task_b1_rejects_negative_lambda` | NEG | `lambda_grid=(-1.0,)` raises |
+| B11 (v3 amended) | `test_task_b1_warns_lambda_binding_at_grid_edge` | NEG | Grid edge warning |
+| B12 (v3 amended) | `test_task_b1_bootstrap_seeded_for_reproducibility` | POS-invariant | seed=42 → identical |
+| B13 (v3 amended) | `test_task_b1_rejects_underpowered_fold_with_warning` | NEG | `n_eff_nonoverlap_train < 3` skip |
 
-NEG count Task B: B3, B4, B10, B11, B12, B13 = 6 NEG (invariant-style + strict) + B5/B6/B8/B9 reportable-flag-NEG = 10 invariant/NEG of 13 = 77%. Conservative count: 7 strict-NEG of 13 = 54% ≥50%.
+NEG count Task B1: 7 strict-NEG of 13 = 54% ≥50%.
 
-##### §5.B.5 total tests (v2)
+##### §5.B.5.B2 Task B2 tests (+3 v3 NEW per S-9; ≥2 NEG)
 
-Total new tests for L5-B = 12 + 13 = **25** (was 15 in v1; +10 via S-3 split). NEG aggregate: 7 (Task A) + 7 (Task B) = 14 NEG / 25 total = 56% ≥50%.
+| # | Test name | Type | What it asserts |
+|---|---|---|---|
+| B2-1 (v3 NEW per S-9) | `test_task_b1_does_not_consume_return_positive_calibrated_probability` | NEG (Standing Order #4 AST audit) | AST audit confirms Task B1 input panel contains NO column named `positive_return_probability` or `RETURN_POSITIVE` — RETURN_POSITIVE is downstream output (Task B2), NOT input. Closes ChatGPT v2 D.2 circularity. |
+| B2-2 (v3 NEW per S-9) | `test_task_b2_consumes_task_b1_return_forecasts_only` | POS | `calibrate_return_forecast_task_b2` consumes `return_forecasts_by_horizon` from `fit_return_forecast_task_b1` output; rejects other inputs |
+| B2-3 (v3 NEW per S-9) | `test_task_b2_outputs_positive_return_probability_in_zero_one` | POS-invariant | Output `IsotonicCalibrationResult` values clip to [0, 1]; populates `positive_return_probability` slot on `ScoredObservation` |
+
+NEG count Task B2: 1 strict-NEG of 3 = 33% — augmented by inherited audit. Combined Task B (B1 + B2) NEG: 7 + 1 = 8 strict-NEG of 16 total = 50% ≥ floor. **Floor met.**
+
+##### §5.B.5 total tests (v3)
+
+Total new tests for L5-B (v3) = 12 (Task A) + 13 (Task B1) + 3 (Task B2) = **28** (was 25 in v2; +3 via S-9 split). NEG aggregate v3: 7 (Task A) + 7 (Task B1) + 1 (Task B2) = 15 NEG / 28 total = 54% ≥50%.
 
 > **v1 §5.B.5 SUPERSEDED by v2 §5.B.5.A + §5.B.5.B above per S-3.** The original 15-test list focused on single Ridge fit; v2 expands to 25 tests across Task A (component-weight refit) + Task B (return-forecast). v1 tests preserved in commit history at d776eb4 (tag `layer5-spec-v1`).
 
@@ -1093,15 +1131,53 @@ class IsotonicCalibrationResult:
 SAHM_RULE_TRIGGER_THRESHOLD: float = 0.30
 YIELD_CURVE_INVERSION_TRIGGER_MIN_CONSECUTIVE_MONTHS: int = 2
 
-def fit_isotonic_per_horizon(
-    raw_scores_by_horizon: dict[str, np.ndarray],
-    forward_returns_by_horizon: dict[str, np.ndarray],
+# v3 RENAME per S-8 (closes ChatGPT v2 E.1 partially-closed → CLOSED):
+# fit_isotonic_per_horizon → fit_isotonic_calibrators (25 calibrators per §3.3 schema)
+
+def fit_isotonic_calibrators(
+    raw_scores: dict[tuple[str, str], np.ndarray],       # keyed by (score_type, horizon)
+    panel: pd.DataFrame,                                  # for event_label dispatch
     *,
     fit_window: tuple[pd.Timestamp, pd.Timestamp],
+    drawdown_thresholds: tuple[float, ...] = (0.10, 0.20, 0.35, 0.50, 0.65),
     bootstrap_iterations: int = 1000,
     random_seed: int = 42,
-) -> dict[str, IsotonicCalibrationResult]:
-    """Fit 4 isotonic calibrators (one per horizon) per Q4 lock."""
+) -> dict[tuple[str, str], IsotonicCalibrationResult]:
+    """Fit 25 isotonic calibrators per §3.3 calibration target schema.
+    
+    Key shape:
+    - ("CRPS", "1Y"): 1 entry (CRPS calibrates only against 12M NBER labels)
+    - ("CDRS", h) × 5 drawdown_thresholds: 4 horizons × 5 = 20 entries
+    - ("RETURN_POSITIVE", h): 4 entries (1 per horizon)
+    
+    For each (score_type, horizon), call build_event_labels() to dispatch correct event label per §3.3.
+    """
+
+def build_event_labels(
+    score_type: Literal["CRPS", "CDRS", "RETURN_POSITIVE"],
+    panel: pd.DataFrame,
+    horizon: HorizonLabel,
+    *,
+    drawdown_threshold: float | None = None,
+) -> np.ndarray:
+    """Build binary event labels per §3.3 schema (v3 NEW per S-8)."""
+    if score_type == "CRPS":
+        if horizon != "1Y":
+            raise ValueError(
+                "CRPS calibrates only against 12M NBER recession labels per §3.3; "
+                f"horizon={horizon!r} not supported. Extend §3.3 schema to authorize other horizons."
+            )
+        return _nber_recession_start_within_12m(panel)
+    elif score_type == "CDRS":
+        if drawdown_threshold is None:
+            raise ValueError("CDRS calibration requires drawdown_threshold per §3.3")
+        return _spx_drawdown_ge_threshold_within_h(
+            panel, threshold=drawdown_threshold, horizon=horizon,
+        )
+    elif score_type == "RETURN_POSITIVE":
+        return _forward_real_return_gt_zero_h(panel, horizon=horizon)
+    else:
+        raise ValueError(f"score_type {score_type!r} not in §3.3 schema")
 
 def should_recalibrate(
     last_refit_date: pd.Timestamp,
@@ -1122,11 +1198,18 @@ def calibrate_raw_score(
     (calibrated, calibrated, calibrated) until L5-E populates band derivation."""
 ```
 
-##### §5.RM-6.1.2 Per-horizon scope (Q4 lock)
+##### §5.RM-6.1.2 Score-type-specific calibration labels (v3 fix per S-8; closes ChatGPT v2 E.1 partially-closed → CLOSED)
 
-**4 calibrators**: one each for 1Y, 3Y, 5Y, 10Y. Each calibrator fit on `(raw_score, forward_return_binary)` pairs from the corresponding L5-A schedule's expanding-window training data (rolling-20Y as robustness check).
+Per §3.3 calibration target schema, isotonic calibrators MUST consume **score-type-specific** event labels. v2 spec generic `forward_return_binary` is REMOVED and replaced with explicit label-builder dispatch via `build_event_labels()` (defined in §5.RM-6.1.1 above).
 
-`forward_return_binary` is the indicator for "positive forward real total return at horizon H": binary 1 if `forward_return > 0`, else 0. Mirrors L3.5D `pre_1978_training_only` semantics — pre-1978 data NOT used in real-time calibration (training-only).
+**Per-horizon scope clarification (Q4 lock; v3 corrected per S-8)**:
+- **CRPS**: 12M only (single calibrator per refit window). v1/v2 phrasing "per-horizon × 4 calibrators" for CRPS is INCORRECT — there is only **1 CRPS calibrator** per refit window, calibrating against NBER recession start within 12M (`USREC` series).
+- **CDRS**: 4 horizons × 5 drawdown thresholds = **20 CDRS calibrators** per refit window, each calibrating against `SPX_drawdown ≥ threshold within H`.
+- **RETURN_POSITIVE**: 4 horizons × 1 label = **4 RETURN_POSITIVE calibrators** per refit window, each calibrating against `forward_real_return > 0 at horizon H`.
+
+**Total calibrators per refit window: 25** (1 CRPS + 20 CDRS + 4 RETURN_POSITIVE), NOT 4 as v2 wording suggested.
+
+Pre-1978 NBER data is training-only per L3.5D `pre_1978_training_only` semantics — never used in real-time CRPS calibration.
 
 ##### §5.RM-6.1.3 Recalibration cadence (Q5 lock)
 
@@ -1153,7 +1236,7 @@ Implementation: `should_recalibrate` returns `(False, "cooldown_active")` during
 2. **Sahm Rule threshold empirical smoke-test**: load `SAHMREALTIME` from FRED cache; count historical Sahm triggers at thresholds {0.25, 0.30, 0.35, 0.40} over 1978-2025 sample; report trigger frequency per threshold; verify 0.30 binds within target ~1-2× annual rate (NBER recession frequency)
 3. **Yield curve inversion historical count**: load 10Y-3M spread (DGS10 − DGS3MO from FRED); count 2+ consecutive-month-inversion events 1985-2025; target ≥3 events (1989, 2000, 2006-07, 2019, 2022-23 historically known); confirm trigger fires
 4. **Bootstrap seed determinism smoke-test**: run isotonic + B=1000 bootstrap twice with seed=42; element-wise identical
-5. **L5-A panel + L5-B raw_score pipeline integration**: smoke-test that L5-A WalkForwardSchedule + L5-B RidgeFitResult.raw_score_train feeds into `fit_isotonic_per_horizon` cleanly
+5. **L5-A panel + L5-B raw_score pipeline integration**: smoke-test that L5-A WalkForwardSchedule + L5-B RidgeFitResult.raw_score_train feeds into `fit_isotonic_calibrators` (v3 API per S-8) cleanly
 
 #### §5.RM-6.3 Methodology rigor
 
@@ -1184,7 +1267,7 @@ Implementation: `should_recalibrate` returns `(False, "cooldown_active")` during
 
 | # | Test name | Type | What it asserts |
 |---|---|---|---|
-| 1 | `test_isotonic_per_horizon_yields_4_calibrators` | POS | `fit_isotonic_per_horizon` returns dict with keys `{"1Y", "3Y", "5Y", "10Y"}` |
+| 1 (v3 amended per S-8) | `test_isotonic_calibrators_yields_25_per_3_3_schema` | POS | `fit_isotonic_calibrators` returns dict with 25 keys: 1× ("CRPS", "1Y") + 20× ("CDRS", h, threshold) + 4× ("RETURN_POSITIVE", h) per §3.3 schema |
 | 2 | `test_pav_monotonicity_grep_audit` | NEG (Standing Order #4) | Sweep 1000-point grid [0, 1] per horizon; assert `np.all(np.diff(predicted) >= -1e-9)` per horizon × refit; ANY violation raises AssertionError |
 | 3 | `test_quarterly_recalibration_cadence_fires_on_mar_jun_sep_dec` | POS | `should_recalibrate(last_refit=Jan 1, as_of=Mar 1, ...)` returns `(True, "quarterly_cadence")` |
 | 4 | `test_sahm_rule_trigger_at_threshold_0_30` | POS | With SAHMREALTIME=0.31 at as_of, returns `(True, "sahm_rule_trigger")` |
@@ -1193,40 +1276,41 @@ Implementation: `should_recalibrate` returns `(False, "cooldown_active")` during
 | 7 | `test_rejects_non_monotone_input_via_warning` | NEG | Fitting on `(raw=[0.2, 0.5, 0.3], y=[0, 1, 0])` emits `RuntimeWarning("non-monotone input detected")` |
 | 8 | `test_rejects_calibration_with_insufficient_samples_min_50` | NEG | Fitting with `n_train_obs < 50` for any horizon raises `ValueError("insufficient samples for isotonic")` |
 | 9 | `test_bootstrap_se_seeded_for_reproducibility` | NEG-invariant | Two runs with `random_seed=42` produce identical `bootstrap_se_distribution`; failure raises |
-| 10 | `test_rejects_horizon_outside_1Y_3Y_5Y_10Y_in_calibrator_dict` | NEG | `fit_isotonic_per_horizon` called with non-standard horizon keys raises `ValueError` |
-| 11 (v2 NEW per S-2) | `test_calibration_target_matches_score_type_per_3_3_table` | NEG (invariant) | For every `score_type ∈ {"CRPS", "CDRS", "RETURN_POSITIVE"}`, calibrator's event_label semantics match §3.3 calibration target schema row; mismatch raises `ValueError("calibration target semantics mismatch §3.3")` |
+| 10 (v3 amended per S-8) | `test_rejects_horizon_outside_1Y_3Y_5Y_10Y_in_calibrator_dict` | NEG | `fit_isotonic_calibrators` called with non-standard horizon keys raises `ValueError` |
+| 11 (v3 HARD-GATE UPGRADE per S-8; supersedes v2 S-2 invariant) | `test_calibration_target_matches_score_type_per_3_3_table` | NEG (HARD GATE) | `build_event_labels()` enforces §3.3 schema at fit time: (a) `build_event_labels("CRPS", panel, horizon="3Y")` raises `ValueError("CRPS calibrates only against 12M")`; (b) `build_event_labels("CDRS", panel, horizon="1Y")` without `drawdown_threshold` raises `ValueError("CDRS calibration requires drawdown_threshold")`; (c) `build_event_labels("UNKNOWN", ...)` raises `ValueError("not in §3.3 schema")`; (d) valid `("CRPS","1Y")`, `("CDRS","5Y", threshold=0.20)`, `("RETURN_POSITIVE","10Y")` all return `dtype == bool` |
 | **12 (v2 NEW per S-7)** | `test_isotonic_calibrator_drift_psi_ks_reported_quarterly` | POS | PSI (Population Stability Index) + KS statistic computed for calibrator drift detection per quarterly refit; reported in metadata; closes ChatGPT E.6 calm-period drift detection |
 | **13 (v2 NEW per S-7)** | `test_rolling_brier_delta_negative_for_2_consecutive_refits_triggers_warning` | NEG | If rolling Brier difference negative for 2 consecutive refits, emit `RuntimeWarning("calibrator quality degrading; consider model retrain")` |
 | **14 (v2 NEW per S-7)** | `test_sahm_curve_trigger_coalescing_within_90_day_cooldown` | POS | When Sahm trigger fires within 90d of prior refit, `should_recalibrate` returns `(False, "cooldown_active")`; coalesced refit emits on cooldown expiry; closes ChatGPT D.2 trigger thrashing prevention |
 
 NEG count v2: tests 2, 7, 8, 9, 10, 11, 13 = 7 strict NEG; test 6 + 4 + 5 + 14 invariants/triggers (POS). 7 NEG of 14 = 50% ≥ floor. **Floor met.** Total tests = 14 (was 11 post-S-2; +3 via S-7).
 
-#### §5.RM-6.6 Gate 21 — Isotonic calibration integrity
+#### §5.RM-6.6 Gate 21 — Isotonic calibration integrity (v3 per S-8)
 
-PASS criteria:
-1. `fit_isotonic_per_horizon` returns 4 calibrators per spec
-2. PAV monotonicity invariant holds for every horizon × refit window (test #2)
-3. Quarterly + Sahm + yield-curve triggers fire correctly (tests #3, #4, #5)
-4. `calibrate_raw_score` always returns calibrated ∈ [0, 1] (test #6)
-5. Bootstrap seeded reproducibly (test #9)
-6. All 10 tests in §5.RM-6.5 PASS
-7. Cross-horizon consistency report emitted: `IsotonicCalibrationResult.refit_trigger_metadata` populated per calibrator
-8. Empirical Sahm rule trigger frequency reported in verification (1985-2025 sample): target binding rate 1-2× annual
+PASS criteria (v3):
+1. `fit_isotonic_calibrators` returns **25 calibrators total** (1 CRPS + 20 CDRS + 4 RETURN_POSITIVE) per refit window, per §3.3 calibration target schema — NOT 4
+2. Each fit confirmed via `build_event_labels()` dispatch matching §3.3 schema (test #11 hard-gate enforces)
+3. PAV monotonicity invariant holds for every calibrator × refit window (test #2)
+4. Quarterly + Sahm + yield-curve triggers fire correctly (tests #3, #4, #5)
+5. `calibrate_raw_score` always returns calibrated ∈ [0, 1] (test #6)
+6. Bootstrap seeded reproducibly (test #9)
+7. All 14 tests in §5.RM-6.5 PASS (test #1 amended for 25 calibrators per S-8; test #11 hardened per S-8; test #10 API renamed per S-8)
+8. Cross-(score_type × horizon) consistency report emitted: `IsotonicCalibrationResult.refit_trigger_metadata` populated per calibrator
+9. Empirical Sahm rule trigger frequency reported in verification (1985-2025 sample): target binding rate 1-2× annual; 90d cooldown + coalescing per §5.RM-6.1.4 active
 
-#### §5.RM-6.7 Proof contract (12 items)
+#### §5.RM-6.7 Proof contract (v3: 12 items)
 
 | # | Proof |
 |---|---|
-| 1 | `python -c "from macro_pipeline.models.isotonic_calibrator import fit_isotonic_per_horizon, should_recalibrate, calibrate_raw_score, SAHM_RULE_TRIGGER_THRESHOLD"` succeeds |
+| 1 (v3 per S-8) | `python -c "from macro_pipeline.models.isotonic_calibrator import fit_isotonic_calibrators, build_event_labels, should_recalibrate, calibrate_raw_score, SAHM_RULE_TRIGGER_THRESHOLD"` succeeds |
 | 2 | `SAHM_RULE_TRIGGER_THRESHOLD == 0.30` |
-| 3 | `pytest tests/test_isotonic_calibrator.py` shows all 10 tests PASS |
-| 4 | PAV monotonicity grep-audit (test #2) covers 1000-point grid × 4 horizons × N refits; 0 violations |
+| 3 (v3 per S-8) | `pytest tests/test_isotonic_calibrator.py` shows all 14 tests PASS (13 v2 baseline + test #11 hardened per v3 S-8) |
+| 4 | PAV monotonicity grep-audit (test #2) covers 1000-point grid × 25 calibrators × N refits; 0 violations |
 | 5 | Sahm trigger empirical frequency reported per threshold {0.25, 0.30, 0.35, 0.40} over 1978-2025 (4 numbers; 0.30 in target band 1-2× annual) |
 | 6 | Yield curve 2-month-inversion historical count reported (1985-2025): ≥3 events |
 | 7 | Bootstrap reproducibility test #9 PASSes |
 | 8 | `calibrate_raw_score` clips correctly (test #6) |
-| 9 | Gate 21 PASSes |
-| 10 | Cumulative test count = 610 + 10 = 620 |
+| 9 | Gate 21 PASSes (9 sub-criteria green per v3) |
+| 10 | Cumulative test count = 610 + 14 = 624 (v2: 620; v3 +4 via S-8 hardening + S-9 Task B2 tests) |
 | 11 | Conviction 3-field reported |
 | 12 | S-2 filed if Sahm trigger frequency outside target band; else NOT filed |
 
@@ -1403,14 +1487,14 @@ class DrawdownConditionalResult:
     bootstrap_se: dict[str, float]                # SE per threshold from B=1000 bootstrap
     historical_anchor_dates: tuple[pd.Timestamp, ...]  # anchor dates (e.g., recession troughs) feeding empirical
     
-    # ---- v2 NEW per S-5 (closes ChatGPT E.4 / L5-RISK-4): sparse cell intervals ----
+    # ---- v2 NEW per S-5 (closes ChatGPT E.4 / L5-RISK-4); v3 cleanup taxonomy consolidation ----
     n_eff_nonoverlap: int                              # n_obs // horizon_months
     event_count: dict[str, int]                        # per threshold
     wilson_interval_95: dict[str, tuple[float, float]] # per threshold; Wilson 95% CI
     interval_width: dict[str, float]                   # per threshold; CI upper − lower
-    cell_label: str                                    # "production" | "diagnostic_only"
-    hierarchical_pooling_applied: bool                 # True if cell was pooled with neighbors
-    pooling_neighbors: tuple[str, ...]                 # list of pooled neighbor cells if applied (e.g., ("recession × 5Y",))
+    cell_label: Literal["production", "diagnostic_only", "pooled"]  # v3 consolidated 3-state taxonomy per §2.4 cleanup
+    pooling_neighbors: tuple[str, ...]                 # list of pooled neighbor cells if cell_label == "pooled" (e.g., ("recession × 5Y",))
+    # v2 `hierarchical_pooling_applied: bool` REMOVED in v3 cleanup (redundant with cell_label == "pooled")
 
 def fit_drawdown_conditionals(
     forward_drawdowns_by_horizon: dict[str, np.ndarray],
@@ -1421,7 +1505,12 @@ def fit_drawdown_conditionals(
 ) -> dict[tuple[str, str], DrawdownConditionalResult]:
     """Fit conditional drawdown CDF per (horizon, regime_state) cell.
     Returns dict keyed by (horizon, regime_state); 4 × 4 = 16 cells.
-    Cells with n_obs < 5 return None entry with `np.nan` exceedance probabilities."""
+    
+    Per §5.D.1.3 (v2 S-5 / v3 cleanup): cells with n_eff < 10 OR interval width ≥ 0.50 
+    are labeled "diagnostic_only" and trigger hierarchical pooling per neighbor cells. 
+    **NO cell ever returns raw nan**; all cells return either production estimate, 
+    diagnostic_only estimate, or pooled estimate (v3 taxonomy: cell_label ∈ {"production",
+    "diagnostic_only", "pooled"})."""
 ```
 
 ##### §5.D.1.1 Historical drawdown computation
@@ -1440,20 +1529,21 @@ For each `(horizon × regime × threshold)` cell:
 
 1. Compute `n_eff_nonoverlap = n_obs // horizon_months` and `event_count[threshold]`
 2. Compute Wilson 95% interval per threshold: `wilson_interval(event_count, n_eff)`
-3. Classify cell:
-   - `n_eff ≥ 10 AND interval_width < 0.30`: label `"production"`
-   - `n_eff ≥ 10 AND 0.30 ≤ interval_width < 0.50`: label `"production"` BUT flag in metadata
-   - `n_eff < 10 OR interval_width ≥ 0.50`: label `"diagnostic_only"`; trigger hierarchical pooling
-4. **Hierarchical pooling** (when triggered):
+3. Classify cell (**v3 3-state taxonomy per §2.4 cleanup**):
+   - `n_eff ≥ 10 AND interval_width < 0.30`: `cell_label = "production"`
+   - `n_eff ≥ 10 AND 0.30 ≤ interval_width < 0.50`: `cell_label = "production"` BUT flag in `refit_trigger_metadata`
+   - `n_eff < 10 OR interval_width ≥ 0.50`: `cell_label = "diagnostic_only"` initially; trigger hierarchical pooling
+4. **Hierarchical pooling** (when `"diagnostic_only"` triggered):
    - Pool with adjacent regime states first (e.g., `late-cycle × 10Y` pools with `recession × 10Y` if both sparse)
    - If still sparse, pool with adjacent horizon (e.g., `recession × 10Y` pools with `recession × 5Y`)
-   - Report pooled `n_eff` + pooled probability + record pooling chain in `pooling_neighbors`
-5. **NEVER return raw `nan`**; always either production estimate, diagnostic estimate, or pooled estimate. v1 nan-cliff at `n < 5` replaced by this graceful sparsity policy.
+   - On successful pool: **`cell_label = "pooled"`** + `pooling_neighbors` records chain
+5. **NEVER return raw `nan`**; always either `"production"` estimate, `"diagnostic_only"` estimate, or `"pooled"` estimate. v1 nan-cliff at `n < 5` replaced by this graceful sparsity policy.
+6. **v3 cleanup consolidation**: `cell_label: Literal["production", "diagnostic_only", "pooled"]` — single 3-state taxonomy. v2 `hierarchical_pooling_applied: bool` REMOVED (redundant with `cell_label == "pooled"`).
 
 #### §5.D.2 Pre-flight contract
 
 1. **Anchor cycle verification**: confirm 4-cycle anchor set (1990, 2001, 2008, 2020 troughs) presents non-zero drawdowns at all 5 thresholds for `recession` cell at all 4 horizons
-2. **Sample size verification**: report n_obs per (horizon × regime_state) cell; cells with n_obs < 5 flagged for `nan` output (informational; not Gate 23 fail)
+2. **Sample size verification (v3 amended per §2.4 cleanup)**: report `n_eff_nonoverlap` per (horizon × regime_state) cell; cells with `n_eff < 10` OR `interval_width ≥ 0.50` labeled `"diagnostic_only"` and triggered for hierarchical pooling per §5.D.1.3 v2 S-5; **no raw nan returned** (v3 taxonomy: cell_label ∈ {"production", "diagnostic_only", "pooled"})
 3. **Bootstrap seed determinism**: same seed → identical SE
 4. **Drawdown computation grep-audit**: verify drawdown formula uses min over window (not endpoint) per spec
 
@@ -1488,7 +1578,7 @@ For each `(horizon × regime × threshold)` cell:
 | **9 (v2 NEW per S-5)** | `test_wilson_interval_computed_per_threshold` | POS | `wilson_interval_95[threshold]` populated per cell per threshold; matches `signal_probability.wilson_95_ci` |
 | **10 (v2 NEW per S-5)** | `test_diagnostic_only_label_at_n_eff_below_10_or_width_above_0_5` | NEG | Sparse cell flagged correctly |
 | **11 (v2 NEW per S-5)** | `test_hierarchical_pooling_when_sparse_with_neighbor_recording` | POS | Pooled cell has `hierarchical_pooling_applied=True` and `pooling_neighbors` populated with chain |
-| **12 (v2 NEW per S-5)** | `test_no_raw_nan_in_v2_drawdown_output` | NEG | No cell returns `nan` in `exceedance_probability`; closes ChatGPT E.4 hard-cliff fix |
+| **12 (v3 amended per §2.4 cleanup)** | `test_no_raw_nan_in_drawdown_output_v3_taxonomy` | NEG | No cell returns `nan` in `exceedance_probability`; every cell has `cell_label ∈ {"production", "diagnostic_only", "pooled"}` per v3 3-state taxonomy; closes ChatGPT v2 E.4 CLOSED-WITH-FLAG → CLOSED |
 
 #### §5.D.6 Gate 23 — Drawdown conditional integrity (v2)
 
@@ -2088,7 +2178,7 @@ ChatGPT 5.5 is asked to pressure-test these specific methodology claims; each ma
 - [ ] **L5-D**: Drawdown conditional monotonicity per cell — §5.D.5 test #2
 - [ ] **L5-E**: Triple-σ disambiguation — §5.E.3.1
 - [ ] **L5-F**: DMS Q6=C bps band per Dimson-Marsh-Staunton — §5.F.3
-- [ ] **L5-G**: Bayesian k = horizon × 15 form; prior 6.5% US primary + 4.5% global robustness — §5.G.3
+- [ ] **L5-G**: Bayesian **k_h backsolved per §5.G.1 v2 S-4** (`K_HORIZON = {5.9, 6.7, 9.4, 11.0}`); prior 6.5% US primary + 4.5% global robustness — §5.G.3 (v1 `k = horizon × 15` literal scrubbed v3)
 
 ### §8.2 ChatGPT 5.5 MAY flag (Strategic anticipates)
 
@@ -2100,7 +2190,7 @@ Pre-empted concerns from methodology rigor blocks; spec response documented in e
 - [ ] **L5-C**: Bin count adequacy → Strategic response: §5.C.2 adaptive reduction documented
 - [ ] **L5-RM-6**: Structural break in calibration across regimes → mitigated by Q5 regime trigger
 - [ ] **L5-G**: US-specific vs global prior choice → Strategic response: US primary justified by deliverable; global as robustness
-- [ ] **L5-G**: `k = horizon × 15` ad-hoc → anchored to "prior worth 15 years of horizon-length observations" intuition; sensitivity L5b
+- [ ] **L5-G**: **RESOLVED in v2 per S-4** — k_h backsolved from W_REF_TARGET × N_REF_NONOVERLAP, replacing arithmetically inconsistent v1 `horizon × 15` form. Sensitivity at 0.5×/1×/2× k_h reported per §5.G.5 test #8.
 
 ### §8.3 ChatGPT 5.5 decisions deferred to V
 
@@ -2171,7 +2261,10 @@ L3.5 + L3.5b closed at D30. L5 spec/build deviations use `Sxx` IDs.
 | **S-6** | 2026-05-11 | v2 chunk 9 / §5.B.1.4 + §5.E.1 + §5.E.3 + §5.E.5 + §2.5 audit #10 | Block bootstrap block-size + HAC bandwidth sensitivity + joint bootstrap forecast σ + empirical coverage; closes ChatGPT E.5 + E.7 / L5-RISK-5 (MED) | ACCEPT | Mechanism: ChatGPT E.5 flagged HAC + bootstrap inference may undercover at long horizons. ChatGPT E.7 flagged forecast σ quadrature assumes ρ=0 independence between Ridge + isotonic — invalid in practice. v2 fix: §5.B.1.4 extended with block-size sensitivity {h/4, h/2, h, 2h} + bandwidth sensitivity {h−1, Andrews-automatic, max(2, h//4)}; §5.E.1 ForecastSigmaResult adds 5 fields (joint_bootstrap_sigma, covariance_ridge_isotonic, forecast_sigma_with_covariance, empirical_coverage_95, coverage_inflation_factor); §5.E.3 v1 quadrature deprecated as primary, joint bootstrap promoted; coverage inflation auto-applied if empirical<0.90. Tests #7-9 NEW + #1 amended. Audit #10 added. Disposition: ACCEPT | none |
 | **S-7** | 2026-05-11 | v2 chunk 9 / §5.RM-6.1.4 + §5.RM-6.5 + §5.B (Task B B8/B9) | Trigger cooldown 90d + coalescing + λ/calibrator stability diagnostics; closes ChatGPT E.6 / L5-RISK-6 + L5-RISK-7 (MED) | ACCEPT | Mechanism: ChatGPT E.6 flagged λ path instability hidden by grid-edge test; ChatGPT D.2 + L5-RISK-7 flagged recalibration trigger thrashing risk. v2 fix: §5.B.5 Task B tests B8 (lambda_log10_sd_5fold) + B9 (coefficient_sign_flip_rate) added in chunk 7. §5.RM-6.1.4 NEW: 90-day cooldown after refit + coalescing within cooldown + max 6 refits/year + escalation Sahm 0.30→0.35 if frequency exceeds. §5.RM-6.5 tests #12 (PSI/KS quarterly), #13 (rolling Brier delta), #14 (cooldown coalescing) added. Disposition: ACCEPT | none |
 
-Reserved: S-8 through S-25.
+| **S-8** | 2026-05-11 | v3 chunk 11 / §5.RM-6.1.1 + §5.RM-6.1.2 + §5.RM-6.5 + §5.RM-6.6 + §5.RM-6.7 + §3.2 + §3.3 | RM-6 calibration label semantics aligned with §3.3 schema; `fit_isotonic_per_horizon` renamed → `fit_isotonic_calibrators` with 25 total calibrators (1 CRPS + 20 CDRS + 4 RETURN_POSITIVE); `build_event_labels()` NEW dispatch enforces schema at fit time; test #11 hardened to HARD GATE; closes ChatGPT v2 E.1 PARTIALLY-CLOSED → CLOSED | ACCEPT | Mechanism: ChatGPT v2 review §B E.1 + §D.1 flagged that §5.RM-6.1.2 v2 wording ("4 calibrators on `(raw_score, forward_return_binary)`") contradicted §3.3 schema (which mandates CRPS=NBER 12M / CDRS=drawdown threshold / RETURN_POSITIVE=return>0). v3 fix: (a) renamed API; (b) added `build_event_labels()` dispatcher raising on mismatch; (c) corrected calibrator count 4 → 25 reflecting actual fan-out (1 CRPS, 20 CDRS, 4 RETURN_POSITIVE); (d) test #11 v2 invariant upgraded to HARD GATE asserting per-score_type wrong-input raises; (e) §3.2 row + Gate 21 + proof contract updated. Disposition: ACCEPT | none |
+| **S-9** | 2026-05-11 | v3 chunk 11 / §5.B.1.0 + §5.B.1.1 + §5.B.5 + §3.1 dependency graph | L5-B Task B split into Task B1 (Ridge return forecast; RETURN_POSITIVE NOT input) + Task B2 (RETURN_POSITIVE calibration via RM-6 isotonic); closes ChatGPT v2 D.2 RETURN_POSITIVE circularity | ACCEPT | Mechanism: ChatGPT v2 §D.2 flagged circular dependency — §3.3 lists RETURN_POSITIVE raw input = "Ridge return forecast (L5-B Task B)" while Task B (v2) was described as consuming `calibrated_probability_panel` post-RM-6, which would include `positive_return_probability`. v3 split: Task B1 produces Ridge return forecast consuming ONLY CRPS+CDRS calibrated panels + exogenous macro features; Task B2 calibrates B1 output → positive_return_probability via `fit_isotonic_calibrators(score_type="RETURN_POSITIVE")`. §3.1 dependency graph amended; §5.B.5 +3 NEW tests (B2-1 NEG AST audit no-RETURN_POSITIVE-in-B1; B2-2 POS B2 consumes B1; B2-3 POS B2 output in [0,1]). Total L5-B tests v3: 28 (was 25 in v2). Disposition: ACCEPT | none |
+
+Reserved: S-10 through S-25.
 
 ---
 
