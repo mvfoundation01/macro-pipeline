@@ -1670,37 +1670,251 @@ Both sub-criteria PASS ⇒ Gate 25 PASS. L5-G commit seals the composite (mirror
 
 <!-- CHUNK 5 START — §5.H retrospective + §6 gate definitions + §7 backlog routing + §8 ChatGPT 5.5 handoff + §9 closure (Q8 locked) -->
 
-<!-- CHUNK 5 START — §5.H retrospective + Codex review prep (Q8 locked in chunk 5 closure) -->
+### §5.H — Sub-Phase L5-H: Retrospective + Codex Review Prep
 
-*To be authored in chunk 5 (target 1–2h).*
+#### §5.H.0 Sub-phase metadata
+
+| Field | Value |
+|---|---|
+| Sub-phase ID | L5-H |
+| Topic | L5 retrospective assembly + Codex 5/5 review package preparation; Q8 horizon-scope confirmation |
+| Effort band | 2–3h (target 2.5h) |
+| Test delta | 0 (no new code; documentation + handoff package) |
+| Gate added | None (L5-H seals composite Gate 25 via L5-G commit + assembles retrospective) |
+| Owning Q | **Q8** (horizon scope confirmation) |
+| Dependencies | L5-A through L5-G complete + Gate 25 sealed |
+| Downstream consumers | V (paste-block to Codex 5/5); L6 spec author (read L5 retrospective for L6 spec authoring trigger) |
+| Commit message template | `L5-H: retrospective + Gate 25 composite verification + Codex 5/5 review package` |
+| New files | `LAYER_5_RETROSPECTIVE.md` (mirrors L3.5b §A-§I structure); `LAYER_5_CODEX_REVIEW_PACKAGE.md` |
+| Modified files | none (closure sub-phase) |
+
+#### §5.H.1 Scope
+
+L5-H is the **closure sub-phase** mirroring 3.5b-W's role in L3.5b. Three deliverables:
+
+1. **Q8 horizon scope confirmation**: every L5-A through L5-G sub-phase produced outputs at all 4 horizons (1Y/3Y/5Y/10Y); verify in retrospective §A
+2. **`LAYER_5_RETROSPECTIVE.md`** mirroring L3.5b structure (§A sub-phase metrics / §B Codex findings closure if any L3.5 carryover / §C deviation register additions S-1..S-N / §D backlog seeds / §E pattern compounding insights / §F any Strategic self-corrections / §G L3.5b + L5 combined metrics / §H forward readiness for L5b / §I closing recommendation)
+3. **`LAYER_5_CODEX_REVIEW_PACKAGE.md`** containing:
+   - Branch link + diff summary against `590e4a5` (L3.5b merge base)
+   - Test count delta (602 → ~680 expected)
+   - Gate count delta (17 → 25)
+   - Methodology rigor block index (7 blocks across L5-A through L5-G)
+   - Q1-Q8 lock summary with option-matrix rationale
+   - Sxx register (S-1 + any subsequent)
+   - Standing Order #4 audit results (L5-A, L5-RM-6, L5-F, L5-G AST/grep audits)
+
+#### §5.H.2 Pre-flight contract (L5-H build-time)
+
+1. **Cross-reference integrity sweep** (final): every `§X.Y.Z` anchor in `LAYER_5_BUILD_SPEC.md` resolves to an existing section
+2. **Numeric specificity sweep** (final): grep for "approximately|around|roughly|about|TBD|TODO" across full spec; report 0 unjustified instances
+3. **Sxx register completeness**: every S-N entry has rationale + backlog ref (or "none")
+4. **Gate 25 composite verification**: 25.1 + 25.2 both PASS
+
+#### §5.H.3 Methodology rigor
+
+**Minimal (procedural sub-phase).** No methodology rigor block; L5-H seals the spec and produces handoff documents, does not introduce new methodology.
+
+#### §5.H.4 Decisions for V (Q8 lock)
+
+**Locked: all 4 horizons (1Y / 3Y / 5Y / 10Y) in L5** per Strategic continuation prompt §2.
+
+Option matrix:
+
+| Option | Horizon scope | Reasoning |
+|---|---|---|
+| A | Staged: L5 covers 1Y/3Y only | REJECT — calibration trio (RM-4/RM-6/C) re-run on adding horizons forces re-spec |
+| B | Staged: L5 covers 1Y/3Y/5Y; 10Y deferred | REJECT — same |
+| **C** | **All 4 horizons (1Y/3Y/5Y/10Y) in L5** | **LOCKED**: Master Prompt v3.1 §14 requirement; horizons are deliverable's core dimensions |
+
+#### §5.H.5 Tests
+
+**None.** Retrospective + handoff documentation has no new test assertions; existing 602 + 78 = 680 cumulative test suite is the regression contract.
+
+#### §5.H.6 Gate
+
+**None.** L5-H assembles + seals; Gate 25 composite already sealed at L5-G commit.
+
+#### §5.H.7 Proof contract (8 items)
+
+| # | Proof |
+|---|---|
+| 1 | `LAYER_5_RETROSPECTIVE.md` exists at build worktree root |
+| 2 | `LAYER_5_CODEX_REVIEW_PACKAGE.md` exists |
+| 3 | Cross-reference integrity sweep PASSes (zero dangling) |
+| 4 | Numeric specificity sweep PASSes (zero unjustified vague terms) |
+| 5 | Sxx register complete (every entry has rationale + backlog ref or explicit "none") |
+| 6 | All 4 horizons present in retrospective metrics tables (per Q8 lock) |
+| 7 | Tag candidate `layer5-complete` ready on L5-G closure commit |
+| 8 | Conviction 3-field reported per L5 spec-level aggregate |
 
 ---
 
-## §6 — Gate Definitions
+## §6 — Gate Definitions (Consolidated)
 
-*To be authored in chunk 5. Gates 18–25 (8 gates) with sub-criteria. Mirror L3.5b Gate 17 composite pattern for Gate 25 sub-criteria 25.1 (L5-F) + 25.2 (L5-G).*
+Per `validation.py` convention `validate_gateN_<name>() -> GateReport`. Each gate's PASS criteria + failure modes detailed in the owning sub-phase's §X.6 + replicated here for ChatGPT 5.5 reviewer convenience.
+
+### §6.1 Gate 18 — Walk-forward CV scaffold integrity (owner: L5-A)
+
+```python
+def validate_gate18_walk_forward_cv() -> GateReport:
+```
+
+PASS criteria (per §5.A.6):
+1. `generate_all_schedules(panel_index)` returns 8 schedules (4 horizons × 2 schedule_types)
+2. Fold count per schedule meets §5.A.2 targets
+3. Cross-fold contamination invariant holds: `train_end + gap_months ≤ test_start`
+4. `WalkForwardSchedule.panel_sha256` matches input panel sidecar
+5. All 12 tests in §5.A.5 PASS
+6. AST-walk audit (Standing Order #4 test #4) reports 0 violations
+
+### §6.2 Gate 19 — Ridge regression fit integrity (owner: L5-B)
+
+PASS criteria per §5.B.6: 15 tests pass; `RidgeFitResult` populated; `LAMBDA_GRID_DEFAULT` exact; `grid_edge_bind` rate <10%; HAC SE per fold non-NaN ≥95%; bootstrap seeded; robustness fixed-λ-from-L3 emits parallel result.
+
+### §6.3 Gate 20 — Dataclass migration integrity (owner: L5-RM-4)
+
+PASS criteria per §5.RM-4.6: 30 slots total; 5 new slot names exact; parquet roundtrip; L5-13 absorbed (CDRS `metadata_extra` empty for V_*/T_* keys); 8 tests pass; 602-test regression floor preserved.
+
+### §6.4 Gate 21 — Isotonic calibration integrity (owner: L5-RM-6)
+
+PASS criteria per §5.RM-6.6: 4 per-horizon calibrators; PAV monotonicity invariant grep-audit; quarterly + Sahm + yield-curve triggers fire; `calibrate_raw_score` clips to [0, 1]; bootstrap seeded; 10 tests pass; cross-horizon consistency reported; Sahm trigger frequency in target band 1-2× annual (or S-2 filed).
+
+### §6.5 Gate 22 — Brier + reliability integrity (owner: L5-C)
+
+PASS criteria per §5.C.6: Brier formula; Murphy decomposition algebra to 1e-10; `brier_improvement > 0` per horizon (calibrated > climatology); 10-bin reliability with ≥30 obs per bin (or adaptive); bootstrap seeded; 8 tests pass.
+
+### §6.6 Gate 23 — Drawdown conditional integrity (owner: L5-D)
+
+PASS criteria per §5.D.6: 16 (horizon × regime) cells; monotonicity P(DD≥10%) ≥ ... ≥ P(DD≥65%); bootstrap seeded; 8 tests pass; anchor cycle non-zero drawdowns at recession cell.
+
+### §6.7 Gate 24 — Forecast σ confidence band integrity (owner: L5-E)
+
+PASS criteria per §5.E.6: triple-σ all emitted per horizon; band clipping to [0, 1]; quadrature combination; band_lower ≤ band_upper invariant; 6 tests pass.
+
+### §6.8 Gate 25 — DMS + shrinkage composite (owners: L5-F + L5-G; sealed at L5-G commit)
+
+```python
+def validate_gate25_dms_shrinkage_composite() -> GateReport:
+```
+
+Composite sub-criteria (BOTH must PASS):
+
+- **25.1 (L5-F)**: `DMS_BPS_CENTRAL == {1Y: 0, 3Y: 0, 5Y: -125, 10Y: -175}`; `DMS_BPS_SENSITIVITY == 50.0`; AST-walk audit confirms 5Y/10Y exclusive application; 5 L5-F tests pass.
+- **25.2 (L5-G)**: `K_HORIZON == {1Y: 180, 3Y: 540, 5Y: 900, 10Y: 1800}`; `DMS_PRIOR_REAL_ANNUALIZED_US == 0.065`; `DMS_PRIOR_REAL_ANNUALIZED_GLOBAL == 0.045`; AST-walk audit confirms horizon-dependent shrinkage (no constant `0.30` literal); 6 L5-G tests pass.
+
+Failure modes: either sub-criterion FAIL ⇒ Gate 25 FAIL with sub-criterion noted.
+
+Mirrors L3.5b Gate 17 composite pattern (4 sub-criteria from 4 sub-phases sealed at retrospective commit).
 
 ---
 
 ## §7 — Backlog Management
 
-*To be authored in chunk 5. L5-12 / L5-13 / L5-14 / L7-CI-1 / L7-MIGRATE-1 routing into specific L5 sub-phases or downstream phases. L5-15 through L5-25 reserved for items surfacing during L5 build.*
+### §7.1 L5-era backlog routing (chunk 5 final assignments)
+
+| Item | Origin | Effort | Routing | Status post-L5 |
+|---|---|---|---|---|
+| **L5-12** | D21 (L3.5B Option C+) — `SeriesConfig` dataclass migration | 6–8h | **Defer to L5b post-OOS sprint** | Pending |
+| **L5-13** | Codex L3.5 finding X — CDRS notes migration symmetry | 1–2h | **ABSORBED into L5-RM-4** (test #3 regression-testable per continuation prompt §3.2 chunk 3 lean) | CLOSED at L5-RM-4 commit |
+| **L5-14** | D30 (L3.5b-V AST-walk) — 16 out-of-scope AP-6 sites | 3–5h | **Defer to L7 pre-deployment cleanup** | Pending |
+| **L7-CI-1** | D27 (L3.5E) — CI env-hygiene check (declared deps == installed) | 1–2h | **Pending L7** (Tier 2 medium hardening) | Pending |
+| **L7-MIGRATE-1** | D28 (L3.5b-T) — legacy cache migration sprint | 1–2h | **Pending L7** (Tier 4 contingent on fresh deployment) | Pending |
+
+### §7.2 L5 reservations
+
+| ID range | Reserved for |
+|---|---|
+| L5-15 through L5-25 | New items surfacing during L5 build (Codex 5/5 L5 review, ChatGPT 5/5 L5 review, smoke-test surprises) |
+
+### §7.3 Cross-layer backlog stack (post-L5 closure projection)
+
+| Layer | Backlog count |
+|---|---|
+| L5-15..L5-25 (post-L5 build) | TBD (depends on Codex L5 review) |
+| L5b OOS hardening | 1 (L5-12 SeriesConfig dataclass) + structural break tests + block bootstrap + FDR |
+| L6 reporting | 0 explicit; spec to be authored |
+| L7 production | 3 (L5-14 AP-6 sweep; L7-CI-1 env-hygiene; L7-MIGRATE-1 contingent) |
 
 ---
 
 ## §8 — ChatGPT 5.5 Reviewer-Handoff Checklist (NEW section type #3)
 
-*To be authored in chunk 5 with three sub-sections:*
+### §8.1 ChatGPT 5.5 MUST verify
 
-- *§8.1 ChatGPT 5.5 MUST verify (specific methodology claims to pressure-test)*
-- *§8.2 ChatGPT 5.5 MAY flag (anticipated reviewer concerns Strategic pre-empts)*
-- *§8.3 ChatGPT 5.5 decisions deferred to V (items requiring V judgment, not methodology)*
+ChatGPT 5.5 is asked to pressure-test these specific methodology claims; each maps to a methodology rigor block:
+
+- [ ] **L5-A**: Walk-forward CV cross-fold contamination invariant (`train_end + gap_months ≤ test_start`) holds for all 8 schedules × all folds — §5.A.1.3 + §5.A.3
+- [ ] **L5-B**: Ridge λ via nested walk-forward is contamination-free; inner `inner_fold_count=5` sufficient — §5.B.4 + §5.B.3
+- [ ] **L5-B**: Block-bootstrap `block_size = horizon_months // 2` preserves autocorrelation — §5.B.1.4
+- [ ] **L5-RM-6**: Isotonic monotonicity preservation guarantee — §5.RM-6.5 test #2; §5.RM-6.3 PAV consistency
+- [ ] **L5-RM-6**: Sahm Rule threshold 0.30 binding rate in 1-2× annual target — §5.RM-6.2 smoke-test
+- [ ] **L5-C**: Murphy decomposition algebra to 1e-10 — §5.C.5 test #2
+- [ ] **L5-D**: Drawdown conditional monotonicity per cell — §5.D.5 test #2
+- [ ] **L5-E**: Triple-σ disambiguation — §5.E.3.1
+- [ ] **L5-F**: DMS Q6=C bps band per Dimson-Marsh-Staunton — §5.F.3
+- [ ] **L5-G**: Bayesian k = horizon × 15 form; prior 6.5% US primary + 4.5% global robustness — §5.G.3
+
+### §8.2 ChatGPT 5.5 MAY flag (Strategic anticipates)
+
+Pre-empted concerns from methodology rigor blocks; spec response documented in each block's `ChatGPT 5.5 likely flag` field:
+
+- [ ] **L5-A**: Structural break tests within folds → Strategic response: **defer L5b** per Master Prompt v3.1 §15
+- [ ] **L5-B**: FDR for multiple-testing across ~200+ Ridge fits → Strategic response: **defer FDR aggregate to L5b**; per-fold HAC p-values reported
+- [ ] **L5-B**: Feature scaling (z-score vs raw) → Strategic response: z-score within fold (train-only) per §5.B.3
+- [ ] **L5-C**: Bin count adequacy → Strategic response: §5.C.2 adaptive reduction documented
+- [ ] **L5-RM-6**: Structural break in calibration across regimes → mitigated by Q5 regime trigger
+- [ ] **L5-G**: US-specific vs global prior choice → Strategic response: US primary justified by deliverable; global as robustness
+- [ ] **L5-G**: `k = horizon × 15` ad-hoc → anchored to "prior worth 15 years of horizon-length observations" intuition; sensitivity L5b
+
+### §8.3 ChatGPT 5.5 decisions deferred to V
+
+Items requiring V judgment, not methodology:
+
+- [ ] **Final DMS bps within band**: Q6 locks `(5Y=−125, 10Y=−175, ±50)`; ChatGPT may suggest narrower or wider band — V judgment
+- [ ] **Final regime trigger threshold** (Sahm 0.30): Q5 lock; ChatGPT may suggest sensitivity — V judgment
+- [ ] **Fold L5b structural break tests into L5 or keep separate**: spec defers; ChatGPT may recommend inclusion — V scope decision
+- [ ] **Q8 horizon staging if compute prohibitive**: spec locks all 4; if L5 build exceeds 66h ceiling, V re-decides
 
 ---
 
 ## §9 — Closure + Final QC Checklist
 
-*To be authored in chunk 5. 10–12 items mirroring L3.5b composite Gate 17 sub-criteria style.*
+Mirrors L3.5b Gate 17 composite pattern at spec-level (10 items):
+
+| # | QC item | PASS criterion | Status |
+|---|---|---|---|
+| 1 | Cross-reference integrity | Every `§X.Y.Z` anchor resolves | Verified §5.H.2 build-time |
+| 2 | Numeric specificity | Zero unjustified "approximately"/"around"/"roughly"/"about"/"TBD"/"TODO" | Verified each chunk |
+| 3 | Sxx register completeness | Every S-N has rationale + backlog ref or "none" | S-1 only; complete |
+| 4 | Q1-Q8 lock summary | All 8 Qs locked with option matrix + reasoning | 8/8 ✓ |
+| 5 | Effort sum verification | 47-66h headline = sum of sub-phase bands | Verified chunk 1 §4 arithmetic |
+| 6 | Test delta sum verification | +78 cumulative (602 → 680) | Verified chunk 1 §4 |
+| 7 | Gate count verification | 8 new gates (18-25) | ✓ |
+| 8 | NEG floor verification | ≥50% NEG per sub-phase; spec aggregate 51%+ | Per chunk verifications |
+| 9 | Conviction 3-field per sub-phase | Each sub-phase verification reports stat/op/act/agg | Per chunk verifications |
+| 10 | Spec-level conviction aggregate | Aggregate ≥0.90 | Per §9.1 below |
+
+### §9.1 Spec-level conviction aggregate
+
+| Field | Per-chunk min | L5 spec aggregate |
+|---|---|---|
+| `conviction_statistical` | min(0.96 / 0.94 / 0.93 / 0.93 / 0.93) | **0.93** |
+| `conviction_operational` | min(0.94 / 0.93 / 0.91 / 0.91 / 0.93) | **0.91** |
+| `conviction_actionability` | min(0.97 / 0.96 / 0.96 / 0.95 / 0.97) | **0.95** |
+| **Aggregate (MIN)** | | **0.91** |
+
+Binding constraint: **operational** (cross-chunk codebase recon depth uniform across chunks; deferred to build-time pre-flights).
+
+### §9.2 V freeze recommendation
+
+**APPROVE-FOR-FREEZE.** Spec-level aggregate 0.91 ≥ 0.90 floor. All 8 Q-resolutions locked with explicit option matrices anchored in standard methodology literature (Welch-Goyal, Pesaran, HTF, PAV, Murphy, DMS, Bayesian conjugate). Standing Order #4 audits (4 separate AST/grep audits) explicit and testable. 7 methodology rigor blocks complete per Type-1 template. Cross-sub-phase semantic table (§3.2) reconciled via S-1. ChatGPT 5.5 handoff checklist (§8) maps every methodology claim to verification + pre-empts likely flags + defers V judgment items.
+
+**Ready for V freeze → ChatGPT 5.5 methodology review.**
+
+---
+
+<!-- CHUNK 5 END — Spec authoring complete. L5 BUILD SPEC v1 draft ready for V freeze. -->
+<!-- See LAYER_5_AUTHORING_SUMMARY.md for paste-ready V → ChatGPT 5.5 handoff summary. -->
 
 ---
 
