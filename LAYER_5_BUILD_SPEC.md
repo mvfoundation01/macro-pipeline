@@ -839,6 +839,8 @@ NEG count Task B2: 1 strict-NEG of 3 = 33% — augmented by inherited audit. Com
 
 Total new tests for L5-B (v3) = 12 (Task A) + 13 (Task B1) + 3 (Task B2) = **28** (was 25 in v2; +3 via S-9 split). NEG aggregate v3: 7 (Task A) + 7 (Task B1) + 1 (Task B2) = 15 NEG / 28 total = 54% ≥50%.
 
+**§5.B.5 total test count = 28** (v4 defensive mirror anchor per §2.4 / AP-AUTH-39 prevention). Mirror in §5.B.6 PASS criterion 19, §5.B.7 proof item 2 and 14, §6.2 consolidated Gate 19 PASS criterion 19, cumulative L5 test count §9 closure QC.
+
 > **v1 §5.B.5 SUPERSEDED by v2 §5.B.5.A + §5.B.5.B above per S-3.** The original 15-test list focused on single Ridge fit; v2 expands to 25 tests across Task A (component-weight refit) + Task B (return-forecast). v1 tests preserved in commit history at d776eb4 (tag `layer5-spec-v1`).
 
 #### §5.B.6 Gate 19 — L5-B Task A + Task B integrity (v2)
@@ -848,51 +850,58 @@ def validate_gate19_l5b_composite_and_return_forecast() -> GateReport:
     """Gate 19 — L5-B Task A composite-weight refit + Task B return-forecast (v2 per S-3)."""
 ```
 
-PASS criteria (v2):
+PASS criteria (v4 sync per §6.2 mirror):
 
-**Task A sub-criteria**:
-1. `fit_composite_weights` executes for all 8 schedules × 2 score_types (CRPS + CDRS) × CDRS-specific 5 drawdown_thresholds = 8 + 40 = 48 schedule-score-threshold combinations
-2. `CompositeWeightRefitResult.component_coefficients` is `dict[str, float]` with ≥4 keys (CDRS) or ≥6 keys (CRPS); AST audit confirms NOT scalar
-3. Task A AUC + Brier + calibration slope/intercept populated per fold
-4. CDRS monotone CDF check holds per fold: P(DD≥10%) ≥ P(DD≥20%) ≥ P(DD≥35%) ≥ P(DD≥50%) ≥ P(DD≥65%)
-5. `sign_flip_rate < 0.20` across consecutive folds per Standing Order #4 audit
-6. All 12 Task A tests in §5.B.5.A PASS
+**Task A subcriteria** (composite-weight refit on component-level matrix):
+1. `fit_composite_weights` executes for CRPS (component matrix: yield curve + Sahm + LEI + ISM + FCI + credit) + CDRS (4 buckets × subcomponents) across all 8 schedules × CDRS 5 drawdown_thresholds
+2. AST audit confirms scalar `raw_score` NOT accepted as input (component matrix required)
+3. `CompositeWeightRefitResult.component_coefficients` is `dict[str, float]` with ≥4 keys (CDRS) or ≥6 keys (CRPS)
+4. Task A AUC + Brier + calibration slope/intercept populated per fold
+5. CDRS monotone CDF check holds per fold: P(DD≥10%) ≥ P(DD≥20%) ≥ P(DD≥35%) ≥ P(DD≥50%) ≥ P(DD≥65%)
+6. `sign_flip_rate < 0.20` across consecutive folds per Standing Order #4 audit
+7. All 12 Task A tests in §5.B.5.A PASS
 
-**Task B sub-criteria**:
-7. `fit_return_forecast` executes for all 8 schedules × 4 horizons = 32 schedule-horizon combinations
-8. `RidgeFitResult` fields populated per §5.B.1.1 v2 (incl. lambda_log10_sd_across_5fold + coefficient_sign_flip_rate)
-9. `lambda_grid` matches `LAMBDA_GRID_DEFAULT` exactly
-10. `grid_edge_bind` rate across all folds <10%
-11. HAC SE non-NaN ≥95% where `n_eff_nonoverlap_train ≥ 3`
-12. Bootstrap residual SE distribution length = 1000; seeded reproducibly
-13. Block-size sensitivity report emitted with 4 values {h/4, h/2, h, 2h} per fold (closes E.5)
-14. Bandwidth sensitivity report emitted {h−1, Andrews, fixed-lower} (closes E.5)
-15. All 13 Task B tests in §5.B.5.B PASS
+**Task B1 subcriteria** (Ridge return forecast; v3 per S-9):
+8. `fit_return_forecast_task_b1` executes for all 4 horizons × 8 schedules
+9. AST audit confirms `positive_return_probability` / RETURN_POSITIVE NOT in Task B1 input panel (closes ChatGPT v2 D.2 circularity)
+10. `RidgeFitResult` populated: R² + OOS R² + slope + intercept + residual SE + p-value + HAC maxlags + block-bootstrap CI
+11. Block-size sensitivity {h/4, h/2, h, 2h} reported per fold (closes E.5)
+12. Bandwidth sensitivity {h−1, Andrews-automatic, fixed-lower} reported (closes E.5)
+13. λ_log10 SD across 5-fold ≤1.0; coefficient sign-flip rate <20%; reported per horizon (closes E.6)
+14. All 13 Task B1 tests in §5.B.5.B PASS
 
-**Composite**:
-16. AST audit confirms Task A consumes component-level matrix; Task B consumes post-RM-6 calibrated_probability panel
-17. Robustness check (fixed-λ-from-L3) produces parallel result sets; relative OOS Brier difference <5% (informational; not fail criterion)
+**Task B2 subcriteria** (RETURN_POSITIVE calibration; v3 per S-9):
+15. `calibrate_return_forecast_task_b2` consumes ONLY Task B1 outputs (`return_forecasts_by_horizon`)
+16. Internally calls `fit_isotonic_calibrators` with `score_type="RETURN_POSITIVE"` per §3.3 schema
+17. `positive_return_probability` populated per horizon ∈ [0, 1]; `band_lower ≤ band_upper`
+18. All 3 Task B2 tests in §5.B.5.B2 PASS
 
-Failure modes: any of (1)-(16) false ⇒ Gate 19 FAIL.
+**Common**:
+19. All **28 tests** in §5.B.5 PASS (12 Task A + 13 Task B1 + 3 Task B2)
+20. `grid_edge_bind` rate <10% across all folds (both Task A penalized logistic and Task B1 Ridge)
+21. HAC SE non-NaN ≥95%; bootstrap seeded reproducibly
+22. Robustness check (fixed-λ-from-L3) produces parallel result sets; relative OOS Brier difference <5% (informational; not fail)
 
-#### §5.B.7 Proof contract (v2: 14 items)
+Failure modes: any of (1)-(22) false ⇒ Gate 19 FAIL with specific sub-criterion noted.
+
+#### §5.B.7 Proof contract (v4: 14 items per §6.2 mirror sync)
 
 | # | Proof |
 |---|---|
-| 1 | `python -c "from macro_pipeline.models.ridge_cv import fit_composite_weights, fit_return_forecast, CompositeWeightRefitResult, RidgeFitResult, LAMBDA_GRID_DEFAULT"` succeeds |
-| 2 | `pytest tests/test_ridge_cv.py` shows all 25 new tests PASS (12 Task A + 13 Task B) |
+| 1 | `python -c "from macro_pipeline.models.ridge_cv import fit_composite_weights, fit_return_forecast_task_b1, calibrate_return_forecast_task_b2, CompositeWeightRefitResult, RidgeFitResult, LAMBDA_GRID_DEFAULT"` succeeds |
+| 2 | `pytest tests/test_ridge_cv.py` shows all **28** new tests PASS (12 Task A + 13 Task B1 + 3 Task B2) |
 | 3 | `LAMBDA_GRID_DEFAULT` equals `10.0 ** np.linspace(-4, 2, 11)` element-wise |
 | 4 | Task A: per-fold `component_coefficients` dict size reported (CRPS=6, CDRS=4 buckets × subcomponents); AST audit 0 scalar collapses |
-| 5 | Task A: `sign_flip_rate < 0.20` rate across consecutive folds reported per score_type |
-| 6 | Task A: CDRS monotone CDF check holds per fold (5-threshold ordering) |
-| 7 | Task A: AUC + Brier + calibration slope/intercept reported per (horizon × fold × score_type × threshold for CDRS) |
-| 8 | Task B: `r_squared_oos` reported per horizon (4 numbers) |
-| 9 | Task B: `lambda_log10_sd_across_5fold` reported per horizon; `coefficient_sign_flip_rate` reported (closes E.6) |
-| 10 | Task B: block-size sensitivity {h/4, h/2, h, 2h} reported per fold (closes E.5) |
-| 11 | Task B: bandwidth sensitivity {h−1, Andrews, fixed-lower} reported (closes E.5) |
-| 12 | `grid_edge_bind` rate <10% across all folds (both Task A + Task B) |
-| 13 | Gate 19 PASSes in `validation.py` (all 17 sub-criteria green) |
-| 14 | Cumulative test count = 614 + 25 = 639; conviction 3-field reported per §2.4 |
+| 5 | Task A: AST audit confirms scalar `raw_score` NOT accepted; component matrix required (`test_task_a_composite_uses_component_level_matrix_not_scalar`) |
+| 6 | Task B1: AST audit confirms `positive_return_probability` / RETURN_POSITIVE NOT in input panel (`test_task_b1_does_not_consume_return_positive_calibrated_probability`) |
+| 7 | Task B1: per-fold `R², OOS R², slope, intercept, residual_SE, p_value, HAC maxlags, bootstrap CI` reported |
+| 8 | Task B1: block-size sensitivity {h/4, h/2, h, 2h} OOS Brier delta reported per horizon |
+| 9 | Task B1: `lambda_log10_sd_5fold` ≤1.0 across all horizons; `coefficient_sign_flip_rate` <20% |
+| 10 | Task B2: consumes only Task B1 return forecasts (`test_task_b2_consumes_task_b1_return_forecasts_only`) |
+| 11 | Task B2: `positive_return_probability` populated per horizon ∈ [0, 1] (`test_task_b2_outputs_positive_return_probability_in_zero_one`) |
+| 12 | `grid_edge_bind` rate <10% across all folds (Task A + Task B1) |
+| 13 | Gate 19 PASSes per §5.B.6 in-section + §6.2 consolidated (mirror integrity per §2.4 anchors) |
+| 14 | Cumulative test count = previous + **28**; conviction 3-field reported per §2.4 |
 
 ---
 
@@ -1284,6 +1293,8 @@ Implementation: `should_recalibrate` returns `(False, "cooldown_active")` during
 
 NEG count v2: tests 2, 7, 8, 9, 10, 11, 13 = 7 strict NEG; test 6 + 4 + 5 + 14 invariants/triggers (POS). 7 NEG of 14 = 50% ≥ floor. **Floor met.** Total tests = 14 (was 11 post-S-2; +3 via S-7).
 
+**§5.RM-6.5 total test count = 14** (= 13 v2 baseline + 1 v3 test #11 HARD GATE upgrade per S-8). v4 defensive mirror anchor per §2.4 / AP-AUTH-39 prevention. Mirror in §5.RM-6.6 PASS criterion 8, §5.RM-6.7 proof item 3 and 10, §6.4 consolidated Gate 21 PASS criterion 8.
+
 #### §5.RM-6.6 Gate 21 — Isotonic calibration integrity (v3 per S-8)
 
 PASS criteria (v3):
@@ -1554,7 +1565,7 @@ For each `(horizon × regime × threshold)` cell:
 | Assumption | Historical analog regime → forward analog regime; conditional distribution stable within regime |
 | Estimator | Empirical exceedance frequency per cell |
 | Identification | Conditioning on regime_state at fold start |
-| Consistency | LLN within regime; per-cell consistency requires per-cell n_obs ≥ 5 (else `nan`) |
+| Consistency (v4 amended per §2.3 scrub) | LLN within regime; per-cell consistency requires sufficient `n_eff_nonoverlap` per §5.D.1.3 cell sparsity policy. Cells below threshold are labeled `"diagnostic_only"` (point estimate emitted with wide Wilson CI) OR `"pooled"` (hierarchical pooling across neighbor cells); **NEVER raw `nan` returned** per v3 3-state taxonomy (`Literal["production", "diagnostic_only", "pooled"]`). v1/v2 "n_obs ≥ 5 (else nan)" wording REMOVED in v4 scrub |
 | Standard error | Bootstrap B=1000 with seed=42 |
 | Failure mode | Regime-recession-10Y cell has historically ~5 observations (1929-33, 1937, 1973-75, 2007-09, 2020) — borderline; mitigated by widening to 65% bin |
 | ChatGPT 5.5 likely flag | Sample size at long-horizon-recession cells; recommend cross-horizon analog smoothing (defer L5b) |
@@ -1577,8 +1588,10 @@ For each `(horizon × regime × threshold)` cell:
 | 8 | `test_bootstrap_seeded_for_reproducibility` | NEG-invariant | Two seed=42 runs produce identical bootstrap_se element-wise |
 | **9 (v2 NEW per S-5)** | `test_wilson_interval_computed_per_threshold` | POS | `wilson_interval_95[threshold]` populated per cell per threshold; matches `signal_probability.wilson_95_ci` |
 | **10 (v2 NEW per S-5)** | `test_diagnostic_only_label_at_n_eff_below_10_or_width_above_0_5` | NEG | Sparse cell flagged correctly |
-| **11 (v2 NEW per S-5)** | `test_hierarchical_pooling_when_sparse_with_neighbor_recording` | POS | Pooled cell has `hierarchical_pooling_applied=True` and `pooling_neighbors` populated with chain |
+| **11 (v4 amended per §2.3 scrub; supersedes v2 hierarchical_pooling_applied assertion)** | `test_hierarchical_pooling_when_sparse_uses_cell_label_taxonomy` | POS+NEG | Construct sparse cell scenario (`n_eff < 10`); assert `sparse_cell.cell_label == "pooled"` AND `len(sparse_cell.pooling_neighbors) > 0`; **v4 NEG**: assert `not hasattr(sparse_cell, "hierarchical_pooling_applied")` (v2 bool REMOVED in v3 cleanup; v4 explicitly tests removal) |
 | **12 (v3 amended per §2.4 cleanup)** | `test_no_raw_nan_in_drawdown_output_v3_taxonomy` | NEG | No cell returns `nan` in `exceedance_probability`; every cell has `cell_label ∈ {"production", "diagnostic_only", "pooled"}` per v3 3-state taxonomy; closes ChatGPT v2 E.4 CLOSED-WITH-FLAG → CLOSED |
+
+**§5.D.5 total test count = 12** (= 8 v2 baseline + 4 v2/v3 cell_label taxonomy tests: #9 Wilson + #10 diagnostic_only label + #11 hierarchical pooling v4 amended + #12 no-raw-nan v3 taxonomy). v4 defensive mirror anchor per §2.4 / AP-AUTH-39 prevention. Mirror in §5.D.6 PASS criterion 8, §5.D.7 proof item 2, §6.6 consolidated Gate 23 PASS criterion 8.
 
 #### §5.D.6 Gate 23 — Drawdown conditional integrity (v2)
 
@@ -1591,7 +1604,7 @@ PASS (v2): 16 cells returned; monotonicity invariant; bootstrap seeded; **every 
 | 1 | `from macro_pipeline.analysis.drawdown_conditionals import fit_drawdown_conditionals, DRAWDOWN_THRESHOLDS` succeeds |
 | 2 | 8 tests PASS |
 | 3 | 16 cells × 5 thresholds = 80 numbers reported in verification table |
-| 4 | n_obs per cell reported; cells <5 flagged |
+| 4 | `n_eff_nonoverlap` per cell reported; cells with `n_eff < 10` OR `interval_width ≥ 0.50` labeled `"diagnostic_only"` or `"pooled"` per v3 taxonomy (v4 scrub: replaces stale "cells <5 flagged" wording) |
 | 5 | Bootstrap SE distribution archived |
 | 6 | Monotonicity invariant holds across all cells (test #2) |
 | 7 | Anchor cycle non-zero drawdowns confirmed |
@@ -1967,6 +1980,8 @@ def apply_shrinkage(
 | **7 (v2 NEW per S-4)** | `test_shrinkage_weight_matches_W_REF_TARGET_within_2_percentage_points_at_N_REF` | POS-invariant | For each horizon h: `compute_shrinkage_weight(N_REF_NONOVERLAP[h], h)` is within ±2pp of `W_REF_TARGET[h]`. Closes ChatGPT §G.3 v2 proof test requirement. |
 | **8 (v2 NEW per S-4)** | `test_k_horizon_sensitivity_0_5x_1x_2x` | POS | At each horizon, compute shrinkage weight at `0.5 × K_HORIZON[h]`, `1.0 × K_HORIZON[h]`, `2.0 × K_HORIZON[h]` with reference n_eff; report sensitivity profile; assert monotone (w increases with k). Closes ChatGPT §G.3 sensitivity requirement. |
 
+**§5.G.5 total test count = 8** (= 5 v2 baseline + 3 v2 NEW tests #6, #7, #8 for K_HORIZON backsolve verification via S-4). v4 defensive mirror anchor per §2.4 / AP-AUTH-39 prevention. Mirror in §5.G.6 PASS criterion (composite Gate 25.2), §5.G.7 proof item 4, §6.8 Gate 25.2 sub-criterion.
+
 #### §5.G.6 Gate 25 (composite) — DMS + shrinkage sealed
 
 Composite gate 25 sub-criteria:
@@ -2093,25 +2108,80 @@ PASS criteria (per §5.A.6):
 5. All 12 tests in §5.A.5 PASS
 6. AST-walk audit (Standing Order #4 test #4) reports 0 violations
 
-### §6.2 Gate 19 — Ridge regression fit integrity (owner: L5-B)
+<!-- CHUNK 12 v4 START — §6 consolidated gate sync (closes ChatGPT v3 C.1 HIGH) -->
 
-PASS criteria per §5.B.6: 15 tests pass; `RidgeFitResult` populated; `LAMBDA_GRID_DEFAULT` exact; `grid_edge_bind` rate <10%; HAC SE per fold non-NaN ≥95%; bootstrap seeded; robustness fixed-λ-from-L3 emits parallel result.
+### §6.2 Gate 19 — L5-B Task A + Task B1 + Task B2 integrity (v4 sync per §6.2 v3 §5.B.6 mirror)
+
+PASS criteria per §5.B.6 v3 (Task A + Task B1 + Task B2):
+
+**Task A subcriteria** (composite-weight refit on component-level matrix):
+1. `fit_composite_weights` executes for CRPS (component matrix: yield curve + Sahm + LEI + ISM + FCI + credit) + CDRS (4 buckets × subcomponents)
+2. AST audit confirms scalar `raw_score` NOT accepted as input (component matrix required)
+3. Output includes per-component coefficients + intercept + λ + AUC + Brier + calibration slope/intercept
+
+**Task B1 subcriteria** (Ridge return forecast):
+4. `fit_return_forecast_task_b1` executes for all 4 horizons × 8 schedules
+5. AST audit confirms `positive_return_probability` / RETURN_POSITIVE NOT in Task B1 input panel (closes ChatGPT v2 D.2)
+6. `RidgeFitResult` populated: R² + OOS R² + slope + intercept + residual SE + p-value + HAC maxlags + block-bootstrap CI
+7. Block-size sensitivity {h/4, h/2, h, 2h} reported per fold
+8. λ_log10 SD across 5-fold ≤1.0; coefficient sign-flip rate <20%; reported per horizon
+
+**Task B2 subcriteria** (RETURN_POSITIVE calibration):
+9. `calibrate_return_forecast_task_b2` consumes ONLY Task B1 outputs (`return_forecasts_by_horizon`)
+10. Internally calls `fit_isotonic_calibrators` with `score_type="RETURN_POSITIVE"`
+11. `positive_return_probability` populated per horizon ∈ [0, 1]; `band_lower ≤ band_upper`
+
+**Common**:
+12. All 28 tests in §5.B.5 PASS (12 Task A + 13 Task B1 + 3 Task B2)
+13. `grid_edge_bind` rate <10% across all folds (both Task A penalized logistic and Task B1 Ridge)
+14. HAC SE per fold non-NaN ≥95%; bootstrap seeded reproducibly
+
+Failure modes: any of (1)-(14) false ⇒ Gate 19 FAIL with specific sub-criterion noted.
 
 ### §6.3 Gate 20 — Dataclass migration integrity (owner: L5-RM-4)
 
 PASS criteria per §5.RM-4.6: 30 slots total; 5 new slot names exact; parquet roundtrip; L5-13 absorbed (CDRS `metadata_extra` empty for V_*/T_* keys); 8 tests pass; 602-test regression floor preserved.
 
-### §6.4 Gate 21 — Isotonic calibration integrity (owner: L5-RM-6)
+### §6.4 Gate 21 — Isotonic calibration integrity (owner: L5-RM-6 v3 25-calibrator topology)
 
-PASS criteria per §5.RM-6.6: 4 per-horizon calibrators; PAV monotonicity invariant grep-audit; quarterly + Sahm + yield-curve triggers fire; `calibrate_raw_score` clips to [0, 1]; bootstrap seeded; 10 tests pass; cross-horizon consistency reported; Sahm trigger frequency in target band 1-2× annual (or S-2 filed).
+PASS criteria per §5.RM-6.6 v3 (`build_event_labels()` dispatch + 25 calibrators):
+
+1. `fit_isotonic_calibrators` returns **25 calibrators per refit window**:
+   - 1 CRPS calibrator (key `("CRPS", "1Y")`; 12M-only per §3.3 schema)
+   - 20 CDRS calibrators (4 horizons × 5 drawdown thresholds; keys `("CDRS", h)` for h ∈ {1Y, 3Y, 5Y, 10Y})
+   - 4 RETURN_POSITIVE calibrators (4 horizons; keys `("RETURN_POSITIVE", h)`)
+2. `build_event_labels()` dispatch enforced via test #11 HARD GATE:
+   - CRPS at horizon ≠ "1Y" raises `ValueError("CRPS calibrates only against 12M")`
+   - CDRS without `drawdown_threshold` raises `ValueError("CDRS calibration requires drawdown_threshold")`
+   - Unknown `score_type` raises `ValueError("not in §3.3 schema")`
+3. PAV monotonicity invariant holds for every (score_type, horizon, [threshold]) calibrator (grep audit)
+4. Quarterly + Sahm Rule >0.30 + 10Y-3M curve flip triggers fire correctly
+5. 90-day refit cooldown + coalescing enforced; max 6 refits/year
+6. `calibrate_raw_score` always returns calibrated ∈ [0, 1]
+7. Bootstrap SE distribution length = 1000; seeded reproducibly
+8. All **14 tests** in §5.RM-6.5 PASS (13 v2 baseline + 1 v3 test #11 hard gate)
+9. Cross-horizon consistency reported via diagnostics
+
+Failure modes: any of (1)-(9) false ⇒ Gate 21 FAIL.
 
 ### §6.5 Gate 22 — Brier + reliability integrity (owner: L5-C)
 
 PASS criteria per §5.C.6: Brier formula; Murphy decomposition algebra to 1e-10; `brier_improvement > 0` per horizon (calibrated > climatology); 10-bin reliability with ≥30 obs per bin (or adaptive); bootstrap seeded; 8 tests pass.
 
-### §6.6 Gate 23 — Drawdown conditional integrity (owner: L5-D)
+### §6.6 Gate 23 — Drawdown conditional integrity (owner: L5-D v3 cell_label taxonomy)
 
-PASS criteria per §5.D.6: 16 (horizon × regime) cells; monotonicity P(DD≥10%) ≥ ... ≥ P(DD≥65%); bootstrap seeded; 8 tests pass; anchor cycle non-zero drawdowns at recession cell.
+PASS criteria per §5.D.6 v3 (3-state taxonomy + no raw nan):
+
+1. `fit_drawdown_conditionals` returns 16 cells (4 horizons × 4 regime states)
+2. Per-cell `cell_label: Literal["production", "diagnostic_only", "pooled"]` populated; NEVER raw nan
+3. Wilson 95% intervals per drawdown threshold computed; `interval_width` reported
+4. Hierarchical pooling triggered when `n_eff < 10 OR interval_width ≥ 0.50`; `pooling_neighbors` recorded
+5. Monotonicity invariant: `P(DD≥10%) ≥ P(DD≥20%) ≥ ... ≥ P(DD≥65%)` per cell
+6. Bootstrap SE distribution seeded reproducibly
+7. Anchor cycle (1990, 2001, 2008, 2020) non-zero drawdowns at recession cells confirmed
+8. All **12 tests** in §5.D.5 PASS (8 v2 baseline + 4 v2/v3 — Wilson interval + diagnostic_only label + hierarchical pooling + no-raw-nan v3 taxonomy)
+
+Failure modes: any of (1)-(8) false ⇒ Gate 23 FAIL.
 
 ### §6.7 Gate 24 — Forecast σ confidence band integrity (owner: L5-E)
 
@@ -2123,14 +2193,28 @@ PASS criteria per §5.E.6: triple-σ all emitted per horizon; band clipping to [
 def validate_gate25_dms_shrinkage_composite() -> GateReport:
 ```
 
-Composite sub-criteria (BOTH must PASS):
+Composite sub-criteria (BOTH must PASS) — v4 sync per §5.G.6 v2/v3 owning §5.X.6:
 
-- **25.1 (L5-F)**: `DMS_BPS_CENTRAL == {1Y: 0, 3Y: 0, 5Y: -125, 10Y: -175}`; `DMS_BPS_SENSITIVITY == 50.0`; AST-walk audit confirms 5Y/10Y exclusive application; 5 L5-F tests pass.
-- **25.2 (L5-G)**: `K_HORIZON == {1Y: 180, 3Y: 540, 5Y: 900, 10Y: 1800}`; `DMS_PRIOR_REAL_ANNUALIZED_US == 0.065`; `DMS_PRIOR_REAL_ANNUALIZED_GLOBAL == 0.045`; AST-walk audit confirms horizon-dependent shrinkage (no constant `0.30` literal); 6 L5-G tests pass.
+**25.1 (L5-F — DMS)**:
+- `DMS_BPS_CENTRAL == {"1Y": 0, "3Y": 0, "5Y": -125, "10Y": -175}`
+- `DMS_BPS_SENSITIVITY == 50.0`
+- AST-walk audit confirms `apply_dms_adjustment` called for 5Y/10Y only; NOT called for 1Y/3Y
+- All 5 L5-F tests pass
 
-Failure modes: either sub-criterion FAIL ⇒ Gate 25 FAIL with sub-criterion noted.
+**25.2 (L5-G — Bayesian shrinkage v3 backsolved)**:
+- **`K_HORIZON == {"1Y": 5.9, "3Y": 6.7, "5Y": 9.4, "10Y": 11.0}`** (v3 backsolved per §5.G.1; supersedes v1/v2 `{180, 540, 900, 1800}` arithmetic inconsistency)
+- `N_REF_NONOVERLAP == {"1Y": 113, "3Y": 38, "5Y": 22, "10Y": 11}`
+- `W_REF_TARGET == {"1Y": 0.05, "3Y": 0.15, "5Y": 0.30, "10Y": 0.50}`
+- `DMS_PRIOR_REAL_ANNUALIZED_US == 0.065`
+- `DMS_PRIOR_REAL_ANNUALIZED_GLOBAL == 0.045`
+- AST-walk audit confirms horizon-dependent shrinkage (no constant `0.30` literal anywhere)
+- Computed `w` at reference cutpoints matches `W_REF_TARGET` within ±2pp (per §5.G.5 test #7)
+- k_h sensitivity {0.5×, 1×, 2×} reported (per §5.G.5 test #8)
+- All **8 L5-G tests** PASS (5 v2 baseline + 3 v2/v3 tests #6, #7, #8 for backsolve verification)
 
-Mirrors L3.5b Gate 17 composite pattern (4 sub-criteria from 4 sub-phases sealed at retrospective commit).
+Both sub-criteria PASS ⇒ Gate 25 PASS. L5-G commit seals the composite.
+
+Mirrors L3.5b Gate 17 composite pattern (sub-criteria sealed at retrospective commit).
 
 ---
 
@@ -2298,6 +2382,7 @@ Cumulative AP-1 through AP-15 from prior layers apply. L5-specific additions:
 | **AP-19 NEW** | DMS bps applied to 1Y or 3Y output paths (DMS adjustment is a long-horizon survivorship correction; only 5Y/10Y); detected via §2.5 audit |
 | **AP-20 NEW** | Bayesian shrinkage weight as a constant (e.g., `weight = 0.30` literal anywhere); spec mandates horizon-dependent + sample-size-adaptive; detected via §2.5 audit |
 | **AP-21 NEW** | `score_value` references re-introduced post-3.5D rename; 3.5D D24 deprecation warning preserved through L5; full removal at L4-L5 boundary deferred to L5-RM-4 absorbing the boundary |
+| **AP-AUTH-39 NEW v4** | Updating gate PASS criteria in owning §5.X.6 sub-phase WITHOUT updating the consolidated §6.N gate mirror (dual-anchor synchronization miss); detected by grep audit comparing §5.X.6 vs §6.N test counts + API names + literal values; v3 missed Gate 19/21/23/25 sync in §6.2/§6.4/§6.6/§6.8 → ChatGPT v3 §C.1 HIGH flag → v4 fixed all 4 plus added defensive mirror-anchor summary lines per §5.B.5/§5.RM-6.5/§5.D.5/§5.G.5. **Mitigation discipline**: when patching any §5.X.6 PASS criterion or API name or test count, the build agent MUST also grep-audit §6 consolidated mirror for matching anchor and update in same commit; LAYER_5_AUTHORING_SUMMARY mirror integrity table per chunk verification report enforces 4-anchor check (§5.X.5 == §5.X.6 == §5.X.7 == §6.N). |
 
 ---
 
