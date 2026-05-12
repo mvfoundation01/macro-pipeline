@@ -1,0 +1,30 @@
+# Pre-commit framework configuration (forward-compat).
+#
+# This repo does not currently bundle the pre-commit framework
+# (https://pre-commit.com) as a dependency. The same two hooks are wired
+# directly into `.git/hooks/pre-commit` by `scripts/precommit/install_hook.py`.
+#
+# If pre-commit framework is later added (`uv add --dev pre-commit`), this
+# config becomes the canonical hook source: `pre-commit install` will
+# supersede the direct .git/hooks/pre-commit shim.
+#
+# Build plan ref: claude/layer-5-build-plan @ 32cce8b ITEM 6.
+
+repos:
+  - repo: local
+    hooks:
+      - id: validate-dual-grep-in-verification
+        name: AP-AUTH-41 v6 dual-grep enforcement (docs verification tables)
+        entry: python scripts/precommit/validate_dual_grep_in_verification.py
+        language: system
+        types: [markdown]
+        files: ^docs/.*\.md$
+        pass_filenames: true
+
+      - id: validate-no-cumulative-arithmetic
+        name: AP-AUTH-42 NEW v6 cumulative-arithmetic scrub (docs prose)
+        entry: python scripts/precommit/validate_no_cumulative_arithmetic.py
+        language: system
+        types: [markdown]
+        files: ^docs/.*\.md$
+        pass_filenames: true
