@@ -1,0 +1,20 @@
+============================= test session starts =============================
+collecting ... collected 15 items
+
+tests/test_walk_forward_cv.py::test_expanding_window_yields_monotone_train_end PASSED [  6%]
+tests/test_walk_forward_cv.py::test_rolling_20y_window_fixed_length PASSED [ 13%]
+tests/test_walk_forward_cv.py::test_horizon_dependent_step_size_matches_Q2_lock[1Y-1] PASSED [ 20%]
+tests/test_walk_forward_cv.py::test_horizon_dependent_step_size_matches_Q2_lock[3Y-1] PASSED [ 26%]
+tests/test_walk_forward_cv.py::test_horizon_dependent_step_size_matches_Q2_lock[5Y-12] PASSED [ 33%]
+tests/test_walk_forward_cv.py::test_horizon_dependent_step_size_matches_Q2_lock[10Y-60] PASSED [ 40%]
+tests/test_walk_forward_cv.py::test_no_cross_fold_contamination_grep_audit PASSED [ 46%]
+tests/test_walk_forward_cv.py::test_min_train_window_240_months_enforced PASSED [ 53%]
+tests/test_walk_forward_cv.py::test_rejects_horizon_outside_1Y_3Y_5Y_10Y PASSED [ 60%]
+tests/test_walk_forward_cv.py::test_rejects_inverted_train_test_boundary PASSED [ 66%]
+tests/test_walk_forward_cv.py::test_rejects_overlapping_test_windows_within_schedule PASSED [ 73%]
+tests/test_walk_forward_cv.py::test_rejects_gap_months_below_horizon_minimum PASSED [ 80%]
+tests/test_walk_forward_cv.py::test_pit_safety_propagates_panel_sha256_to_schedule PASSED [ 86%]
+tests/test_walk_forward_cv.py::test_rejects_corrupt_panel_propagates_CacheValidationError PASSED [ 93%]
+tests/test_walk_forward_cv.py::test_rejects_panel_with_missing_months_gaps PASSED [100%]
+
+============================= 15 passed in 2.44s ==============================
