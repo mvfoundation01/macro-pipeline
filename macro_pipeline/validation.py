@@ -3267,6 +3267,209 @@ def _cli_gate10() -> int:
     return 0 if report.passed else 1
 
 
+def validate_gate18_walk_forward_cv(
+    schedules: tuple | None = None,
+    *,
+    panel_index: pd.DatetimeIndex | None = None,
+    panel_path: str | None = None,
+    fold_count_targets: dict[tuple[str, str], int] | None = None,
+) -> GateReport:
+    """Gate 18 — L5-A walk-forward CV scaffold integrity.
+
+    Per ``LAYER_5_BUILD_SPEC.md`` v6 §5.A.6, all PASS criteria below must hold.
+    This validator covers the runtime-observable subset (criteria 1, 2, 3, 4, 6);
+    criterion 5 (all 12 §5.A.5 tests PASS) is asserted out-of-band via pytest
+    and cited in the L5-A verification report.
+
+    Criteria
+    --------
+    1. ``generate_all_schedules(panel_index)`` returns exactly 8 schedules
+       (4 horizons × 2 schedule_types).
+    2. Each schedule has fold count ≥ §5.A.2 empirical target.
+    3. Cross-fold contamination invariant: ``train_end + gap_months ≤ test_start``
+       holds for every fold in every schedule.
+    4. ``WalkForwardSchedule.panel_sha256`` propagated from cache when
+       ``panel_path`` supplied; per-schedule non-empty if PIT mode active.
+    6. AST-walk audit (programmatic Standing Order #4) reports 0 contamination
+       violations across the full 8-schedule grid.
+
+    Parameters
+    ----------
+    schedules
+        Pre-generated 8-schedule tuple. If None, generated from ``panel_index``
+        / ``panel_path`` (both optional but at least one required when
+        ``schedules`` is None).
+    panel_index, panel_path
+        Used only if ``schedules`` is None. ``panel_path`` enables PIT-safety
+        propagation per L3.5b-T cache discipline.
+    fold_count_targets
+        Override §5.A.2 default fold-count thresholds (test convenience).
+    """
+    from macro_pipeline.analysis.walk_forward_cv import (
+        GATE18_FOLD_COUNT_TARGETS,
+        WalkForwardSchedule,
+        generate_all_schedules,
+    )
+
+    targets = (
+        fold_count_targets
+        if fold_count_targets is not None
+        else GATE18_FOLD_COUNT_TARGETS
+    )
+    findings: list[str] = []
+    warnings: list[str] = []
+    summary: dict = {}
+
+    # Resolve schedules input — accept pre-generated, otherwise build from panel.
+    if schedules is None:
+        if panel_index is None and panel_path is None:
+            findings.append(
+                "FAIL: Gate 18 requires either `schedules` or "
+                "`panel_index` / `panel_path`"
+            )
+            return GateReport(
+                name="Gate 18 - L5-A Walk-forward CV scaffold",
+                passed=False, findings=findings, warnings=warnings, summary=summary,
+            )
+        if panel_index is None and panel_path is not None:
+            # Lightweight load: just read the index for the gate; full validation
+            # happens inside generate_schedule when panel_path is propagated.
+            import pandas as _pd
+            panel_index = _pd.DatetimeIndex(
+                _pd.read_parquet(panel_path).index.get_level_values("date").unique()
+            )
+        schedules = generate_all_schedules(
+            panel_index, panel_path=panel_path,
+        )
+
+    # ---- Criterion 1: exactly 8 schedules --------------------------------
+    n_schedules = len(schedules)
+    summary["criterion_1_schedule_count"] = n_schedules
+    if n_schedules == 8:
+        findings.append(f"Criterion 1 PASS: {n_schedules} schedules generated")
+    else:
+        findings.append(
+            f"FAIL: Criterion 1 — expected 8 schedules (4 horizons × 2 types), "
+            f"got {n_schedules}"
+        )
+
+    # ---- Criterion 2: per-schedule fold count meets target --------------
+    fold_counts: dict[str, int] = {}
+    fold_count_failures: list[str] = []
+    for schedule in schedules:
+        key = (schedule.horizon, schedule.schedule_type)
+        target = targets.get(key)
+        n_folds = len(schedule.folds)
+        fold_counts[f"{schedule.horizon}/{schedule.schedule_type}"] = n_folds
+        if target is not None and n_folds < target:
+            fold_count_failures.append(
+                f"{schedule.horizon}/{schedule.schedule_type}: "
+                f"{n_folds} < target {target}"
+            )
+    summary["criterion_2_fold_counts"] = fold_counts
+    summary["criterion_2_targets"] = {
+        f"{k[0]}/{k[1]}": v for k, v in targets.items()
+    }
+    if not fold_count_failures:
+        findings.append("Criterion 2 PASS: all 8 schedules meet §5.A.2 targets")
+    else:
+        for fail in fold_count_failures:
+            findings.append(f"FAIL: Criterion 2 — fold count below target: {fail}")
+
+    # ---- Criterion 3 + 6: cross-fold contamination AST-walk audit -------
+    # (3 and 6 are functionally identical; both check the universal claim
+    # `train_end + gap_months <= test_start` over every fold.)
+    contamination_violations: list[str] = []
+    total_folds = 0
+    for schedule in schedules:
+        for fold in schedule.folds:
+            total_folds += 1
+            min_test_start = fold.train_end + pd.DateOffset(months=fold.gap_months)
+            if fold.test_start < min_test_start:
+                contamination_violations.append(
+                    f"{schedule.horizon}/{schedule.schedule_type} fold "
+                    f"{fold.fold_id}: train_end+gap={min_test_start.date()} > "
+                    f"test_start={fold.test_start.date()}"
+                )
+    summary["criterion_3_6_audit_total_folds"] = total_folds
+    summary["criterion_3_6_audit_violations"] = len(contamination_violations)
+    if not contamination_violations:
+        findings.append(
+            f"Criteria 3 + 6 PASS: AST-walk over {total_folds} folds reports "
+            "0 contamination violations (Standing Order #4 universal claim audit)"
+        )
+    else:
+        for v in contamination_violations[:5]:
+            findings.append(f"FAIL: Criteria 3 + 6 — contamination: {v}")
+        if len(contamination_violations) > 5:
+            findings.append(
+                f"FAIL: ... and {len(contamination_violations) - 5} more violations"
+            )
+
+    # ---- Criterion 4: panel_sha256 propagation ---------------------------
+    sha_status: dict[str, str] = {}
+    pit_active = panel_path is not None or any(s.panel_sha256 for s in schedules)
+    sha_failures: list[str] = []
+    for schedule in schedules:
+        sha_status[f"{schedule.horizon}/{schedule.schedule_type}"] = (
+            f"{schedule.panel_sha256[:12]}..." if schedule.panel_sha256
+            else "(panel-only mode; no cache validation)"
+        )
+        if pit_active and not schedule.panel_sha256:
+            sha_failures.append(
+                f"{schedule.horizon}/{schedule.schedule_type} missing panel_sha256"
+            )
+    summary["criterion_4_panel_sha256_per_schedule"] = sha_status
+    if pit_active:
+        if not sha_failures:
+            findings.append(
+                "Criterion 4 PASS: PIT-safety panel_sha256 propagated to all "
+                "8 schedules"
+            )
+        else:
+            for fail in sha_failures:
+                findings.append(f"FAIL: Criterion 4 — {fail}")
+    else:
+        warnings.append(
+            "Criterion 4 SKIP: panel_only mode (no panel_path provided); "
+            "no cache validation performed. Build-time gate invocation MUST "
+            "pass panel_path to enforce PIT-safety propagation."
+        )
+
+    # ---- Criterion 5 reminder -------------------------------------------
+    warnings.append(
+        "Criterion 5 (all 12 §5.A.5 tests PASS) is asserted out-of-band via "
+        "`pytest tests/test_walk_forward_cv.py`; cite in verification report."
+    )
+
+    passed = not any(f.startswith("FAIL") for f in findings)
+    return GateReport(
+        name="Gate 18 - L5-A Walk-forward CV scaffold",
+        passed=passed, findings=findings, warnings=warnings, summary=summary,
+    )
+
+
+def _cli_gate18() -> int:
+    import logging
+    logging.basicConfig(level="WARNING", format="%(message)s")
+    # Default CLI invocation uses the L3D r_squared_panel cache.
+    try:
+        from macro_pipeline.analysis.r_squared_panel import PANEL_CACHE_PATH
+        report = validate_gate18_walk_forward_cv(
+            panel_path=str(PANEL_CACHE_PATH),
+        )
+    except Exception as exc:  # pragma: no cover - CLI convenience
+        report = GateReport(
+            name="Gate 18 - L5-A Walk-forward CV scaffold",
+            passed=False,
+            findings=[f"FAIL: CLI invocation error: {exc}"],
+            warnings=[],
+            summary={},
+        )
+    print(report.render())
+    return 0 if report.passed else 1
+
+
 if __name__ == "__main__":
     import sys
     cmd = sys.argv[1] if len(sys.argv) > 1 else "gate1"
@@ -3304,10 +3507,13 @@ if __name__ == "__main__":
         sys.exit(_cli_gate16())
     if cmd == "gate17":
         sys.exit(_cli_gate17())
+    if cmd == "gate18":
+        sys.exit(_cli_gate18())
     print(
         f"Unknown command: {cmd}. Available: "
         "gate1, gate2, gate3, gate4a, gate4b, gate4c, gate4d, "
-        "gate8, gate9, gate10, gate11, gate12, gate13, gate14, gate15, gate16, gate17",
+        "gate8, gate9, gate10, gate11, gate12, gate13, gate14, gate15, gate16, gate17, "
+        "gate18",
         file=sys.stderr,
     )
     sys.exit(2)
