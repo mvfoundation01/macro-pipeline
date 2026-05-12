@@ -1,12 +1,12 @@
-# LAYER 5 BUILD SPEC — Authoring Summary (v5)
+# LAYER 5 BUILD SPEC — Authoring Summary (v6)
 
 **Spec file**: `LAYER_5_BUILD_SPEC.md`
 **Branch**: `claude/layer-5-spec` (base: `590e4a5` = main = L3.5b merge commit)
-**Authoring agent**: Claude Code under V's role-widening directive (v1: 2026-05-10; v2/v3/v4: 2026-05-11; **v5 final scrub: 2026-05-11**)
-**Status**: **v5 draft complete — closes ChatGPT 5.5 v4 review §C.2 HIGH (RM-4 slot count) + §C.1 MED (§5.X.7 mirror integrity L5-D + L5-G) + §C.3 LOW/MED (cumulative arithmetic); ready for V freeze + ChatGPT 5.5 v5 closure verification (expected FREEZE-AS-IS)**
-**Predecessor tags preserved**: v1@`d776eb4` / v2@`76ca810` / v3@`362b71b` / v4@`5caf678` (all historical)
-**v5 tag**: `layer5-spec-v5` at chunk-13 closure SHA
-**Date**: 2026-05-11
+**Authoring agent**: Claude Code under V's role-widening directive (v1: 2026-05-10; v2/v3/v4/v5: 2026-05-11; **v6 negative-grep scrub: 2026-05-12**)
+**Status**: **v6 draft complete — closes ChatGPT 5.5 v5 review §C.1 HIGH (RM-4 30/5-slot anchor scrub) + §C.2 LOW/MED (cumulative arithmetic regex) + §C.3 LOW (AP-AUTH-41 v6 dual-grep strengthening + AP-AUTH-42 NEW); ready for V freeze + ChatGPT 5.5 v6 closure verification (FREEZE-AS-IS-V6 expected with very high probability — 6-iteration convergence)**
+**Predecessor tags preserved**: v1@`d776eb4` / v2@`76ca810` / v3@`362b71b` / v4@`5caf678` / v5@`036a454` (all historical)
+**v6 tag**: `layer5-spec-v6` at chunk-14 closure SHA
+**Date**: 2026-05-12
 
 ---
 
@@ -33,6 +33,8 @@
 | **v1 + v2 + v3 + v4 grand total** | **~30.75** | combined budget 20-32.5 | within ceiling |
 | 13 (v5) | ~1.65 | 0.75-1.5 | final scrub: RM-4 slot count (5→6 / 30→31) + §5.D.7/§5.G.7 mirror fix + global cumulative arithmetic → symbolic + AP-AUTH-40 + AP-AUTH-41 (0 Sxx) |
 | **v1 + v2 + v3 + v4 + v5 grand total** | **~32.4** | combined budget 20.75-34 | within ceiling |
+| 14 (v6) | ~1.0 | 0.5-1 | negative-grep scrub: 8 RM-4 30/5-slot anchor sites + 2 cumulative arithmetic (`602+8=610` + `602+78=680`) + AP-AUTH-41 v6 STRENGTHENED + AP-AUTH-42 NEW + §5.RM-4.8 anchor verification table NEW (0 Sxx) |
+| **v1 + v2 + v3 + v4 + v5 + v6 grand total** | **~33.4** | combined budget 21.25-35 | within ceiling |
 
 ---
 

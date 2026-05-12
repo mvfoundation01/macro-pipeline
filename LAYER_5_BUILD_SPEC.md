@@ -925,7 +925,7 @@ Failure modes: any of (1)-(22) false ⇒ Gate 19 FAIL with specific sub-criterio
 | Owning Q-resolutions | None (structural sub-phase; no methodology choice) |
 | Dependencies | L5-B (consumes `raw_score` from `RidgeFitResult`) |
 | Downstream consumers | L5-RM-6 (isotonic on raw_score → calibrated_probability), L5-C/D/E/F/G (all consume calibrated_probability + new slots) |
-| Commit message template | `L5-RM-4: ScoredObservation 5-slot batched migration + raw/calibrated semantic split + L5-13 absorbed` |
+| Commit message template | `L5-RM-4: ScoredObservation 6-slot batched migration + raw/calibrated semantic split + L5-13 absorbed` (v6 per C.1 anchor fix: 5→6) |
 | Modified files | `macro_pipeline/scoring/scored_observation.py` (slot additions + validator); `macro_pipeline/scoring/cdrs.py` (L5-13 notes migration); `tests/test_scored_observation.py` (slot tests); `tests/test_cdrs.py` (L5-13 regression test); `macro_pipeline/validation.py` (+ `validate_gate20_dataclass_migration()`) |
 
 #### §5.RM-4.1 Scope
@@ -1023,7 +1023,7 @@ Effort: 1-2h, folded into L5-RM-4's 4-6h band.
 #### §5.RM-4.2 Pre-flight contract (build-time L5-RM-4 pre-flight executes)
 
 1. **AST-walk audit of `scored_observation.py:49`** confirming 25 existing slots; capture diff for the 5 additions
-2. **Parquet roundtrip smoke-test**: construct `ScoredObservation` with all 30 slots populated; serialize via `to_dict()`; deserialize; assert element-wise equality
+2. **Parquet roundtrip smoke-test (v6 amended per C.1)**: construct `ScoredObservation` with all **31 slots** populated (25 base + 6 new); serialize via `to_dict()`; deserialize; assert element-wise equality
 3. **L5-13 CDRS notes audit**: grep `scoring/cdrs.py` for `metadata_extra["V_*"]` / `["T_*"]` patterns; verify migration replaces every match (target: 0 remaining post-migration)
 4. **Test suite regression**: existing 602 tests must still pass post-dataclass change (default values for new slots prevent ctor signature breakage)
 5. **`scored_observation.to_dict()` schema audit**: verify the new slots are included in `to_dict()` output (chunk-3 build-time concern; spec authoring confirms it's expected)
@@ -1042,14 +1042,14 @@ Effort: 1-2h, folded into L5-RM-4's 4-6h band.
 
 #### §5.RM-4.4 Decisions
 
-**No owning Q.** Single structural decision: **BATCHED dataclass migration** (5 slots in one commit) per V's standing approval (chunk 1 §1.3 row 9; reaffirmed via S-1 reconciliation in §10). Alternative `DISTRIBUTED` (each of L5-D/E/F/G adds its own slot in its own commit) rejected — 5 dataclass migration commits vs 1; higher merge-conflict risk; Codex 5/5 review surface inflates 5×.
+**No owning Q.** Single structural decision: **BATCHED dataclass migration** (**6 slots** in one commit per v6 anchor fix per C.1; was incorrectly stated 5 in v1-v5 active prose despite S-2 expansion) per V's standing approval (chunk 1 §1.3 row 9; reaffirmed via S-1 reconciliation + S-2 expansion in §10). Alternative `DISTRIBUTED` (each of L5-D/E/F/G/RM-6-Task-B2 adds its own slot in its own commit) rejected — 6 dataclass migration commits vs 1; higher merge-conflict risk; Codex 5/5 review surface inflates 6×.
 
 #### §5.RM-4.5 Tests (+8; 5 NEG / 3 POS = 63% NEG)
 
 | # | Test name | Type | What it asserts |
 |---|---|---|---|
-| 1 | `test_dataclass_has_all_30_slots` | POS | Inspect `ScoredObservation.__dataclass_fields__`; assert exactly 30 fields (25 existing + 5 new); names match spec |
-| 2 | `test_parquet_roundtrip_preserves_5_new_slots` | POS | Construct + populate all 30 slots; `to_dict()` + parquet write + read + compare element-wise |
+| 1 (v6 renamed per C.1) | `test_dataclass_has_all_31_slots` | POS | Inspect `ScoredObservation.__dataclass_fields__`; assert exactly **31 fields** (25 existing + 6 new per v3 S-2 propagated to v6); names match spec |
+| 2 (v6 renamed per C.1) | `test_parquet_roundtrip_preserves_6_new_slots` | POS | Construct + populate all **31 slots**; `to_dict()` + parquet write + read + compare element-wise |
 | 3 | `test_notes_field_carries_L5_provenance_post_L5_13_absorption` | POS | After L5-RM-4 migration, CDRS `scored_obs.notes` contains formatted V/T lineage; `scored_obs.metadata_extra` does NOT contain V/T keys (L5-13 absorbed; regression-testable per continuation prompt §3.2 chunk 3) |
 | 4 | `test_rejects_calibrated_probability_band_lower_outside_zero_one` | NEG | `ScoredObservation(..., calibrated_probability_band_lower=1.5)` raises `ValueError` |
 | 5 | `test_rejects_calibrated_probability_band_upper_outside_zero_one` | NEG | symmetric to #4 |
@@ -1063,11 +1063,11 @@ NEG count: 5 (tests 4, 5, 6, 7, 8). POS count: 3 (tests 1, 2, 3). NEG% = 63%, we
 
 ```python
 def validate_gate20_dataclass_migration() -> GateReport:
-    """Gate 20 — L5-RM-4 ScoredObservation 5-slot batched migration."""
+    """Gate 20 — L5-RM-4 ScoredObservation 6-slot batched migration (v6 per C.1)."""
 ```
 
 PASS criteria:
-1. `ScoredObservation.__dataclass_fields__` count = 30
+1. `ScoredObservation.__dataclass_fields__` count = **31** (v6 anchor fix per C.1)
 2. **6 new slot names** (v5 anchor fix per C.2) exactly match spec: `calibrated_probability_band_lower`, `calibrated_probability_band_upper`, `drawdown_conditional_distribution`, `dms_adjustment_bps`, `bayesian_shrinkage_weight`, `positive_return_probability` (v3 added per S-2; v5 propagated to all anchors)
 3. Parquet roundtrip smoke-test PASSes (test #2)
 4. L5-13 absorption confirmed: CDRS `metadata_extra` has 0 V_*/T_* keys (test #3)
@@ -1078,14 +1078,41 @@ PASS criteria:
 
 | # | Proof |
 |---|---|
-| 1 | `python -c "from macro_pipeline.scoring import ScoredObservation; assert len(ScoredObservation.__dataclass_fields__) == 30"` succeeds |
+| 1 (v6 amended per C.1) | `python -c "from macro_pipeline.scoring import ScoredObservation; assert len(ScoredObservation.__dataclass_fields__) == 31"` succeeds |
+
+##### §5.RM-4.8 RM-4 anchor verification table (NEW v6; AP-AUTH-41 + AP-AUTH-42 mandate)
+
+For RM-4 dataclass slot count anchor (**31 total / 6 new slots**), 5 anchor sites in §5.RM-4 + 1 mirror in §6.3 MUST be consistent at every spec version. Future spec authoring (L5b, L6, etc.) referencing dataclass slot counts MUST update all 6 points in a single commit per AP-AUTH-41 v6 dual-grep discipline.
+
+| Anchor # | Section | Expected content | Negative grep targets (must be 0 in active prose) |
+|---|---|---|---|
+| 1 | §5.RM-4.2 pre-flight smoke-test #2 | "all 31 slots populated" | `all 30 slots` |
+| 2 | §5.RM-4.4 decision prose | "BATCHED dataclass migration (6 slots in one commit)" | `5 slots in one commit` / `5-slot` |
+| 3 | §5.RM-4.5 test #1 + #2 names + assertions | `test_dataclass_has_all_31_slots` + `test_parquet_roundtrip_preserves_6_new_slots` + "exactly 31 fields (25 existing + 6 new)" | `all_30_slots` / `preserves_5_new_slots` / `exactly 30` |
+| 4 | §5.RM-4.6 validator docstring + PASS criterion 1 | `6-slot batched migration` + `count = 31` | `5-slot batched migration` / `count = 30` |
+| 5 | §5.RM-4.7 proof item 1 | `assert len(ScoredObservation.__dataclass_fields__) == 31` | `== 30` |
+| **Mirror (§6.3)** | §6.3 Gate 20 consolidated mirror | "31 total slots / 6 new slot names" + `positive_return_probability` enumerated | `30 slots total` / `5 new slot names` |
+
+**Pre-commit verification command** (AP-AUTH-41 v6 dual-grep):
+
+```bash
+# Negative grep (must return 0 in active prose; historical Sxx S-1/S-2/S-3 PRESERVED)
+grep -cE "all_30_slots|preserves_5_new_slots|count = 30|== 30|5-slot|5 new slot|5 slots|all 30 slots|exactly 30" LAYER_5_BUILD_SPEC.md
+# Expected: 0 (active) + historical Sxx entries filtered out by grep -v on S-1/S-2
+
+# Positive grep (must return ≥6 hits across 5 anchors + 1 mirror)
+grep -cE "all_31_slots|preserves_6_new_slots|count = 31|== 31|6-slot|6 new slot|6 slots|all 31 slots|exactly 31" LAYER_5_BUILD_SPEC.md
+# Expected: ≥6 propagation sites
+```
+
+This codifies the 5-anchor + 1-mirror = 6-point RM-4 verification topology for future spec audits per AP-AUTH-41 v6 negative-grep discipline.
 | 2 | `pytest tests/test_scored_observation.py tests/test_cdrs.py` shows all 8 new tests PASS plus L5-13 regression PASS |
 | 3 | `grep -E 'metadata_extra\[.V_|metadata_extra\[.T_' macro_pipeline/scoring/cdrs.py` returns 0 matches post-migration |
 | 4 | `scoring/notes_formatter.py` exists and is imported by both `crps.py` and `cdrs.py` |
 | 5 | Parquet roundtrip smoke-test data archived in verification |
 | 6 | All 5 validator checks raise `ValueError` on boundary violations (tests 4-8) |
 | 7 | Gate 20 PASSes |
-| 8 | 602 + 8 = 610 cumulative tests; ruff clean |
+| 8 (v6 symbolic per C.2 + AP-AUTH-42) | Cumulative test count = previous baseline + L5-RM-4 delta (**+8**; symbolic per AP-AUTH-40/42 to prevent future drift); ruff clean |
 | 9 | Conviction 3-field reported |
 | 10 | Codex 5/5 finding X explicitly noted closed via test #3 invariant |
 
@@ -2069,7 +2096,7 @@ Option matrix:
 
 #### §5.H.5 Tests
 
-**None.** Retrospective + handoff documentation has no new test assertions; existing 602 + 78 = 680 cumulative test suite is the regression contract.
+**None.** Retrospective + handoff documentation has no new test assertions; existing baseline + cumulative L5 delta test suite is the regression contract (exact count resolved in L5-H verification per AP-AUTH-40/42 symbolic discipline; v6 scrubbed hard-coded `602 + 78 = 680` arithmetic per C.2).
 
 #### §5.H.6 Gate
 
@@ -2395,7 +2422,8 @@ Cumulative AP-1 through AP-15 from prior layers apply. L5-specific additions:
 | **AP-21 NEW** | `score_value` references re-introduced post-3.5D rename; 3.5D D24 deprecation warning preserved through L5; full removal at L4-L5 boundary deferred to L5-RM-4 absorbing the boundary |
 | **AP-AUTH-39 NEW v4** | Updating gate PASS criteria in owning §5.X.6 sub-phase WITHOUT updating the consolidated §6.N gate mirror (dual-anchor synchronization miss); detected by grep audit comparing §5.X.6 vs §6.N test counts + API names + literal values; v3 missed Gate 19/21/23/25 sync in §6.2/§6.4/§6.6/§6.8 → ChatGPT v3 §C.1 HIGH flag → v4 fixed all 4 plus added defensive mirror-anchor summary lines per §5.B.5/§5.RM-6.5/§5.D.5/§5.G.5. **Mitigation discipline**: when patching any §5.X.6 PASS criterion or API name or test count, the build agent MUST also grep-audit §6 consolidated mirror for matching anchor and update in same commit; LAYER_5_AUTHORING_SUMMARY mirror integrity table per chunk verification report enforces 4-anchor check (§5.X.5 == §5.X.6 == §5.X.7 == §6.N). |
 | **AP-AUTH-40 NEW v5** | Filing Sxx that documents a change to spec methodology/structure WITHOUT propagating the change to spec body sections AND consolidated mirrors AND proof contracts (Sxx-to-spec-body propagation miss); detected by grep audit comparing Sxx register entry intent vs spec body anchors; **v3 S-2 said "5 → 6 new slots"** but §5.RM-4 metadata (.0) + intro (.1 intro paragraph) + Gate 20 PASS criterion (.6) + proof (.7) + §6.3 consolidated mirror + §4 decomp ALL still said "5 new / 30 total"; v4 AP-AUTH-39 dual-anchor caught §5.X.6/§6.N pairs but NOT the Sxx-to-body propagation because it's a third anchor pattern; ChatGPT v4 §C.2 HIGH flagged → v5 fixed all 5 propagation anchors + added defensive mirror-anchor verification. **Mitigation discipline**: when filing any Sxx documenting a change to spec methodology, structure, or numbers, the build agent MUST grep-audit FOR every spec section that references the changed item (use Sxx topic keywords) AND update each propagation anchor in same commit; verification report MUST verify Sxx-to-body propagation per anchor with verbatim grep output. Cumulative test count proof contracts MUST use symbolic wording (`previous + L5-X delta`) NOT hard-coded arithmetic to prevent recurrence. |
-| **AP-AUTH-41 NEW v5** | Claiming mirror integrity "verified" in verification report without verbatim grep output per anchor pair (v4 self-audit claimed 16/16 alignment but ChatGPT v4 §C.1 found §5.D.7 and §5.G.7 anchors still stale — actually 14/16 because §5.X.7 anchors were enumerated in claim but not grepped). **Mitigation discipline**: verification report mirror integrity table MUST include `grep -nE "<expected_count>" <section>` output verbatim per anchor; bare assertion "ALIGNED" without grep proof is REVISE-REQUIRED. |
+| **AP-AUTH-41 v6 STRENGTHENED** | Claiming mirror integrity "verified" without **BOTH** verbatim positive grep (new pattern present) AND verbatim negative grep (old pattern absent) per anchor. v4 self-audit claimed 16/16 alignment but actually 14/16 because §5.X.7 anchors not grepped at all. v5 self-audit claimed 20/20 alignment but actually 17/20 because RM-4 anchors grepped positive-only ("31 slots / 6 new" present) without negative grep ("30 slots / 5-slot" absent), missing 8+ stale references in §5.RM-4.2/.4/.5/.6/.7. v6 codifies: every claimed-alignment anchor requires BOTH pos+neg grep documented in verification report. **Mitigation**: verification table MUST show `grep -nE "<positive>"` AND `grep -nE "<negative>"` output per anchor; bare assertion "ALIGNED" without both proofs is REVISE-REQUIRED. |
+| **AP-AUTH-42 NEW v6** | Filing cumulative test-count arithmetic in proof contracts as hard-coded numbers (e.g., `602 + 78 = 680` or `602 + 8 = 610`) instead of symbolic placeholders (`previous baseline + L5-X delta`). Prevents future drift when sub-phase test counts change. AP-AUTH-40 mitigation list MUST include grep target regex `[0-9]+ \+ [0-9]+ =` to catch ALL cumulative arithmetic patterns, not just specific instances. v5 missed `602 + 8 = 610` and `602 + 78 = 680` because AP-AUTH-40 mitigation list was specific-instance not regex. v6 codifies: cumulative arithmetic scrub uses regex `[0-9]+ \+ [0-9]+ =` to catch all variants. **Mitigation discipline**: every proof-contract item containing cumulative test count MUST use symbolic wording; grep regex must catch numeric arithmetic patterns before commit. |
 
 ---
 
