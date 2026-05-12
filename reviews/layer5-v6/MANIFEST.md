@@ -61,13 +61,13 @@ or JS rendering required.
 
 | File | sha256 (first 12) |
 |------|-------------------|
-| layer5_spec_v6.md | <fill> |
-| layer5_spec_v5.md | <fill> |
-| chatgpt55_v5_verdict.md | <fill> |
-| track_a_v6_readiness.md | <fill> |
-| sxx_register_l5.md | <fill> |
-| ap_register_v6.md | <fill> |
-| v5_to_v6.patch | <fill> |
+| layer5_spec_v6.md | 1ccb54a5c9d5 |
+| layer5_spec_v5.md | 327944cccc19 |
+| chatgpt55_v5_verdict.md | 16e69502fd66 |
+| track_a_v6_readiness.md | 690a3fb068d1 |
+| sxx_register_l5.md | b669eff7f8b6 |
+| ap_register_v6.md | 6bc2855ecc3d |
+| v5_to_v6.patch | 744b917465b6 |
 
 ---
 
