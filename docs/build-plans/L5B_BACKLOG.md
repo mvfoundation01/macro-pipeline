@@ -210,9 +210,10 @@ Spec `LAYER_5_BUILD_SPEC.md` v6 @ `9f848bb` contains five doc-vs-implementation 
 - L5-D ACCEPT report (2026-05-13) — extended for §5.D.0 stale anchor (D-D-1) + §5.D.7 proof item 2 typo (D-D-2)
 - L5-E ACCEPT report (2026-05-13) — extended for §5.E.0 stale anchor (D-E-1) + §5.E.5 header "wait recount" literal + §5.E.7 proof-contract brevity expansion + Op-E-1 path (b)+(c) v2 callable-helper resolution
 - L5-G ACCEPT report (2026-05-13) — extended for §5.G.0 stale anchor (D-G-1) + Gate 25 composite SEAL confirmation (25.1 + 25.2 sub-criteria validated; mirrors L3.5b Gate 17 pattern per spec §5.G.6)
+- L5-H ACCEPT report (2026-05-13) — no new L5b-7 bullet added at L5-H (Strategic-approved D-H-1 through D-H-5 are all spec-literal-faithful resolutions of Strategic-prompt-vs-spec divergence at L5-H; no narrative drift to backlog). Provenance entry recorded here for L5 chain closure traceability.
 - AP-AUTH-52 codified at `docs/ap_register.md` (sibling discipline)
 - D-B1-1 / D-B1-2 / D-B1-3 + D-D-1 / D-D-2 + D-E-1 + D-G-1 Strategic dispositions (Track B chat, 2026-05-13)
 
 ---
 
-**END — L5B_BACKLOG.md (L5b-2 + L5b-3 + L5b-4 + L5b-5 + L5b-6 + L5b-7 as of 2026-05-13 post-L5-G; reserved L5b-1 + L5b-8..N open)**
+**END — L5B_BACKLOG.md (L5b-2 + L5b-3 + L5b-4 + L5b-5 + L5b-6 + L5b-7 as of 2026-05-13 post-`layer5-complete`; reserved L5b-1 + L5b-8..N open for L5b OOS hardening sprint)**
