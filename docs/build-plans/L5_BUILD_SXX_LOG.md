@@ -112,17 +112,25 @@ vs spec's claimed (25 + 6 = 31). Discrepancy = 2 fields.
 
 **Resolution path**: PATCH-IMPL (per build plan §5.3 — implementation-level adjustment within spec degrees of freedom; spec text 25/31 is informational; spec list of 6 names is canonical).
 
-**Strategic decision**: pending L5-RM-4 ACCEPT review. Three options:
-- (a) ACCEPT Track A interpretation (test asserts 29; document discrepancy in retrospective)
-- (b) REJECT — patch spec via v7 surgical cycle (spec FROZEN; high cost; not recommended)
-- (c) DEFER — implement 6 fields per spec; test asserts 31 as spec says → test FAILS; sub-phase ACCEPT blocked pending Strategic
+**Strategic decision**: **RESOLVED-OPTION-A** (2026-05-15) — Strategic disposed via Option A in L5-RM-6 pre-flight prompt: "Strategic disposed S-12 via Option A: empirical 29-slot assertion ACCEPT; spec magic-numbers deferred to L5b-4 backlog. Pattern B contract validated empirically with 643/643 tests passing."
 
-Track A prior: (a) — minimal disruption; preserves spec FREEZE; documents reality in code + verification report.
+**Resolution date**: 2026-05-15
 
-**Backlog ref**: file L5b-N at retrospective if Strategic wants spec patched in next L5-spec-vX cycle (post-L5 ship).
+**Resolution mechanism**: Track A's L5-RM-4 implementation (commit `056d198`) stands as-is — test #1 asserts empirical 29-slot count; Gate 20 criterion 1 verifies empirical truth; verification report §8 surfaced the gap for Strategic adjudication. Strategic chose ACCEPT empirical (Option A) over spec-patch (Option B) or block-sub-phase (Option C).
 
-**Build artifact**: S-12 entry (this log), L5-RM-4 implementation will use 29-slot assertion; verification report will cite S-12 + spec line refs.
+**Documented magic-number sites** (4 in spec §5.RM-4 + 1 header inconsistency; all deferred to L5b-4 backlog):
+1. §5.RM-4.0 line 921: "31 slots total (25 base + 6 new)" — empirical 29 (= 23 base + 6 new)
+2. §5.RM-4.5 test #1 line 1051: `test_dataclass_has_all_31_slots` — implemented as `test_dataclass_has_29_slots_actual_vs_spec_31_claimed`
+3. §5.RM-4.6 criterion 1 line 1070: `count = 31` — empirical 29
+4. §5.RM-4.7 proof item 1 line 1081: `== 31` — empirical 29
+5. §5.RM-4.1.1 header line 935: "(5 total)" — body lists 6 (residual v3-era header)
+
+**Backlog spawned**: **L5b-4** — Spec v7 surgical patch for magic-number cleanup §5.RM-4 (LOW priority; doc-residue only; post-L5 retrospective scope). See `docs/build-plans/L5B_BACKLOG.md`.
+
+**Status**: **RESOLVED-OPTION-A**.
+
+**Build artifact**: L5-RM-4 ACCEPT @ tag `l5-rm-4-accept` (commit `056d198`); L5-RM-6 pre-flight now unblocked.
 
 ---
 
-**END — L5_BUILD_SXX_LOG.md (S-10 + S-11 RESOLVED; S-12 CONDITIONAL pending Strategic; cumulative count 12; reserved range 13-25 open)**
+**END — L5_BUILD_SXX_LOG.md (S-10/11/12 ALL RESOLVED; cumulative count 12; reserved range 13-25 open)**

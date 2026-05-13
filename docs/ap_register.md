@@ -114,4 +114,28 @@ This file collects NEW APs added during L5 build execution.
 
 ---
 
-**END — ap_register.md (AP-AUTH-50 + AP-AUTH-51 entries; cumulative provenance §0)**
+## AP-AUTH-52 (NEW; codified 2026-05-15) — Spec magic-numbers must be derivable from production base + delta, not asserted as opaque totals
+
+**Symptom**: Spec `LAYER_5_BUILD_SPEC.md` v6 §5.RM-4.0 + §5.RM-4.5 + §5.RM-4.6 + §5.RM-4.7 asserted "31 total slots" (= 25 base + 6 new) without enumerating the 25 base components or citing a grep command that would produce 25. Empirical `len(ScoredObservation.__dataclass_fields__)` at production HEAD `056d198` = 23 (NOT 25). Discrepancy surfaced only at code-exec time (S-12 filed 2026-05-14), requiring Strategic disposition mid-sub-phase.
+
+The 4 magic-number sites in §5.RM-4 + 1 header inconsistency (§5.RM-4.1.1 "(5 total)") all derive from the same root cause: spec authoring asserted opaque arithmetic without a grep-traceable base.
+
+**Surfaced**: L5-RM-4 code-exec Phase 0 baseline check (S-12 in `L5_BUILD_SXX_LOG.md`; resolution path RESOLVED-OPTION-A 2026-05-15 disposed by Strategic).
+
+**Mitigation discipline**:
+1. Spec authoring procedure for any sub-phase modifying a production type (dataclass, enum, function signature with side effects) MUST derive any new "total count" assertion as **`<base_grep_count> + <delta>` with the grep command shown in spec**, not assert opaque totals like "X total".
+2. Cross-check at v6-style spec closure review: any "N total" assertion without a corresponding `grep` command + count citation is REVISE-REQUIRED.
+3. AP-AUTH-50 (upstream-export grep at pre-flight) + AP-AUTH-51 (risk register grep evidence) + AP-AUTH-52 (spec-time grep evidence) form a complete discipline triple: code-exec, pre-flight, AND spec authoring all cite grep evidence for quantifiable claims.
+4. Reviewer audit at spec closure: any methodology-section "N base / M new / K total" arithmetic without `K = N + M` derivation cited from empirical grep → REVISE-REQUIRED.
+
+**Enforcement**: post-L5 spec template update (L5b-4 candidate). For active L5 build, AP-AUTH-52 codification serves as discipline-signal for any future spec-vs-implementation gaps encountered (Track A and Strategic should file Sxx + cite AP-AUTH-52 when a similar magic-number gap surfaces).
+
+**Cross-reference**:
+- S-12 (`L5_BUILD_SXX_LOG.md`) — the gap that triggered codification
+- AP-AUTH-50 (upstream-export grep) — parent at pre-flight stage
+- AP-AUTH-51 (risk register grep) — sibling at pre-flight stage
+- L5b-4 (`L5B_BACKLOG.md`) — backlog item to retroactively patch spec v7
+
+---
+
+**END — ap_register.md (AP-AUTH-50 + AP-AUTH-51 + AP-AUTH-52 entries; cumulative provenance §0)**

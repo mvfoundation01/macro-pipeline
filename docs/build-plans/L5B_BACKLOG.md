@@ -62,4 +62,74 @@ Track A's L5-A `_cli_gate18` in `macro_pipeline/validation.py` doesn't accept a 
 
 ---
 
-**END — L5B_BACKLOG.md (L5b-2 + L5b-3 as of 2026-05-14; reserved L5b-1 + L5b-4..N open)**
+---
+
+## L5b-4 — Spec v7 surgical patch: magic-number cleanup §5.RM-4
+
+**Source**: S-12 disposition Option A (RESOLVED-OPTION-A 2026-05-15).
+
+**Surfaced**: L5-RM-4 ACCEPT review (commit `056d198`; verification report §8 deviation #1).
+
+Spec `LAYER_5_BUILD_SPEC.md` v6 @ `9f848bb` §5.RM-4 contains 4 magic-number sites + 1 header inconsistency that mismatch empirical production base. Sites enumerated in `L5_BUILD_SXX_LOG.md` S-12 entry:
+1. §5.RM-4.0 line 921 — "31 slots total (25 base + 6 new)" → should be "29 (23 + 6)"
+2. §5.RM-4.5 test #1 line 1051 — `test_dataclass_has_all_31_slots` → should be `_29_slots`
+3. §5.RM-4.6 criterion 1 line 1070 — `count = 31` → should be `count = 29`
+4. §5.RM-4.7 proof item 1 line 1081 — `== 31` → should be `== 29`
+5. §5.RM-4.1.1 header line 935 — "(5 total)" → should be "(6 total)" (body already lists 6)
+
+**Effort estimate**: 1-2h ChatGPT review + 0.5h Track A surgical scrub + 0.5h Strategic disposition ≈ 2-3h cycle (would constitute a v7 spec surgical patch comparable to v6).
+
+**Priority**: **LOW** — doc residue only; zero functional impact. L5-RM-4 implementation works correctly per Pattern B + empirical Gate 20 PASS. Deferral to post-L5 retrospective is the right priority signal.
+
+**Owner**: post-L5 retrospective (NOT during active L5 build; spec FROZEN per scope guard).
+
+**Acceptance criteria**:
+1. v7 spec patch updates 4 magic-number sites + 1 header
+2. AP-AUTH-52 mitigation discipline enforced in v7: each new total derives from `<base_grep_count> + <delta>` with grep command shown
+3. v7 ChatGPT review confirms 0 new magic-numbers introduced
+4. L5-RM-4 test #1 + Gate 20 + verification report still align (already correct via Option A; v7 just cleans spec literals)
+
+**Provenance trail**:
+- S-12 in `L5_BUILD_SXX_LOG.md` (filed 2026-05-14; CONDITIONAL → RESOLVED-OPTION-A 2026-05-15)
+- AP-AUTH-52 codified in `docs/ap_register.md` (2026-05-15)
+
+---
+
+## L5b-5 — Investigate NBER pre-1978 training caveat (spec §5.RM-4 step 3)
+
+**Source**: L5-13 absorption step 3 deferral.
+
+**Surfaced**: L5-RM-4 ACCEPT report (2026-05-15; verification report §5 + §8 deviation #2).
+
+Spec `LAYER_5_BUILD_SPEC.md` v6 @ `9f848bb` §5.RM-4.1.4 step 3 reads: "Add NBER pre-1978 caveat to notes when `pre_1978_training_only=True` flag is set (mirrors CRPS handling)."
+
+**Deferral rationale**: no `pre_1978_training_only` flag exists in:
+- `ScoredObservation` dataclass schema (pre- or post-RM-4)
+- `scoring/cdrs.py` code path (no flag set/read)
+- Any caller surface (no current data flow constructs the flag)
+
+Spec step 3 reads as speculative — anticipates a future state where pre-1978 training mode is distinguished from post-1978 NBER-announcement-calendar mode. The flag would need to be introduced upstream (likely in `RegimeContext` or `PitDataContext`) before L5-13 step 3 can be implemented.
+
+**Effort estimate**: 2-4h
+- Investigate intended semantic of `pre_1978_training_only` (consult L3.5C NBER calendar spec): 1h
+- Add `pre_1978_training_only` flag to appropriate dataclass (RegimeContext likely): 1-2h
+- Wire flag through CDRS code path; add NBER pre-1978 caveat note formatter helper: 0.5-1h
+- 2-3 regression tests covering pre-1978/post-1978 caveat emission: 0.5h
+
+**Priority**: **MED** — validity of pre-1978 NBER labels affects long-horizon drawdown statistics in OOS hardening (L5b scope). Not blocking any L5 sub-phase; relevant for L5b OOS hardening sprint where pre-1978 vs post-1978 sample distinction matters.
+
+**Owner**: L5b OOS hardening cycle (likely L5b-RM-X sub-phase or equivalent).
+
+**Acceptance criteria**:
+1. Spec ambiguity resolved (consult L3.5C `regime/nber_calendar.py` + L3.5C verification docs)
+2. `pre_1978_training_only` flag introduced (probably `RegimeContext`)
+3. CDRS adds caveat to notes when flag is set; CRPS continues current pattern
+4. Tests verify caveat presence pre-1978 + absence post-1978
+
+**Provenance trail**:
+- L5-RM-4 verification report §5 (L5-13 absorption table; step 3 row marked DEFERRED)
+- L5-RM-4 ACCEPT report §8 deviation #2
+
+---
+
+**END — L5B_BACKLOG.md (L5b-2 + L5b-3 + L5b-4 + L5b-5 as of 2026-05-15; reserved L5b-1 + L5b-6..N open)**
