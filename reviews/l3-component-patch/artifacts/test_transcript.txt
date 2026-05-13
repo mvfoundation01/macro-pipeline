@@ -1,0 +1,11 @@
+============================= test session starts =============================
+collecting ... collected 6 items
+
+tests/test_component_panel.py::test_build_component_panel_crps_4_active_columns PASSED [ 16%]
+tests/test_component_panel.py::test_build_component_panel_cdrs_4_buckets_M2_option_b_mapping PASSED [ 33%]
+tests/test_component_panel.py::test_build_component_panel_rejects_invalid_score_type PASSED [ 50%]
+tests/test_component_panel.py::test_build_component_panel_rejects_non_monthly_index PASSED [ 66%]
+tests/test_component_panel.py::test_build_component_panel_pit_safety_no_look_ahead PASSED [ 83%]
+tests/test_component_panel.py::test_build_component_panel_bucket_composition_matches_design_doc_v2 PASSED [100%]
+
+============================== 6 passed in 2.36s ==============================
