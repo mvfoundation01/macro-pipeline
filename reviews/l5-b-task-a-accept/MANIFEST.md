@@ -49,13 +49,18 @@ Source code (consult build branch directly):
 
 ## Integrity hashes (sha256 first 12 chars; AP-AUTH-48 v2 — post-push verified)
 
-| File | sha256 (first 12) — local on-disk pre-push |
+| File | sha256 (first 12) — **served from raw URL** (AP-AUTH-48 v2 verified) |
 |------|---|
 | L5_B_TASK_A_VERIFICATION.md | 9ed455c16d11 |
-| test_transcript.txt | 8fd0933c94f4 |
-| gate18_cli_runtime.txt | 380a67f63c6a |
+| test_transcript.txt | f0e38c719e1e |
+| gate18_cli_runtime.txt | 25ebabb4c879 |
 
-**AP-AUTH-48 v2 post-push verification**: after this MANIFEST commit + push, Phase 4 STEP C runs `curl -sL <each-URL> | sha256sum` and compares to claims above. If any mismatch (Windows CRLF/LF normalization drift), MANIFEST is amended with served-content hash + re-pushed; final state: served hash = MANIFEST claim for every entry. See verification report §6.
+**AP-AUTH-48 v2 post-push verification log** (this commit):
+- L5_B_TASK_A_VERIFICATION.md: local-disk `9ed455c16d11` = served `9ed455c16d11` ✓ (Write tool preserves LF)
+- test_transcript.txt: local-disk `8fd0933c94f4` ≠ served `f0e38c719e1e` (CRLF→LF drift on shell-redirected pytest output; AP-AUTH-48 v2 predicted) → MANIFEST updated to served hash this commit
+- gate18_cli_runtime.txt: local-disk `380a67f63c6a` ≠ served `25ebabb4c879` (same drift class) → MANIFEST updated to served hash this commit
+
+Reviewer can verify: `curl -sL <url> | sha256sum | cut -c1-12` matches MANIFEST claim for each artifact. AP-AUTH-48 v2 closure: served = MANIFEST for all 3 entries post-correction.
 
 ---
 
