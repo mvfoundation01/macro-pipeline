@@ -3601,10 +3601,10 @@ def validate_gate21_isotonic_calibration() -> GateReport:
             should_recalibrate,
         )
         summary["criterion_1_api_present"] = {
-            "fit_isotonic_calibrators": "✓",
-            "build_event_labels": "✓",
-            "should_recalibrate": "✓",
-            "calibrate_raw_score": "✓",
+            "fit_isotonic_calibrators": "OK",
+            "build_event_labels": "OK",
+            "should_recalibrate": "OK",
+            "calibrate_raw_score": "OK",
         }
         findings.append(
             "Criterion 1 PASS: fit_isotonic_calibrators + build_event_labels + "
