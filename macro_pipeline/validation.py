@@ -4575,6 +4575,173 @@ def _cli_gate24() -> int:
     return 0 if report.passed else 1
 
 
+def validate_gate25_dms_shrinkage_composite() -> GateReport:
+    """Gate 25 (composite) - DMS adjustment integrity (sub-criterion 25.1)
+    + Bayesian shrinkage integrity (sub-criterion 25.2 - DEFERRED to L5-G).
+
+    Per ``LAYER_5_BUILD_SPEC.md`` v6 @ ``9f848bb`` §5.F.0 "Modified files"
+    row + §5.F.6 Gate 25.1 + §5.G (Gate 25.2 to-be-added).
+
+    L5-F implements sub-criterion 25.1 fully (DMS apply integrity); L5-G
+    will extend this same validator to add 25.2 (Bayesian shrinkage
+    integrity). Mirrors the Gate 19-A / -B1 / -B2 partial-PASS precedent
+    established at the L5-B sub-phase chain.
+
+    Compile-time checks (criteria 25.1.1 - 25.1.4 + Standing Order #2
+    AST audit for R4 leakage mitigation); pytest-asserted out-of-band
+    (criteria 25.1.5 - 25.1.6 via tests/test_dms_adjustment.py).
+    """
+    import inspect
+
+    findings: list[str] = []
+    warnings_list: list[str] = []
+    summary: dict = {}
+
+    try:
+        from macro_pipeline.models.dms_adjustment import (
+            DMS_BPS_CENTRAL,
+            DMS_BPS_SENSITIVITY,
+            apply_dms_adjustment,
+        )
+        import macro_pipeline.models.dms_adjustment as _dms_mod
+
+        summary["criterion_25_1_1_api_present"] = {
+            "DMS_BPS_CENTRAL": "OK",
+            "DMS_BPS_SENSITIVITY": "OK",
+            "apply_dms_adjustment": "OK",
+        }
+        findings.append(
+            "Criterion 25.1.1 PASS: DMS_BPS_CENTRAL + DMS_BPS_SENSITIVITY "
+            "+ apply_dms_adjustment importable (spec §5.F.7 proof item 1)"
+        )
+
+        # Criterion 25.1.2 - Q6-locked central bps constants per spec
+        # §5.F.4. These are spec literals (NOT magic numbers per
+        # AP-AUTH-52 / Strategic prompt §6); cite spec §5.F.4 in
+        # commit message.
+        expected_central = {
+            "1Y": 0.0,
+            "3Y": 0.0,
+            "5Y": -125.0,
+            "10Y": -175.0,
+        }
+        if DMS_BPS_CENTRAL == expected_central:
+            findings.append(
+                "Criterion 25.1.2 PASS: DMS_BPS_CENTRAL matches Q6 lock "
+                "(1Y=0.0, 3Y=0.0, 5Y=-125.0, 10Y=-175.0) per spec "
+                "§5.F.4 + §5.F.5 test #1"
+            )
+        else:
+            findings.append(
+                f"FAIL: Criterion 25.1.2 - DMS_BPS_CENTRAL = "
+                f"{DMS_BPS_CENTRAL}, expected {expected_central} per Q6 lock"
+            )
+        summary["criterion_25_1_2_central"] = DMS_BPS_CENTRAL
+
+        # Criterion 25.1.3 - Q6-locked sensitivity bps per spec §5.F.4.
+        if DMS_BPS_SENSITIVITY == 50.0:
+            findings.append(
+                "Criterion 25.1.3 PASS: DMS_BPS_SENSITIVITY == 50.0 "
+                "per spec §5.F.4 + §5.F.5 test #2"
+            )
+        else:
+            findings.append(
+                f"FAIL: Criterion 25.1.3 - DMS_BPS_SENSITIVITY = "
+                f"{DMS_BPS_SENSITIVITY}, expected 50.0 per Q6 lock"
+            )
+        summary["criterion_25_1_3_sensitivity"] = DMS_BPS_SENSITIVITY
+
+        # Criterion 25.1.4 - signature match per spec §5.F.1.
+        expected_params = {
+            "raw_forecast_real_annualized_bps", "horizon",
+        }
+        sig = inspect.signature(apply_dms_adjustment)
+        actual_params = set(sig.parameters.keys())
+        missing = expected_params - actual_params
+        extra = actual_params - expected_params
+        summary["criterion_25_1_4_signature_params"] = sorted(actual_params)
+        if missing:
+            findings.append(
+                f"FAIL: Criterion 25.1.4 - apply_dms_adjustment missing "
+                f"params {sorted(missing)}"
+            )
+        elif extra:
+            findings.append(
+                f"FAIL: Criterion 25.1.4 - apply_dms_adjustment has "
+                f"unexpected params {sorted(extra)}"
+            )
+        else:
+            findings.append(
+                "Criterion 25.1.4 PASS: apply_dms_adjustment signature "
+                "matches spec two-parameter contract "
+                "(raw_forecast_real_annualized_bps + horizon) per §5.F.1"
+            )
+
+        # Standing Order #2 AST audit (R4 leakage mitigation; mirrors
+        # Gate 22/23/24 pattern). Docstring avoids literal forbidden
+        # substrings (L5-C lesson).
+        source = inspect.getsource(_dms_mod)
+        forbidden_substrings = (
+            ".fit(",
+            "train_test_split",
+            "LogisticRegression",
+            "Ridge(",
+            "IsotonicRegression(",
+        )
+        found_substrings = [s for s in forbidden_substrings if s in source]
+        summary["standing_order_2_ast_audit_forbidden_found"] = found_substrings
+        if found_substrings:
+            findings.append(
+                f"FAIL: Standing Order #2 AST audit - dms_adjustment "
+                f"contains forbidden fitting/estimator substring(s) "
+                f"{found_substrings}; this module must be PURE constant-"
+                "arithmetic only (R4 mitigation)"
+            )
+        else:
+            findings.append(
+                "Standing Order #2 AST audit PASS: dms_adjustment source "
+                "contains no fitting / estimator instantiation - module "
+                "is pure constant-arithmetic horizon dispatcher per "
+                "spec §5.F.1 (R4 mitigation)"
+            )
+    except ImportError as exc:
+        findings.append(f"FAIL: Criterion 25.1.1 - import error: {exc}")
+
+    # Out-of-band assertions for sub-criterion 25.1.
+    warnings_list.append(
+        "Criterion 25.1.5 (Op-F-a runtime dispatcher audit per Standing "
+        "Order #4) asserted via tests/test_dms_adjustment.py test #3 "
+        "(5Y/10Y produce band width = 100.0 bps; 1Y/3Y collapse band)"
+    )
+    warnings_list.append(
+        "Criterion 25.1.6 (all five spec tests in §5.F.5 PASS per §5.F.7 "
+        "proof item 4) asserted via full pytest"
+    )
+
+    # Sub-criterion 25.2 deferred placeholder.
+    warnings_list.append(
+        "Sub-criterion 25.2 (Bayesian shrinkage integrity per spec §5.G) "
+        "DEFERRED to L5-G; this validator will be extended at "
+        "l5-g-accept to add 25.2 checks. Mirrors Gate 19-A/-B1/-B2 "
+        "partial-PASS precedent established at the L5-B chain."
+    )
+
+    passed = not any(f.startswith("FAIL") for f in findings)
+    return GateReport(
+        name="Gate 25 (composite) - DMS adjustment (25.1; L5-F) + Bayesian shrinkage (25.2; DEFERRED to L5-G)",
+        passed=passed, findings=findings, warnings=warnings_list,
+        summary=summary,
+    )
+
+
+def _cli_gate25() -> int:
+    import logging
+    logging.basicConfig(level="WARNING", format="%(message)s")
+    report = validate_gate25_dms_shrinkage_composite()
+    print(report.render())
+    return 0 if report.passed else 1
+
+
 if __name__ == "__main__":
     import sys
     cmd = sys.argv[1] if len(sys.argv) > 1 else "gate1"
@@ -4628,11 +4795,13 @@ if __name__ == "__main__":
         sys.exit(_cli_gate23())
     if cmd == "gate24":
         sys.exit(_cli_gate24())
+    if cmd == "gate25":
+        sys.exit(_cli_gate25())
     print(
         f"Unknown command: {cmd}. Available: "
         "gate1, gate2, gate3, gate4a, gate4b, gate4c, gate4d, "
         "gate8, gate9, gate10, gate11, gate12, gate13, gate14, gate15, gate16, gate17, "
-        "gate18, gate19_b1, gate19_b2, gate20, gate21, gate22, gate23, gate24",
+        "gate18, gate19_b1, gate19_b2, gate20, gate21, gate22, gate23, gate24, gate25",
         file=sys.stderr,
     )
     sys.exit(2)
