@@ -208,7 +208,25 @@ def calibrate_return_forecast_task_b2(
         # Horizon-local single-column panel matching the
         # _forward_real_return_gt_zero_h contract at
         # isotonic_calibrator.py:117-131 (column = forward_real_return_{horizon}).
-        panel = pd.DataFrame({f"forward_real_return_{h}": actuals})
+        # L5b-KICK-1 (Strategic-approved Approach B 2026-05-13): synthesise a
+        # monthly DatetimeIndex starting at fit_window[0] so the panel
+        # satisfies the fit_window train-only invariant enforced inside
+        # _fit_one_calibrator. Defensive guard surfaces caller error if
+        # fit_window is too narrow for the observation count.
+        synthetic_index = pd.date_range(
+            start=fit_window[0], periods=len(actuals), freq="MS",
+        )
+        if synthetic_index[-1] > fit_window[1]:
+            raise ValueError(
+                f"Task B2 fit_window {fit_window} is too narrow for "
+                f"{len(actuals)} observations at monthly cadence "
+                f"(synthesised index would extend to "
+                f"{synthetic_index[-1].date()})"
+            )
+        panel = pd.DataFrame(
+            {f"forward_real_return_{h}": actuals},
+            index=synthetic_index,
+        )
 
         # Single-entry raw_scores dict; satisfies spec §5.B.6 criterion 16
         # literal "Internally calls fit_isotonic_calibrators with

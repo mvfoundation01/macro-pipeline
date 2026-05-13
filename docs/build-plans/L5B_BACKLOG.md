@@ -4,6 +4,24 @@
 
 ---
 
+## L5b SPRINT EXECUTION LOG (completed sub-phases)
+
+Reviewer-driven KICK-N sub-phases addressing CRITICAL findings from Codex 5.5 + ChatGPT 5.5 independent reviews of `layer5-complete`. Distinct from the L5b-N deferred-items register below.
+
+### KICK-1 — Isotonic train-only `fit_window` invariant enforcement (2026-05-13)
+
+**ACCEPT tag**: `l5b-kick-1-accept`
+**Reviewer authority**: Codex 5.5 IMPORTANT + ChatGPT 5.5 CRITICAL #3 (independent convergence on train-only-calibration leakage guard)
+**Approach**: B (Strategic-approved 2026-05-13) — `panel.index` MUST be `pd.DatetimeIndex` AND every index date MUST satisfy `fit_window[0] <= date <= fit_window[1]` (inclusive both sides); enforced inside `_fit_one_calibrator`; structured `ValueError` diagnostic per spec section three point three of the KICK-1 pre-flight prompt.
+**Sxx-13 triage**: NOT triggered (Strategic's predicted "enforcement-not-present-but-no-active-leakage" state confirmed empirically — Task B2 caller fit_window covered full panel range; no train/test split active; no production downstream caller yet).
+**Test delta**: plus four tests (two mandatory NEG/POS-inv + two bonus NEG/POS); seven-hundred-seventeen to seven-hundred-twenty-one.
+**Caller updates**: `return_calibration.py` Task B2 builds panel with synthesised monthly DatetimeIndex from `fit_window[0]` plus defensive overrun guard.
+**Docstring correction**: `isotonic_calibrator.py:376` "inclusive-exclusive" wording corrected to "inclusive-inclusive" per Strategic ruling two (2026-05-13).
+**AP-AUTH delta**: zero (AP-AUTH-53 "Reviewer-driven L5b kickoff item" pattern DEFERRED per AP-AUTH-46 gratuitous-codification guard; re-evaluate at KICK-2 ACCEPT if pattern repeats).
+**Sxx delta**: zero.
+
+---
+
 ## L5b-2 — Implement L3 loaders for ISM New Orders (NAPMNOI) + CB LEI
 
 **Source**: `scoring/crps.py` lines 14-22 documents that `LAYER3_ACTIVE_COMPONENTS` is currently 4 of spec's 6 components. `ism_pmi_neworders` (NAPMNOI) returns FRED 400 (series does not exist post-2018 ISM licensing change); `lei_3d_rule` (CB LEI 6M annualized) has no Tier 1-4 loader (PHILLY_LEI_PROXY blocked by `check_double_counting` vs T10Y3M).

@@ -564,3 +564,159 @@ def test_sahm_curve_trigger_coalescing_within_90_day_cooldown() -> None:
     )
     assert fired_post is True
     assert reason_post == "sahm_rule_trigger"
+
+
+# ===========================================================================
+# L5b-KICK-1 — Train-only fit_window invariant enforcement
+# ===========================================================================
+# Strategic-approved Approach B (2026-05-13): fit_isotonic_calibrators
+# now requires panel.index to be pd.DatetimeIndex AND every index date
+# within [fit_window[0], fit_window[1]] (inclusive both sides). Closes
+# Codex 5.5 IMPORTANT + ChatGPT 5.5 CRITICAL #3 train-only-calibration
+# guard. Four tests below: two mandatory (NEG out-of-window + POS-inv
+# boundary) + two bonus (NEG non-DatetimeIndex schema + POS error-
+# message format) per Strategic ruling 3 (test scope = 4).
+
+
+def _make_partial_window_panel(
+    n: int = 120, start: str = "2000-01-01",
+) -> pd.DataFrame:
+    """Synthetic panel for KICK-1 tests; n monthly obs starting at ``start``."""
+    return _make_panel(n=n).set_index(
+        pd.date_range(start, periods=n, freq="MS"),
+    )
+
+
+def test_kick1_fit_window_rejects_out_of_window_observations() -> None:
+    """L5b-KICK-1 mandatory test #1 (NEG; CRITICAL leakage guard).
+
+    Build panel with one-hundred-twenty monthly observations from
+    2000-01 (ends 2009-12). Set fit_window = (2000-01-01, 2005-12-01)
+    — first seventy-two months in window; last forty-eight are
+    post-window. Calling ``fit_isotonic_calibrators`` must raise
+    ``ValueError`` with the spec section 3.3 diagnostic format.
+
+    Authority: Codex 5.5 IMPORTANT ("Enforce train-only calibration")
+    + ChatGPT 5.5 CRITICAL #3 ("add a NEG test that deliberately
+    passes test-period observations and expects failure").
+    """
+    panel = _make_partial_window_panel(n=120)
+    raw_scores = _make_raw_scores(n=120, seed=42)
+    narrow_window = (pd.Timestamp("2000-01-01"), pd.Timestamp("2005-12-01"))
+    # forty-eight observations exceed fit_window.end.
+    with pytest.raises(
+        ValueError,
+        match=r"received \d+ observations outside fit_window",
+    ):
+        fit_isotonic_calibrators(
+            raw_scores=raw_scores,
+            panel=panel,
+            fit_window=narrow_window,
+            bootstrap_iterations=10,
+            random_seed=42,
+        )
+
+
+def test_kick1_fit_window_boundary_dates_inclusive() -> None:
+    """L5b-KICK-1 mandatory test #2 (POS-invariant).
+
+    Set ``fit_window = (panel.index[0], panel.index[-1])`` — exactly the
+    panel boundary. Both first and last index dates are inclusive per
+    Strategic ruling 2 (2026-05-13 correction of stale
+    ``isotonic_calibrator.py:376`` docstring "inclusive-exclusive" to
+    inclusive-inclusive). Calling ``fit_isotonic_calibrators`` must
+    succeed.
+    """
+    panel = _make_partial_window_panel(n=100)
+    raw_scores = _make_raw_scores(n=100, seed=42)
+    full_window = (panel.index[0], panel.index[-1])
+    # Suppress non-monotone-DGP RuntimeWarning the synthetic fixture
+    # may trigger; we only care that the call returns without raising.
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        result = fit_isotonic_calibrators(
+            raw_scores=raw_scores,
+            panel=panel,
+            fit_window=full_window,
+            bootstrap_iterations=10,
+            random_seed=42,
+        )
+    assert isinstance(result, dict)
+    assert len(result) == 25
+
+
+def test_kick1_fit_window_rejects_non_datetimeindex_panel() -> None:
+    """L5b-KICK-1 bonus test #3 (NEG; schema violation).
+
+    Construct panel with ``pd.RangeIndex`` (the default for callers who
+    forget to pass an explicit DatetimeIndex). Calling
+    ``fit_isotonic_calibrators`` must raise ``ValueError`` with the
+    schema-violation message that points the caller at the correct
+    construction pattern.
+    """
+    n = 100
+    rangeindex_panel = pd.DataFrame({
+        "nber_recession_start_within_12m": (np.arange(n) % 12 == 0),
+        "spx_max_drawdown_within_1Y": np.linspace(0.05, 0.45, n),
+        "spx_max_drawdown_within_3Y": np.linspace(0.05, 0.45, n),
+        "spx_max_drawdown_within_5Y": np.linspace(0.05, 0.45, n),
+        "spx_max_drawdown_within_10Y": np.linspace(0.05, 0.45, n),
+        "forward_real_return_1Y": np.sin(np.arange(n) * 0.1),
+        "forward_real_return_3Y": np.cos(np.arange(n) * 0.1),
+        "forward_real_return_5Y": np.linspace(-0.1, 0.2, n),
+        "forward_real_return_10Y": np.linspace(0.0, 0.3, n),
+    })  # NO index= -> defaults to pd.RangeIndex(n)
+    assert isinstance(rangeindex_panel.index, pd.RangeIndex), (
+        "fixture intent: panel.index must be RangeIndex for this NEG check"
+    )
+    raw_scores = _make_raw_scores(n=n, seed=42)
+    with pytest.raises(
+        ValueError,
+        match=r"requires panel\.index to be pd\.DatetimeIndex",
+    ):
+        fit_isotonic_calibrators(
+            raw_scores=raw_scores,
+            panel=rangeindex_panel,
+            fit_window=(
+                pd.Timestamp("2000-01-01"),
+                pd.Timestamp("2010-12-01"),
+            ),
+            bootstrap_iterations=10,
+            random_seed=42,
+        )
+
+
+def test_kick1_fit_window_error_message_cites_score_type_and_horizon() -> None:
+    """L5b-KICK-1 bonus test #4 (POS; spec section 3.3 error-message format).
+
+    Strategic section 3.3 mandates the ValueError message identify
+    (a) the score_type + horizon of the calibrator being fit,
+    (b) the offending row count, (c) the fit_window bounds,
+    (d) earliest/latest violation dates. Trigger a leakage scenario
+    and assert the message body contains each fragment.
+    """
+    panel = _make_partial_window_panel(n=120)
+    # Single-key raw_scores dict so we know which calibrator surfaces
+    # in the error message (CRPS at 1Y).
+    raw_scores = {("CRPS", "1Y"): np.linspace(0, 1, 120)}
+    narrow_window = (pd.Timestamp("2000-01-01"), pd.Timestamp("2005-12-01"))
+    with pytest.raises(ValueError) as excinfo:
+        fit_isotonic_calibrators(
+            raw_scores=raw_scores,
+            panel=panel,
+            fit_window=narrow_window,
+            bootstrap_iterations=10,
+            random_seed=42,
+        )
+    msg = str(excinfo.value)
+    # Fragment (a): score_type + horizon literal.
+    assert "score_type=CRPS" in msg
+    assert "horizon=1Y" in msg
+    # Fragment (b): observation count present.
+    assert "observations outside fit_window" in msg
+    # Fragment (c): fit_window bounds cited as dates.
+    assert "2000-01-01" in msg
+    assert "2005-12-01" in msg
+    # Fragment (d): earliest + latest violation dates cited.
+    assert "earliest violation" in msg
+    assert "latest" in msg

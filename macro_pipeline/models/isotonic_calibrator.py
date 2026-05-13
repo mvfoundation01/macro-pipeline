@@ -280,7 +280,44 @@ def _fit_one_calibrator(
     random_seed: int,
     refit_trigger: str,
 ) -> IsotonicCalibrationResult:
-    """Fit one isotonic calibrator for a single (score_type, horizon[, threshold])."""
+    """Fit one isotonic calibrator for a single (score_type, horizon[, threshold]).
+
+    L5b-KICK-1 train-only invariant (Approach B per Strategic disposition
+    2026-05-13; reviewer-driven: Codex 5.5 IMPORTANT + ChatGPT 5.5 CRITICAL
+    #3 converged on this CRITICAL leakage guard): ``panel.index`` MUST be
+    a ``pd.DatetimeIndex``, AND every index date MUST satisfy
+    ``fit_window[0] <= date <= fit_window[1]`` (inclusive both sides).
+    Violations raise ``ValueError`` with structured diagnostic; promotes
+    ``fit_window`` from metadata-only to hard runtime invariant.
+    """
+    # ---- L5b-KICK-1: fit_window train-only invariant (Approach B) ----
+    if not isinstance(panel.index, pd.DatetimeIndex):
+        raise ValueError(
+            f"Isotonic calibrator requires panel.index to be pd.DatetimeIndex "
+            f"for fit_window enforcement (received "
+            f"{type(panel.index).__name__}). Construct panel with explicit "
+            "DatetimeIndex (e.g., pd.date_range within fit_window bounds)."
+        )
+    if panel.index.hasnans:
+        raise ValueError(
+            "Isotonic calibrator received panel.index containing NaT "
+            "entries; cannot enforce fit_window bounds on missing dates"
+        )
+    start_ts = pd.Timestamp(fit_window[0])
+    end_ts = pd.Timestamp(fit_window[1])
+    violations_mask = (panel.index < start_ts) | (panel.index > end_ts)
+    n_violations = int(violations_mask.sum())
+    if n_violations > 0:
+        violating_dates = panel.index[violations_mask]
+        viol_min = violating_dates.min()
+        viol_max = violating_dates.max()
+        raise ValueError(
+            f"Isotonic calibrator fit on score_type={score_type}, "
+            f"horizon={horizon} received {n_violations} observations "
+            f"outside fit_window [{start_ts.date()}, {end_ts.date()}]: "
+            f"earliest violation {viol_min.date()}, latest {viol_max.date()}"
+        )
+
     y_train = build_event_labels(
         score_type, panel, horizon, drawdown_threshold=drawdown_threshold,
     )
@@ -373,7 +410,15 @@ def fit_isotonic_calibrators(
         DataFrame with expected event-label columns (see
         ``build_event_labels`` helpers).
     fit_window
-        (start, end) inclusive-exclusive bounds; stored on result.
+        ``(start, end)`` **inclusive-inclusive** bounds (corrected per
+        Strategic L5b-KICK-1 disposition 2026-05-13; v6 spec docstring
+        previously said "inclusive-exclusive" — that wording was stale).
+        ENFORCED at fit time: ``panel.index`` MUST be ``pd.DatetimeIndex``
+        AND every index date MUST satisfy
+        ``start <= date <= end`` (Approach B per L5b-KICK-1). Violations
+        raise ``ValueError`` with score_type + horizon + violation count
+        + earliest/latest violation date diagnostic. Closes Codex 5.5
+        IMPORTANT + ChatGPT 5.5 CRITICAL #3 train-only-calibration guard.
     drawdown_thresholds
         5 thresholds for CDRS fan-out; defaults to spec §3.3 set.
     bootstrap_iterations
