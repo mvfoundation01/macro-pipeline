@@ -46,13 +46,18 @@ Source code (build branch):
 
 ## Integrity hashes (sha256 first 12 chars; AP-AUTH-48 v2 — post-push verified below)
 
-| File | sha256 (first 12) — **served from raw URL** (AP-AUTH-48 v2) |
+| File | sha256 (first 12) — **served from raw URL** (AP-AUTH-48 v2 verified) |
 |------|---|
 | L5_RM_4_VERIFICATION.md | 6be3da798d9b |
-| test_transcript.txt | <pending post-push curl> |
-| gate20_cli.txt | <pending post-push curl> |
+| test_transcript.txt | 15887d67832a |
+| gate20_cli.txt | a4631c78fc95 |
 
-**AP-AUTH-48 v2 post-push protocol**: this MANIFEST will be committed + pushed; then per-artifact `curl -sL <url> | sha256sum` verified; if any served hash differs from claim (CRLF/LF drift on shell-redirected text files per L5-B Task A + L3 patch precedents), MANIFEST is amended with served-content hash + re-pushed.
+**AP-AUTH-48 v2 post-push verification log** (this amendment commit):
+- L5_RM_4_VERIFICATION.md: local-disk = served (Write tool LF-preserved) ✓ no change
+- test_transcript.txt: local-disk `e588171a388b` ≠ served `15887d67832a` (CRLF→LF drift on shell-redirected pytest output; AP-AUTH-48 v2 predicted; same class as L5-B Task A precedent) → MANIFEST updated to served hash
+- gate20_cli.txt: local-disk `9d1ac5b5be4a` ≠ served `a4631c78fc95` (same drift class; shell-redirected `python -m ... gate20` output) → MANIFEST updated to served hash
+
+Reviewer-side `curl -sL <url> | sha256sum | cut -c1-12` matches MANIFEST claim for all 3 artifacts post-amendment. AP-AUTH-48 v2 closure: served = MANIFEST.
 
 ---
 
