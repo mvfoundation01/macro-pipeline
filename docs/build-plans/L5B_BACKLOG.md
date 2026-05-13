@@ -34,4 +34,32 @@
 
 ---
 
-**END — L5B_BACKLOG.md (L5b-2 only as of 2026-05-13; reserved L5b-1 + L5b-3..N open)**
+## L5b-3 — Expose `--panel-path` flag on `gate18` CLI
+
+**Source**: L5-B Task A retry Phase 3 deviation #3.
+
+**Surfaced**: 2026-05-14 L5-B Task A ACCEPT (commit `53deb90`; review branch `reviews/l5-b-task-a-accept` @ `bdeb2d6`).
+
+Track A's L5-A `_cli_gate18` in `macro_pipeline/validation.py` doesn't accept a `--panel-path` flag; it uses `PANEL_CACHE_PATH` from `analysis.r_squared_panel` as the default. V's L5-B Task A retry prompt PHASE 3 invoked Gate 18 with `--panel-path data/cache/<panel-file>.parquet` syntax which CLI doesn't parse. Workaround was to call via Python script (`python -c "..."`) supplying `panel_index` + `panel_path` explicitly. Functional equivalence achieved; flag-based CLI is a hygiene improvement.
+
+**Effort estimate**: 0.25-0.5h
+- Add argparse to `_cli_gate18`: 0.1h
+- Update help text + tests: 0.15h
+- Update CLI documentation in `validation.py` `__main__` dispatcher: 0.05h
+
+**Priority**: **LOW** — functionality available via Python script (e.g., the script captured at `reviews/l5-b-task-a-accept/artifacts/gate18_cli_runtime.txt`); flag is operational hygiene improvement; not blocking any subsequent sub-phase.
+
+**Owner**: L5b OOS hardening cycle (V to schedule alongside other CLI / ergonomic improvements).
+
+**Acceptance criteria**:
+1. `python -m macro_pipeline.validation gate18 --panel-path <path>` accepts an explicit panel cache path.
+2. Existing default behavior (no `--panel-path` → uses `PANEL_CACHE_PATH`) preserved for backward compat.
+3. Help text describes both invocation modes.
+
+**Provenance trail**:
+- L5-B Task A retry execution report (2026-05-14): deviation #3.
+- `_cli_gate18` source: `macro_pipeline/validation.py` (post-S-11 commit `53deb90`).
+
+---
+
+**END — L5B_BACKLOG.md (L5b-2 + L5b-3 as of 2026-05-14; reserved L5b-1 + L5b-4..N open)**
