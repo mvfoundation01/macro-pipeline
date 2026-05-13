@@ -4000,6 +4000,191 @@ def _cli_gate21() -> int:
     return 0 if report.passed else 1
 
 
+def validate_gate22_brier_reliability() -> GateReport:
+    """Gate 22 - L5-C Brier + reliability + Murphy decomposition integrity.
+
+    Per ``LAYER_5_BUILD_SPEC.md`` v6 @ ``9f848bb`` §5.C.6 (six PASS
+    criteria) + §5.C.7 (ten-item proof contract).
+
+    Compile-time checks (criteria 1, 2 partial, 4 partial, 5 partial)
+    + Standing Order #2 AST audit for R4 leakage mitigation
+    (substring inspection of brier_reliability module source confirms
+    no fitting / no estimator instantiation); pytest-asserted
+    out-of-band (criteria 1 full / 2 full / 3 / 6 via
+    tests/test_brier_reliability.py).
+    """
+    import inspect
+
+    findings: list[str] = []
+    warnings_list: list[str] = []
+    summary: dict = {}
+
+    try:
+        from macro_pipeline.analysis.brier_reliability import (
+            BrierDecomposition,
+            compute_brier_per_horizon,
+        )
+        import macro_pipeline.analysis.brier_reliability as _br_mod
+
+        # Criterion 1 partial - API present.
+        summary["criterion_1_api_present"] = {
+            "BrierDecomposition": "OK",
+            "compute_brier_per_horizon": "OK",
+        }
+        findings.append(
+            "Criterion 1 PASS: BrierDecomposition + compute_brier_per_horizon "
+            "importable (spec §5.C.1 + §5.C.7 proof item 1)"
+        )
+
+        # Criterion 2 partial - BrierDecomposition fields cover Murphy
+        # decomposition (brier_score + reliability_term + resolution_term
+        # + uncertainty_term + brier_climatology + brier_improvement).
+        expected_fields = {
+            "horizon", "brier_score", "brier_climatology",
+            "brier_improvement", "reliability_term", "resolution_term",
+            "uncertainty_term", "n_obs", "n_bins", "bin_edges",
+            "bin_avg_predicted", "bin_avg_actual", "bin_counts",
+            "bootstrap_se_distribution",
+        }
+        actual_fields = set(BrierDecomposition.__dataclass_fields__.keys())
+        missing = expected_fields - actual_fields
+        extra = actual_fields - expected_fields
+        summary["criterion_2_field_count"] = len(actual_fields)
+        if missing:
+            findings.append(
+                f"FAIL: Criterion 2 - BrierDecomposition missing fields "
+                f"{sorted(missing)}"
+            )
+        elif extra:
+            findings.append(
+                f"FAIL: Criterion 2 - BrierDecomposition has unexpected "
+                f"extra fields {sorted(extra)}"
+            )
+        else:
+            findings.append(
+                f"Criterion 2 PASS: BrierDecomposition populates all "
+                f"{len(actual_fields)} Murphy-decomposition fields per "
+                "spec §5.C.1 lines 1380-1397"
+            )
+
+        # Criterion 2 + spec §5.C.1 dataclass defaults: bin_edges 11
+        # points (10 bins) and n_bins == 10 (default).
+        sample = BrierDecomposition(
+            horizon="probe", brier_score=0.0, brier_climatology=0.0,
+            brier_improvement=0.0, reliability_term=0.0,
+            resolution_term=0.0, uncertainty_term=0.0, n_obs=0,
+        )
+        if sample.n_bins != 10:
+            findings.append(
+                f"FAIL: Criterion 4 - n_bins default = {sample.n_bins}, "
+                "expected 10 per spec §5.C.1 dataclass"
+            )
+        elif len(sample.bin_edges) != 11:
+            findings.append(
+                f"FAIL: Criterion 4 - bin_edges length = "
+                f"{len(sample.bin_edges)}, expected 11 (10 bins + 1)"
+            )
+        else:
+            findings.append(
+                "Criterion 4 PASS (partial): BrierDecomposition defaults "
+                "n_bins=10, len(bin_edges)=11 (eleven edges = ten bins) "
+                "per spec §5.C.1 line 1394"
+            )
+        summary["criterion_4_default_n_bins"] = sample.n_bins
+        summary["criterion_4_default_bin_edges_len"] = len(sample.bin_edges)
+
+        # Standing Order #2 AST / source audit for R4 leakage
+        # (pre-flight risk register; vanishingly unlikely but verify):
+        # the brier_reliability module must NOT contain any fitting
+        # primitives or estimator instantiation.
+        source = inspect.getsource(_br_mod)
+        forbidden_substrings = (
+            ".fit(",
+            "train_test_split",
+            "LogisticRegression",
+            "Ridge(",
+            "IsotonicRegression(",
+        )
+        found_substrings = [s for s in forbidden_substrings if s in source]
+        summary["criterion_5_ast_audit_forbidden_substrings_found"] = found_substrings
+        if found_substrings:
+            findings.append(
+                f"FAIL: Standing Order #2 AST audit - brier_reliability "
+                f"contains forbidden fitting/estimator substring(s) "
+                f"{found_substrings}; this module must be POST-HOC "
+                "scoring only (R4 mitigation)"
+            )
+        else:
+            findings.append(
+                "Standing Order #2 AST audit PASS: brier_reliability source "
+                "contains no fitting / estimator instantiation - module is "
+                "pure post-hoc scoring (R4 mitigation; spec §5.C.3 "
+                "methodology rigor)"
+            )
+
+        # Criterion 5 - bootstrap_se_distribution field present.
+        if "bootstrap_se_distribution" in actual_fields:
+            findings.append(
+                "Criterion 5 PASS (partial): bootstrap_se_distribution "
+                "field present on BrierDecomposition; bootstrap SE "
+                "reported per horizon (spec §5.C.3 row 'Standard error'; "
+                "runtime seed determinism asserted by test #4 fixture "
+                "with bootstrap_iterations parameter)"
+            )
+    except ImportError as exc:
+        findings.append(f"FAIL: Criterion 1 - import error: {exc}")
+
+    # Out-of-band (criteria 1 full / 2 full / 3 / 4 runtime / 5 runtime / 6).
+    warnings_list.append(
+        "Criterion 1 full (Brier formula matches per-horizon) asserted "
+        "via tests/test_brier_reliability.py test #1 + test #4 (post-hoc "
+        "Brier on synthetic + parametrized over 3 score_types)"
+    )
+    warnings_list.append(
+        "Criterion 2 full (Murphy decomposition algebra holds) asserted "
+        "via test #2 - |brier - (R - Res + U)| < 1e-10 on fixtures "
+        "without within-bin probability variance"
+    )
+    warnings_list.append(
+        "Criterion 3 (brier_improvement > 0 per horizon) asserted via "
+        "test #4 parametrized x 3 score_types (CRPS / CDRS / "
+        "RETURN_POSITIVE) per spec §3.3 calibration target schema"
+    )
+    warnings_list.append(
+        "Criterion 4 runtime (reliability diagrams + bin counts >= 30 per "
+        "bin OR adaptive reduction documented) asserted via "
+        "UserWarning emission inside compute_brier_per_horizon when any "
+        "nonempty bin has < 30 obs; test fixtures use n >= 500 to keep "
+        "all bins populated"
+    )
+    warnings_list.append(
+        "Criterion 5 runtime (bootstrap reproducibility seeded "
+        "random_seed=42) asserted via determinism contract inside "
+        "_bootstrap_brier_se (seeded via np.random.default_rng); "
+        "deterministic per seed"
+    )
+    warnings_list.append(
+        "Criterion 6 (all 8 spec tests in §5.C.5 PASS - 10 pytest "
+        "instances after test #4 parametrize x 3 score_types) asserted "
+        "via full pytest"
+    )
+
+    passed = not any(f.startswith("FAIL") for f in findings)
+    return GateReport(
+        name="Gate 22 - L5-C Brier + reliability + Murphy decomposition",
+        passed=passed, findings=findings, warnings=warnings_list,
+        summary=summary,
+    )
+
+
+def _cli_gate22() -> int:
+    import logging
+    logging.basicConfig(level="WARNING", format="%(message)s")
+    report = validate_gate22_brier_reliability()
+    print(report.render())
+    return 0 if report.passed else 1
+
+
 if __name__ == "__main__":
     import sys
     cmd = sys.argv[1] if len(sys.argv) > 1 else "gate1"
@@ -4047,11 +4232,13 @@ if __name__ == "__main__":
         sys.exit(_cli_gate20())
     if cmd == "gate21":
         sys.exit(_cli_gate21())
+    if cmd == "gate22":
+        sys.exit(_cli_gate22())
     print(
         f"Unknown command: {cmd}. Available: "
         "gate1, gate2, gate3, gate4a, gate4b, gate4c, gate4d, "
         "gate8, gate9, gate10, gate11, gate12, gate13, gate14, gate15, gate16, gate17, "
-        "gate18, gate19_b1, gate19_b2, gate20, gate21",
+        "gate18, gate19_b1, gate19_b2, gate20, gate21, gate22",
         file=sys.stderr,
     )
     sys.exit(2)
