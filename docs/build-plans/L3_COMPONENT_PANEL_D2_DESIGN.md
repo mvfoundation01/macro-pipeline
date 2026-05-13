@@ -176,4 +176,78 @@ If Strategic confirms all 5 questions as proposed → Phase 2 proceeds immediate
 
 ---
 
-**END — L3_COMPONENT_PANEL_D2_DESIGN.md**
+## v2 — Q2 bucket finalization (post-Strategic pushback)
+
+**Trigger**: Strategic confirmed Q1/Q3/Q4/Q5 but pushed back on Q2 `credit_liquidity = mean(T1, T3)`. Concern: T1 (continuous mean-reverting credit shock) + T3 (near-binary persistent positioning) are heterogeneous — averaging produces a bucket dominated by T1 variance in stress and T3 sign drag in calm, collapsing bucket interpretability.
+
+### v2 §A — Spec re-read findings (per Phase 1.6 STEP 1.6.1)
+
+Grep audits against `LAYER_5_BUILD_SPEC.md` v6 @ `9f848bb`:
+
+| Audit query | Result |
+|---|---|
+| `gamma` (case-insensitive) | **0 matches** (spec never mentions dealer gamma OR T3_gamma_sign by name) |
+| `T3` (literal) | **0 matches** |
+| `dealer` | **0 matches** |
+| `liquidity` | **0 matches** outside the compound phrase `credit/liquidity` |
+| `bucket` + `V[1-5]_` / `T[1-5]_` | Generic `4 buckets × subcomponents` at lines 716, 894 (no sub-component → bucket map) |
+| `credit/liquidity` framing | Only line 587 generic ("CDRS: 4 buckets (valuation + sentiment + credit/liquidity + vol/breadth/technical)") |
+| `vol/breadth/technical` framing | Only line 587 generic |
+| `CDRS.*component` | Lines 587, 716, 894, 856, 2145, 2437 — all reference "4 buckets × subcomponents" hierarchically; **none specify the sub-component → bucket map** |
+
+**Spec verdict on T3 placement: SILENT.** No explicit assignment to any bucket. No worked example forcing a placement.
+
+### v2 §B — Decision tree application
+
+Per prompt PHASE 1.6 STEP 1.6.2:
+- IF spec EXPLICITLY assigns T3 → bucket: Option C. **Not triggered.**
+- ELSE IF spec EXPLICITLY assigns T3 elsewhere: adopt that. **Not triggered.**
+- ELSE IF spec is silent: **Option B** (T3 → vol_breadth_technical_gamma). **TRIGGERED.**
+- Option A (equal-count reweighting): only if spec mandates 4-equal-count. **Not triggered** (lines 716/894 explicitly allow asymmetric "4 buckets × subcomponents").
+
+**Decision: ADOPT OPTION B.** Track A reasoning aligns with Strategic semantic-coherence preference: T3 (dealer gamma sign) is a positioning / vol-regime signal, not a credit-spread signal. Pairing it with T1 (HY OAS shock) bundles incompatible signal types. Moving T3 to the vol/breadth/technical bucket pairs it with T2 (VIX) + T4 (breadth) + T5 (MOVE) which all share volatility / market-internals semantics.
+
+### v2 §C — Final bucket mapping (post-Option-B; supersedes §3.2)
+
+CDRS `component_panel` schema (4 columns):
+
+```
+Index: time (monthly DatetimeIndex matching L5-A panel_index)
+Columns:
+  bucket_valuation                   = mean(V1_cape_pctile, V4_ey_real_gap_z, V5_ey_deviation)
+  bucket_sentiment                   = mean(V2_margin_z, V3_concentration_proxy)
+  bucket_credit                      = T1_hy_oas_30d_roc                                          # single-signal bucket
+  bucket_vol_breadth_technical_gamma = mean(T2_vix_12m_pctile, T3_gamma_sign, T4_breadth_thrust, T5_move_z)
+```
+
+Sub-component → bucket sizes: 3 / 2 / 1 / 4 = 10 total V+T signals (5 V + 5 T). Asymmetric counts (1-4 range) accepted per Phase 1.6 guidance ("asymmetric counts are acceptable; semantic coherence wins").
+
+R EXCLUDED (unchanged from §3 / §4.2; Q3 strongly confirmed by Strategic).
+
+### v2 §D — Test plan revision (1 new test per Strategic's Phase 2 requirement)
+
+T6 from §4.5 replaced with **T6_bucket_composition** (contract test against this v2 design doc):
+
+| # | Test | Type | Notes |
+|---|---|---|---|
+| T1 | `test_build_component_panel_crps_4_active_columns` | POS | CRPS schema: 4 active components |
+| T2 | `test_build_component_panel_cdrs_4_buckets_M2_option_b_mapping` | POS | CDRS 4-bucket per v2 §C schema |
+| T3 | `test_build_component_panel_rejects_invalid_score_type` | NEG | `score_type="UNKNOWN"` raises ValueError |
+| T4 | `test_build_component_panel_rejects_non_monthly_index` | NEG | Non-monotonic / gap-y index raises |
+| T5 | `test_build_component_panel_pit_safety_no_look_ahead` | NEG | `as_of = month_T` excludes data from `T+1` |
+| **T6** | `test_build_component_panel_bucket_composition_matches_design_doc_v2` | NEG (contract test) | Asserts CDRS columns match v2 §C verbatim: 4 named columns + correct sub-component aggregation |
+
+NEG count: T3, T4, T5, T6 = 4 of 6 = 67% (exceeds 50% floor per §2.7). ISM/LEI exclusion test merged into T1 docstring assertions (no longer separate test).
+
+### v2 §E — Phase 2 implementation impact
+
+Module `macro_pipeline/analysis/component_panel.py` (NEW) implements `build_component_panel(panel_index, *, score_type)`:
+- `score_type="CRPS"` → 4 columns: yield_curve_nyfed, sahm_rule, nfci_kcfsi, hy_oas_regime
+- `score_type="CDRS"` → 4 columns per v2 §C
+- ISM + LEI explicitly absent; docstring cites backlog L5b-2
+
+Internal: iterate `panel_index`; per date build `PitDataContext(as_of=date)`; call `cdrs_vulnerability::compute_vulnerability` + `cdrs_trigger::compute_trigger` (existing PIT-safe loaders); extract per-sub-component normalized values from `components_normalized` dict; aggregate per v2 §C bucket mapping.
+
+---
+
+**END — L3_COMPONENT_PANEL_D2_DESIGN.md v2 (Option B finalized; T6 contract test added)**
