@@ -33,15 +33,18 @@ Three options per prompt PHASE 0 decision tree CASE C (verbatim):
 
 **Recommendation (Track A's prior)**: option (ii) — authorize component_panel construction within Task A scope, with explicit Strategic clarification on CRPS 6→4 component drift (use L3 reality 4 active components; cite `LAYER3_ACTIVE_COMPONENTS`) and CDRS V/T/R → 4 bucket mapping (Strategic to decide: a) keep CDRS as 3-stage V×T×R input matrix; b) decompose V into 5 sub-percentile columns + T into trigger columns to approximate 4-bucket framing; c) other).
 
-**Strategic decision**: pending (escalated 2026-05-13 by Track A; awaiting V + Strategic disposition)
+**Strategic decision**: **RESOLVED** 2026-05-13 — Strategic chose **Option (iv) HYBRID** (variant of option (ii)): minimal L3 patch shipping `component_panel` export, 4-active-component CRPS subset, ISM + LEI deferred to backlog L5b-2.
 
-**Backlog ref**: 
-- If option (i) chosen: file L5b-1 or L7-N for L3 component-panel export; defer Task A to that pre-req
-- If option (ii) chosen: file L5b-2 (or similar) for "L3 backfill: ism_pmi_neworders + lei_3d_rule loaders" — required for full 6-component CRPS coverage per spec ideal
-- If option (iii) chosen: file L5-N-task-a-followup for full-component-panel integration test
+**Resolution**: L3 component_panel patch landed at commit `60f18033e24f115ddf30d8659e76ebd91b16612d` on branch `claude/layer-5-l3-component-patch` (off `claude/layer-5-build` @ `711f641`). Phase 2 implementation: `macro_pipeline/analysis/component_panel.py` (NEW) + `tests/test_component_panel.py` (6 tests; 4 NEG / 2 POS = 67%) + export wiring in `macro_pipeline/analysis/__init__.py`. CDRS bucket mapping per design doc v2 §C (Option B; Strategic confirmed). PIT discipline preserved.
 
-**Build artifact**: this Sxx log (`docs/build-plans/L5_BUILD_SXX_LOG.md` on `claude/layer-5-build` @ post-S-10 commit); L5-B Task A code-exec HALTED at PHASE 0 pending decision
+**Resolution date**: 2026-05-13
+
+**Backlog spawned**: **L5b-2** — ISM New Orders (NAPMNOI) + CB LEI loaders, ~4-8h effort, MED priority. See `docs/build-plans/L5B_BACKLOG.md`.
+
+**Status**: **RESOLVED**.
+
+**Build artifact**: L3 component_panel patch branch `claude/layer-5-l3-component-patch` @ `60f1803`; merge to build branch + tag `l3-component-patch` per L5-B Task A retry pre-flight authorization.
 
 ---
 
-**END — L5_BUILD_SXX_LOG.md (S-10 only as of 2026-05-13)**
+**END — L5_BUILD_SXX_LOG.md (S-10 RESOLVED; cumulative count 10; reserved range 11-25 open)**

@@ -49,6 +49,12 @@ from macro_pipeline.analysis.regression_target import (
     forward_return_series,
     load_target,
 )
+from macro_pipeline.analysis.component_panel import (
+    CDRS_BUCKET_COLUMNS,
+    CDRS_BUCKET_TO_SUBCOMPONENTS,
+    CRPS_COLUMNS,
+    build_component_panel,
+)
 from macro_pipeline.analysis.walk_forward_cv import (
     GATE18_FOLD_COUNT_TARGETS,
     MIN_TRAIN_WINDOW_MONTHS_DEFAULT,
@@ -62,6 +68,9 @@ from macro_pipeline.analysis.walk_forward_cv import (
 )
 
 __all__ = [
+    "CDRS_BUCKET_COLUMNS",
+    "CDRS_BUCKET_TO_SUBCOMPONENTS",
+    "CRPS_COLUMNS",
     "GATE18_FOLD_COUNT_TARGETS",
     "HORIZONS",
     "HorizonLabel",
@@ -82,6 +91,7 @@ __all__ = [
     "WalkForwardFold",
     "WalkForwardSchedule",
     "align_indicator_to_target",
+    "build_component_panel",
     "build_and_cache",
     "build_panel",
     "classify_verdict",
