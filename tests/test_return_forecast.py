@@ -92,6 +92,25 @@ post-kickoff-sprint.
 
 NEG-flavor accounting: L5b-A has 2 strict NEG + 1 POS-inv = 3 of 5 =
 60% NEG-flavor at the sub-phase level (floor met).
+
+L5b-B (tag ``l5b-b-accept``, 2026-05-15) appended six tests (B.1-B.6)
+closing the ChatGPT 5.5 Dim-3 OOS rigor mandate on Ridge coefficient
+stability via Quandt-Andrews + Bai-Perron sequential supF structural
+break tests per the AP-AUTH-54 fifth-instance internal-implementation
+variant pattern. AP-AUTH-54 envelope STAYS CLOSED at 4-instance
+characterization (Strategic disposition 7); L5b-B's novel sub-
+characteristics (two new helpers, NEW dataclass, Optional field type)
+documented as within-envelope variants.
+
+  B.1  POS         test_l5b_b_quandt_andrews_detects_synthetic_break_at_midpoint
+  B.2  POS-inv     test_l5b_b_no_break_fixture_yields_high_p_value
+  B.3  POS         test_l5b_b_ridge_fit_result_carries_structural_break_diagnostics_at_final_fold
+  B.4  NEG         test_l5b_b_dataclass_rejects_invalid_test_method
+  B.5  NEG         test_l5b_b_dataclass_rejects_missing_no_default_field
+  B.6  NEG-inv     test_l5b_b_non_final_folds_have_structural_break_diagnostics_None
+
+NEG-flavor accounting: L5b-B has 2 strict NEG + 1 POS-inv + 1 NEG-inv
+= 4 of 6 = 67% NEG-flavor at the sub-phase level (floor met).
 """
 from __future__ import annotations
 
@@ -109,6 +128,7 @@ from macro_pipeline.models.return_forecast import (
     LAMBDA_GRID_DEFAULT,
     BootstrapDiagnostics,
     RidgeFitResult,
+    StructuralBreakDiagnostics,
     fit_return_forecast_task_b1,
 )
 
@@ -629,6 +649,7 @@ def test_kick4_dataclass_rejects_missing_inner_cv_scaler_recomputed():
             # recomputed omission (substring match still works
             # regardless, but explicit field provision is cleaner).
             inference_label="forecast_vs_realized",
+            structural_break_diagnostics=None,  # L5b-B fixup: None disabling semantic
         )
 
 
@@ -996,6 +1017,7 @@ def test_kick6_dataclass_rejects_invalid_inference_label():
             bootstrap_diagnostics=valid_diag,
             block_size_sensitivity_diagnostics={"h": valid_diag},
             inference_label="bogus",  # invalid tri-state
+            structural_break_diagnostics=None,  # L5b-B fixup
         )
 
 
@@ -1034,6 +1056,7 @@ def test_kick6_dataclass_rejects_missing_inference_label():
             hac_bandwidth_sensitivity_se={},
             fit_timestamp=pd.Timestamp("2026-05-15"),
             inner_cv_scaler_recomputed=True,
+            structural_break_diagnostics=None,  # L5b-B fixup
             # inference_label deliberately omitted — must raise
         )
 
@@ -1243,3 +1266,194 @@ def test_l5b_a_bootstrap_diagnostics_rejects_missing_block_length_distribution()
             fallback_flag="none",
             # block_length_distribution deliberately omitted — must raise
         )
+
+
+# ===========================================================================
+# L5b-B tests B.1-B.6 — structural break tests (Quandt-Andrews + Bai-
+# Perron sequential supF). Closes ChatGPT 5.5 Dim-3 OOS rigor mandate
+# on Ridge coefficient stability via the AP-AUTH-54 fifth-instance
+# internal-implementation variant pattern. NEG-flavor 4 of 6 = 67% at
+# sub-phase level (floor met). Approach B per Strategic disposition.
+# ===========================================================================
+
+
+# ---------------------------------------------------------------------------
+# Test B.1 — POS (L5b-B)
+# ---------------------------------------------------------------------------
+def test_l5b_b_quandt_andrews_detects_synthetic_break_at_midpoint():
+    """L5b-B: synthetic structural-break fixture with β_pre != β_post
+    at midpoint should be detected by Quandt-Andrews supremum-Wald.
+    Detected break date within ±10 obs of n/2; p_value < 0.05;
+    n_breaks_detected == 1."""
+    from macro_pipeline.models.return_forecast import (
+        _test_structural_breaks_quandt_andrews,
+        _zscore_fit_transform,
+    )
+    np_rng = np.random.default_rng(2026)
+    n = 200
+    n_features = 3
+    # Build X with stable distribution; β shifts at midpoint.
+    X = np_rng.normal(0.0, 1.0, size=(n, n_features))
+    beta_pre = np.array([1.0, 0.5, -0.5])
+    beta_post = np.array([-1.0, 0.5, 1.5])  # clear shift in coefs 0 and 2
+    noise = np_rng.normal(0.0, 0.1, size=n)
+    y = np.empty(n, dtype=float)
+    midpoint = n // 2
+    y[:midpoint] = X[:midpoint] @ beta_pre + noise[:midpoint]
+    y[midpoint:] = X[midpoint:] @ beta_post + noise[midpoint:]
+    # Z-score before fitting (mirror caller pattern).
+    X_z, _, _ = _zscore_fit_transform(X)
+    # Use modest lambda so Ridge doesn't over-shrink.
+    diag = _test_structural_breaks_quandt_andrews(X_z, y, lambda_star=1.0)
+    assert diag.test_method == "quandt_andrews"
+    assert diag.n_breaks_detected == 1, (
+        f"expected 1 break detected at clear midpoint shift; got "
+        f"{diag.n_breaks_detected}; p={diag.break_test_p_value:.4f}, "
+        f"stat={diag.break_test_statistic:.4f}"
+    )
+    assert diag.break_test_p_value < 0.05, (
+        f"expected p < 0.05 on clear synthetic break; got "
+        f"p={diag.break_test_p_value:.4f}"
+    )
+    detected = diag.break_dates_detected[0]
+    assert abs(detected - midpoint) <= 10, (
+        f"detected break at {detected}; expected near midpoint={midpoint} "
+        f"(tolerance ±10 obs); statistic={diag.break_test_statistic:.4f}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Test B.2 — POS-invariant (L5b-B)
+# ---------------------------------------------------------------------------
+def test_l5b_b_no_break_fixture_yields_high_p_value():
+    """L5b-B POS-invariant: white-noise synthetic fixture (β stable
+    across train) should NOT trigger a structural break detection.
+    p_value > 0.10 (fail to reject null of no-break); n_breaks_detected
+    may be 0 (typical) or rarely 1 (size of test ≈ alpha)."""
+    from macro_pipeline.models.return_forecast import (
+        _test_structural_breaks_quandt_andrews,
+        _zscore_fit_transform,
+    )
+    np_rng = np.random.default_rng(42)
+    n = 200
+    n_features = 3
+    X = np_rng.normal(0.0, 1.0, size=(n, n_features))
+    beta_stable = np.array([1.0, 0.5, -0.5])
+    noise = np_rng.normal(0.0, 0.1, size=n)
+    y = X @ beta_stable + noise
+    X_z, _, _ = _zscore_fit_transform(X)
+    diag = _test_structural_breaks_quandt_andrews(X_z, y, lambda_star=1.0)
+    assert diag.break_test_p_value > 0.10, (
+        f"no-break fixture should yield p > 0.10 (fail to reject null); "
+        f"got p={diag.break_test_p_value:.4f}, "
+        f"stat={diag.break_test_statistic:.4f}, "
+        f"n_breaks={diag.n_breaks_detected}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Test B.3 — POS (L5b-B)
+# ---------------------------------------------------------------------------
+def test_l5b_b_ridge_fit_result_carries_structural_break_diagnostics_at_final_fold():
+    """L5b-B: the FINAL fold per (horizon, schedule_type) has
+    structural_break_diagnostics populated (not None); the test_method
+    is bai_perron_sequential_supF (sequential supF variant); the
+    diagnostic object is a StructuralBreakDiagnostics instance."""
+    schedule, crps, cdrs, macro, fwd = _build_synthetic_inputs(horizon="5Y")
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        results = fit_return_forecast_task_b1(
+            schedule, crps, cdrs, macro, fwd, bootstrap_iterations=5,
+        )
+    assert len(results) > 0
+    final_fold = results[-1]
+    assert final_fold.structural_break_diagnostics is not None, (
+        "FINAL fold must have structural_break_diagnostics populated "
+        "per L5b-B final-fold-only mitigation"
+    )
+    assert isinstance(
+        final_fold.structural_break_diagnostics,
+        StructuralBreakDiagnostics,
+    )
+    assert final_fold.structural_break_diagnostics.test_method == (
+        "bai_perron_sequential_supF"
+    )
+    assert final_fold.structural_break_diagnostics.n_breaks_detected >= 0
+
+
+# ---------------------------------------------------------------------------
+# Test B.4 — NEG (L5b-B)
+# ---------------------------------------------------------------------------
+def test_l5b_b_dataclass_rejects_invalid_test_method():
+    """L5b-B: ``StructuralBreakDiagnostics(..., test_method="bogus")``
+    raises ``ValueError`` from ``__post_init__``. Mirrors KICK-5
+    fallback_flag + L5b-A block_length_distribution validator
+    precedents."""
+    with pytest.raises(ValueError, match=r"test_method="):
+        StructuralBreakDiagnostics(
+            test_method="bogus",  # invalid binary state
+            break_test_statistic=0.0,
+            break_test_p_value=1.0,
+            break_dates_detected=(),
+            n_breaks_detected=0,
+            trimming_fraction=0.15,
+            max_breaks_tested=1,
+        )
+
+
+# ---------------------------------------------------------------------------
+# Test B.5 — NEG (L5b-B)
+# ---------------------------------------------------------------------------
+def test_l5b_b_dataclass_rejects_missing_no_default_field():
+    """L5b-B: bare ``StructuralBreakDiagnostics(...)`` missing any of
+    7 no-default fields raises ``TypeError``. AP-AUTH-53 step #3
+    contract."""
+    # Missing test_method.
+    with pytest.raises(TypeError, match=r"test_method"):
+        StructuralBreakDiagnostics(
+            break_test_statistic=0.0,
+            break_test_p_value=1.0,
+            break_dates_detected=(),
+            n_breaks_detected=0,
+            trimming_fraction=0.15,
+            max_breaks_tested=1,
+            # test_method omitted — must raise
+        )
+    # Also exercise consistency invariant: n_breaks_detected mismatched
+    # with len(break_dates_detected) raises ValueError per __post_init__.
+    with pytest.raises(ValueError, match=r"n_breaks_detected.*must equal"):
+        StructuralBreakDiagnostics(
+            test_method="quandt_andrews",
+            break_test_statistic=10.0,
+            break_test_p_value=0.01,
+            break_dates_detected=(50,),
+            n_breaks_detected=2,  # mismatched: tuple len is 1
+            trimming_fraction=0.15,
+            max_breaks_tested=1,
+        )
+
+
+# ---------------------------------------------------------------------------
+# Test B.6 — NEG-invariant (L5b-B)
+# ---------------------------------------------------------------------------
+def test_l5b_b_non_final_folds_have_structural_break_diagnostics_None():
+    """L5b-B NEG-invariant: per Strategic disposition 3 final-fold-only
+    mitigation, all NON-final folds have
+    structural_break_diagnostics is None. Only the FINAL fold has
+    populated diagnostics."""
+    schedule, crps, cdrs, macro, fwd = _build_synthetic_inputs(horizon="5Y")
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        results = fit_return_forecast_task_b1(
+            schedule, crps, cdrs, macro, fwd, bootstrap_iterations=5,
+        )
+    assert len(results) >= 2, "fixture must produce >= 2 folds for B.6"
+    # Non-final folds: None.
+    for i, r in enumerate(results[:-1]):
+        assert r.structural_break_diagnostics is None, (
+            f"fold {i} (non-final) must have "
+            f"structural_break_diagnostics is None; got "
+            f"{type(r.structural_break_diagnostics).__name__}"
+        )
+    # Final fold: populated.
+    assert results[-1].structural_break_diagnostics is not None

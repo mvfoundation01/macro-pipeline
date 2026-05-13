@@ -65,6 +65,100 @@ the two L5-B estimator families in sibling modules. The wording drift is
 tracked in ``L5B_BACKLOG.md`` as ``L5b-7`` (doc-only); zero functional
 impact.
 
+L5b-B (tag ``l5b-b-accept``, 2026-05-15) — structural break tests
+-----------------------------------------------------------------
+**Second original OOS hardening sub-phase.** Closes ChatGPT 5.5 Dim-3
+OOS rigor mandate ("Sample size honesty requires structural break
+detection... distributional stationarity is the implicit assumption
+of Ridge SE and Brier reliability") via the AP-AUTH-54 fifth-instance
+internal-implementation variant pattern. AP-AUTH-54 envelope STAYS
+CLOSED at 4-instance characterization (Strategic disposition 7);
+L5b-B's novel sub-characteristics (two new helpers, NEW dataclass,
+Optional field type) documented as within-envelope variants.
+
+* ``StructuralBreakDiagnostics`` NEW frozen dataclass with seven
+  no-default fields: ``test_method``, ``break_test_statistic``,
+  ``break_test_p_value``, ``break_dates_detected``, ``n_breaks_detected``,
+  ``trimming_fraction``, ``max_breaks_tested``. The ``__post_init__``
+  validator enforces (a) binary tri-state ``test_method`` taxonomy
+  AND (b) the consistency invariant
+  ``n_breaks_detected == len(break_dates_detected)``. FIRST multi-
+  field consistency invariant in the dataclass family.
+* ``_test_structural_breaks_quandt_andrews`` NEW helper. Andrews
+  (1993) supremum-Wald unknown-date single-break test on Ridge
+  coefficients. Reference: Andrews, D.W.K. (1993) "Tests for
+  Parameter Instability and Structural Change with Unknown Change
+  Point" Econometrica 61:821-856.
+* ``_test_structural_breaks_bai_perron_sequential_supF`` NEW helper.
+  Sequential supF variant of Bai-Perron (1998) multi-break detection.
+  Reference: Bai, J., & Perron, P. (1998) "Estimating and Testing
+  Linear Models with Multiple Structural Changes" Econometrica
+  66:47-78. **Approach B documented divergence**: full Bai-Perron
+  algorithm uses dynamic programming to find the GLOBALLY optimal
+  break locations under BIC; this sequential variant finds breaks
+  greedily via repeated Quandt-Andrews invocation on the current
+  partition. The institutional value (detect multi-regime structure)
+  is preserved at a fraction of the implementation cost. Full BP
+  deferred as L5b-residue.
+* **Simplified Wald disclaimer** (Strategic disposition 4 honest
+  framing): the Quandt-Andrews implementation uses the pragmatic
+  ``||delta_beta||^2 / pooled_var`` form rather than the full
+  sandwich variance ``(beta_post - beta_pre)' V^(-1) (beta_post -
+  beta_pre)`` where ``V`` is the Ridge-regularised sandwich
+  ``(X'X + lambda*I)^(-1) X' Sigma X (X'X + lambda*I)^(-1)``.
+  Chi-squared p-value approximation (``df = n_features``) is used in
+  place of Andrews 1993 asymptotic critical values. Full-sandwich
+  Wald is methodologically purer and is deferred as L5b-residue;
+  revisit if a future reviewer flag pushes precision. The simplified
+  form is a relative-comparison statistic across tau candidates and
+  its p-value should be treated as approximate.
+* ``RidgeFitResult`` gains thirtieth no-default field
+  ``structural_break_diagnostics: Optional[StructuralBreakDiagnostics]``.
+  None disabling semantic: (a) all non-final folds per
+  (horizon, schedule_type) carry None per Strategic disposition 3
+  final-fold-only mitigation; (b) future configurations where any
+  horizon has insufficient observations (e.g., 10Y currently
+  generates zero folds under the underpowered guard) prospectively
+  carry None.
+* **Final-fold-only invocation rationale** (Strategic-mandated
+  module docstring note): structural break tests run on the FINAL
+  fold per (horizon, schedule_type) pair only. Earlier folds carry
+  ``structural_break_diagnostics=None``. Rationale: (1) final fold
+  has the most data; the break-date estimate has maximum statistical
+  power. (2) The operationally meaningful break date is the most-
+  recent estimate (drives forward-looking risk management
+  decisions). (3) Per-fold break testing remains accessible via
+  direct helper invocation
+  (``_test_structural_breaks_bai_perron_sequential_supF``) for
+  diagnostics/research. (4) Without this mitigation the per-pipeline
+  cost is roughly 133K extra Ridge fits (217 folds at 1Y × 168
+  candidate tau × 2 sub-sample Ridge fits + ...; ITEM 3 of L5b-B
+  read-and-plan); with mitigation cost reduces to ~3 folds × 168 ×
+  2 ≈ 1K extra Ridge fits per pipeline.
+* **Horizon applicability matrix** (empirical at default settings,
+  n=480):
+    1Y/expanding:  217 folds, all 217 applicable (n_train >= 240 ≫ 60)
+    3Y/expanding:  169 folds, all 169 applicable
+    5Y/expanding:  10 folds, all 10 applicable
+    10Y/expanding: 0 folds (underpowered guard fires); None disabling
+                   semantic prospective for future configs
+* Gate 19-B1 extension: criteria 33-35 (L5b-B NEW) verify (i)
+  ``structural_break_diagnostics`` no-default field via Option Y
+  signature inspection; (ii) AST audit confirms structural break
+  helper invocation in fit body; (iii) runtime probe confirms final
+  fold has populated diagnostics with valid ``test_method`` and
+  consistency invariant holds.
+
+**AP-AUTH-54 envelope STAYS CLOSED at 4-instance characterization**:
+KICK-4 heaviest / KICK-5 medium / KICK-6 lightest / L5b-A heavy.
+L5b-B is the 5th instance with three novel sub-characteristics (two
+new helpers, NEW dataclass, Optional field type) documented as
+within-envelope variants per Strategic disposition 7. Range stays
+closed.
+
+AP-AUTH-54 cited as governing pattern (fifth instance). No new
+AP-AUTH codification at L5b-B.
+
 L5b-A (tag ``l5b-a-accept``, 2026-05-15) — stationary block bootstrap
 ---------------------------------------------------------------------
 **FIRST original OOS hardening sub-phase post-kickoff sprint.** Closes
@@ -308,11 +402,12 @@ from __future__ import annotations
 
 import warnings
 from dataclasses import dataclass, replace
-from typing import Literal
+from typing import Literal, Optional
 
 import numpy as np
 import pandas as pd
 import statsmodels.api as sm
+from scipy.stats import chi2
 
 from macro_pipeline.analysis.newey_west_hac import fit_ols_hac
 from macro_pipeline.analysis.r_squared_panel import HORIZONS
@@ -353,6 +448,118 @@ _VALID_BLOCK_LENGTH_DISTRIBUTIONS: frozenset[str] = frozenset({
     "fixed",
     "geometric",
 })
+
+
+# L5b-B (tag ``l5b-b-accept``, 2026-05-15): structural-break test method
+# discriminator per ChatGPT 5.5 Dim-3 OOS rigor mandate (Ridge
+# coefficient stability across monetary regimes). Binary Literal:
+# ``"quandt_andrews"`` is the unknown-date single-break test per
+# Andrews (1993); ``"bai_perron_sequential_supF"`` is the sequential
+# supF variant of Bai-Perron (1998) multi-break detection (simplified
+# from the full dynamic-programming algorithm per L5b-B Approach B).
+# Mirrors KICK-5 ``BootstrapFallbackFlag`` + L5b-A
+# ``BlockLengthDistribution`` Literal precedents. Per AP-AUTH-53 step
+# #3, the dataclass field carrying this value has no default.
+StructuralBreakTestMethod = Literal[
+    "quandt_andrews",
+    "bai_perron_sequential_supF",
+]
+_VALID_STRUCTURAL_BREAK_TEST_METHODS: frozenset[str] = frozenset({
+    "quandt_andrews",
+    "bai_perron_sequential_supF",
+})
+
+
+@dataclass(frozen=True)
+class StructuralBreakDiagnostics:
+    """Structural break test diagnostics for Ridge coefficient stability.
+
+    L5b-B (tag ``l5b-b-accept``, 2026-05-15): closes ChatGPT 5.5 Dim-3
+    OOS rigor mandate ("Sample size honesty requires structural break
+    detection... distributional stationarity is the implicit assumption
+    of Ridge SE and Brier reliability") via the AP-AUTH-54 fifth-
+    instance internal-implementation variant pattern. AP-AUTH-54
+    envelope STAYS CLOSED at 4-instance characterization; L5b-B is the
+    fifth instance with novel sub-characteristics (two new helpers,
+    NEW dataclass, Optional field type) documented as within-envelope
+    variants per Strategic disposition 7.
+
+    All seven fields no-default per AP-AUTH-53 step #3. The
+    ``__post_init__`` validator enforces (a) the binary tri-state
+    ``test_method`` taxonomy AND (b) the consistency invariant
+    ``n_breaks_detected == len(break_dates_detected)``. First multi-
+    field consistency invariant in the dataclass family.
+
+    Method (Approach B Strategic-approved 2026-05-15):
+    Quandt-Andrews single-break supremum-Wald (Andrews 1993) plus
+    Bai-Perron sequential supF variant for multi-break detection
+    (simplified from full dynamic-programming Bai-Perron 1998). The
+    simplified Wald statistic uses the ``||delta_beta||^2 / pooled_var``
+    pragmatic form with chi-squared p-value approximation (df =
+    n_features); the full sandwich-variance Wald form is deferred as
+    L5b-residue per Strategic disposition 4 honest-framing note.
+
+    Fields
+    ------
+    test_method
+        Binary ``Literal`` taxonomy: ``"quandt_andrews"`` for
+        single-break detection; ``"bai_perron_sequential_supF"`` for
+        sequential supF multi-break detection.
+    break_test_statistic
+        Supremum-Wald statistic (largest Wald value across candidate
+        break dates within trimming bounds).
+    break_test_p_value
+        Approximate p-value via chi-squared distribution with
+        ``df = n_features`` (simplified-Wald approximation per
+        Approach B). Full Andrews 1993 asymptotic critical values
+        deferred as L5b-residue.
+    break_dates_detected
+        Tuple of int index positions (in training sample) at which
+        breaks are detected. Empty tuple when null of no-break is
+        retained.
+    n_breaks_detected
+        Length of ``break_dates_detected``. Consistency invariant
+        enforced by ``__post_init__``.
+    trimming_fraction
+        Andrews 1993 trimming fraction; default ``0.15``. Candidate
+        break dates restricted to
+        ``[ceil(pi * n_train), n_train - ceil(pi * n_train))``.
+    max_breaks_tested
+        Sequential supF maximum-breaks parameter (Bai-Perron 1998
+        K-parameter); default ``3``. Only relevant when
+        ``test_method == "bai_perron_sequential_supF"``.
+    """
+
+    test_method: StructuralBreakTestMethod
+    break_test_statistic: float
+    break_test_p_value: float
+    break_dates_detected: tuple[int, ...]
+    n_breaks_detected: int
+    trimming_fraction: float
+    max_breaks_tested: int
+
+    def __post_init__(self) -> None:
+        # L5b-B NEG test B.4 contract: binary tri-state validation
+        # enforced at construction time. Mirrors KICK-5
+        # ``BootstrapFallbackFlag`` + L5b-A ``BlockLengthDistribution``
+        # validator precedents.
+        if self.test_method not in _VALID_STRUCTURAL_BREAK_TEST_METHODS:
+            raise ValueError(
+                f"test_method={self.test_method!r} must be one of "
+                f"{sorted(_VALID_STRUCTURAL_BREAK_TEST_METHODS)} "
+                "(spec L5b-B binary discriminator per Andrews 1993 / "
+                "Bai-Perron 1998; AP-AUTH-53 step #3)"
+            )
+        # L5b-B consistency invariant: n_breaks_detected must equal
+        # len(break_dates_detected). First multi-field consistency
+        # invariant in the dataclass family; protects downstream
+        # consumers from mismatched count/tuple state.
+        if self.n_breaks_detected != len(self.break_dates_detected):
+            raise ValueError(
+                f"n_breaks_detected={self.n_breaks_detected} must equal "
+                f"len(break_dates_detected)={len(self.break_dates_detected)} "
+                "(L5b-B consistency invariant per AP-AUTH-53 step #3)"
+            )
 
 
 # L5b-KICK-6 (tag ``l5b-kick-6-accept``, 2026-05-15): Ridge inference
@@ -547,6 +754,7 @@ class RidgeFitResult:
     bootstrap_diagnostics: BootstrapDiagnostics     # L5b-KICK-5: primary block-bootstrap call diagnostics surface; no default per AP-AUTH-54 step #2
     block_size_sensitivity_diagnostics: dict[str, BootstrapDiagnostics]  # L5b-KICK-5: per-sensitivity-block-size diagnostics; keys match _BLOCK_SIZE_LABELS; no default
     inference_label: InferenceLabel                 # L5b-KICK-6: tri-state taxonomy labeling p_value_beta_hac as forecast-vs-realized model diagnostic (NOT per-feature Ridge inference); no default per AP-AUTH-54 step #2
+    structural_break_diagnostics: Optional["StructuralBreakDiagnostics"]  # L5b-B: Bai-Perron sequential supF break diagnostics on FINAL fold per (horizon, schedule_type); None disabling semantic for non-final folds + horizons with insufficient obs; no default per AP-AUTH-54 step #2
 
     def __post_init__(self) -> None:
         # L5b-KICK-6 NEG test K6.3 contract: tri-state validation
@@ -835,6 +1043,248 @@ def _sample_stationary_block_lengths(
         lengths.append(L)
         cumulative += L
     return np.asarray(lengths, dtype=int)
+
+
+def _test_structural_breaks_quandt_andrews(
+    X_train_z: np.ndarray,
+    y_train: np.ndarray,
+    lambda_star: float,
+    trimming_fraction: float = 0.15,
+) -> StructuralBreakDiagnostics:
+    """Quandt-Andrews supremum-Wald unknown-date single-break test.
+
+    L5b-B (tag ``l5b-b-accept``, 2026-05-15): Closes part of ChatGPT
+    5.5 Dim-3 OOS rigor mandate on Ridge coefficient stability.
+    Reference: Andrews, D.W.K. (1993) "Tests for Parameter Instability
+    and Structural Change with Unknown Change Point" Econometrica
+    61:821-856.
+
+    Algorithm
+    ---------
+    1. Define candidate break dates ``tau`` in the trimmed range
+       ``[ceil(trim_frac * n_train), n_train - ceil(trim_frac * n_train))``.
+    2. For each ``tau``:
+       a. Fit Ridge on ``(X_train_z[:tau], y_train[:tau])`` → ``beta_pre``,
+          pre-sample residual variance ``var_pre``.
+       b. Fit Ridge on ``(X_train_z[tau:], y_train[tau:])`` → ``beta_post``,
+          post-sample residual variance ``var_post``.
+       c. Compute simplified Wald: ``W(tau) = ||beta_post - beta_pre||^2 /
+          pooled_var`` where ``pooled_var = (var_pre + var_post) / 2``.
+    3. ``sup_wald = max_tau W(tau)`` with argmax ``tau*``.
+    4. Approximate p-value via ``chi2.sf(sup_wald, df=n_features)``.
+    5. If ``p_value < 0.05`` return diagnostics with single detected
+       break at ``tau*``; else return ``n_breaks_detected=0``.
+
+    Simplified Wald disclaimer (Strategic disposition 4 honest framing)
+    -------------------------------------------------------------------
+    The implementation uses the pragmatic ``||delta_beta||^2 /
+    pooled_var`` form rather than the full sandwich variance
+    ``(beta_post - beta_pre)' V^(-1) (beta_post - beta_pre)`` where
+    ``V`` is the Ridge-regularised sandwich estimator
+    ``(X'X + lambda*I)^(-1) X' Sigma X (X'X + lambda*I)^(-1)``. The
+    full-sandwich form is methodologically purer and properly accounts
+    for the Ridge penalty in the standard error; the simplified form
+    is a relative-comparison statistic across ``tau`` candidates and
+    its chi-squared p-value should be treated as approximate.
+    Full-sandwich Wald is deferred as L5b-residue per
+    ``L5B_BACKLOG.md`` (revisit if future reviewer flag pushes
+    precision).
+
+    AP-AUTH-52 magic-number derivation
+    ----------------------------------
+    Trimming fraction default ``0.15`` per Andrews (1993) Section 4
+    institutional recommendation. NOT a magic number; cite literature
+    in commit message + this docstring.
+
+    Parameters
+    ----------
+    X_train_z
+        Z-scored training feature matrix (mirrors caller's z-scaling
+        from outer-CV scope; see ``_zscore_fit_transform``).
+    y_train
+        Training target vector.
+    lambda_star
+        Ridge regularisation parameter (inherited from outer-CV
+        selection at ``_select_lambda_inner_cv_ridge``).
+    trimming_fraction
+        Andrews 1993 trimming; default 0.15.
+
+    Returns
+    -------
+    StructuralBreakDiagnostics
+        Populated with ``test_method="quandt_andrews"`` regardless of
+        whether a break is detected. ``n_breaks_detected`` is 0 or 1.
+    """
+    n = len(y_train)
+    n_features = X_train_z.shape[1]
+    trim = int(np.ceil(trimming_fraction * n))
+    candidate_taus = list(range(trim, n - trim))
+
+    if not candidate_taus:
+        # Trimmed range empty (n too small); return no-break diagnostics
+        # with zero statistic; documented as edge case.
+        return StructuralBreakDiagnostics(
+            test_method="quandt_andrews",
+            break_test_statistic=0.0,
+            break_test_p_value=1.0,
+            break_dates_detected=(),
+            n_breaks_detected=0,
+            trimming_fraction=trimming_fraction,
+            max_breaks_tested=1,
+        )
+
+    best_wald = -np.inf
+    best_tau = candidate_taus[0]
+    for tau in candidate_taus:
+        X_pre = X_train_z[:tau]
+        y_pre = y_train[:tau]
+        X_post = X_train_z[tau:]
+        y_post = y_train[tau:]
+        beta_pre, alpha_pre = _fit_ridge_closed_form(X_pre, y_pre, lambda_star)
+        beta_post, alpha_post = _fit_ridge_closed_form(X_post, y_post, lambda_star)
+        # Residual variances per sub-sample (variance of (y - X·beta - alpha)).
+        resid_pre = y_pre - (X_pre @ beta_pre + alpha_pre)
+        resid_post = y_post - (X_post @ beta_post + alpha_post)
+        var_pre = float(np.var(resid_pre, ddof=1)) if len(resid_pre) > 1 else 0.0
+        var_post = float(np.var(resid_post, ddof=1)) if len(resid_post) > 1 else 0.0
+        pooled_var = max((var_pre + var_post) / 2.0, 1e-12)
+        delta_beta = beta_post - beta_pre
+        wald = float(delta_beta @ delta_beta / pooled_var)
+        if wald > best_wald:
+            best_wald = wald
+            best_tau = tau
+
+    p_value = float(chi2.sf(best_wald, df=n_features))
+    significance_alpha = 0.05
+    if p_value < significance_alpha:
+        return StructuralBreakDiagnostics(
+            test_method="quandt_andrews",
+            break_test_statistic=best_wald,
+            break_test_p_value=p_value,
+            break_dates_detected=(best_tau,),
+            n_breaks_detected=1,
+            trimming_fraction=trimming_fraction,
+            max_breaks_tested=1,
+        )
+    return StructuralBreakDiagnostics(
+        test_method="quandt_andrews",
+        break_test_statistic=best_wald,
+        break_test_p_value=p_value,
+        break_dates_detected=(),
+        n_breaks_detected=0,
+        trimming_fraction=trimming_fraction,
+        max_breaks_tested=1,
+    )
+
+
+def _test_structural_breaks_bai_perron_sequential_supF(
+    X_train_z: np.ndarray,
+    y_train: np.ndarray,
+    lambda_star: float,
+    max_breaks: int = 3,
+    trimming_fraction: float = 0.15,
+) -> StructuralBreakDiagnostics:
+    """Bai-Perron sequential supF multi-break test (simplified variant
+    of Bai-Perron 1998 dynamic programming).
+
+    L5b-B Approach B (Strategic-approved 2026-05-15): sequential supF
+    procedure using Quandt-Andrews infrastructure as the per-segment
+    single-break detector. Reference: Bai, J., & Perron, P. (1998)
+    "Estimating and Testing Linear Models with Multiple Structural
+    Changes" Econometrica 66:47-78. The full BP algorithm uses
+    O(n^2) dynamic programming + BIC model selection; this
+    implementation runs the SEQUENTIAL SUP-F variant where each
+    partition is tested via Quandt-Andrews until no further breaks
+    are detected or ``max_breaks`` is reached.
+
+    Algorithm
+    ---------
+    1. Initialise ``break_dates = []`` and ``sub_samples = [(0, n)]``.
+    2. For ``k in 0..max_breaks - 1``:
+       a. For each sub-sample ``(start, end)``: if span is too small
+          for trimming, skip. Else run ``_test_structural_breaks_
+          quandt_andrews`` on the sub-sample. Record any detected
+          break (offset by ``start``).
+       b. If no breaks detected in this round, terminate.
+       c. Else: extend ``break_dates``; re-partition sub-samples at
+          the union of all detected dates.
+    3. Return aggregate diagnostics with all detected breaks.
+
+    Approach B documented divergence: full Bai-Perron 1998 uses
+    dynamic programming to find the GLOBALLY optimal break locations
+    under BIC; this sequential variant finds breaks greedily. The
+    institutional value (detect multi-regime structure) is preserved
+    at a fraction of the implementation cost. Full BP deferred as
+    L5b-residue.
+
+    Parameters
+    ----------
+    X_train_z, y_train, lambda_star, trimming_fraction
+        Identical to ``_test_structural_breaks_quandt_andrews``.
+    max_breaks
+        K-parameter; maximum number of breaks to detect. Default 3.
+
+    Returns
+    -------
+    StructuralBreakDiagnostics
+        ``test_method="bai_perron_sequential_supF"``;
+        ``break_dates_detected`` contains all detected break indices
+        (sorted ascending); ``n_breaks_detected = len(break_dates_detected)``.
+        ``break_test_statistic`` reports the max sup-Wald across all
+        sequential rounds; ``break_test_p_value`` reports the
+        corresponding minimum p-value (most-significant break).
+    """
+    n = len(y_train)
+    detected_breaks: list[int] = []
+    max_wald = -np.inf
+    min_p_value = 1.0
+    sub_samples: list[tuple[int, int]] = [(0, n)]
+
+    for _round in range(max_breaks):
+        new_breaks_this_round: list[int] = []
+        for start, end in sub_samples:
+            span = end - start
+            trim = int(np.ceil(trimming_fraction * span))
+            if span < 2 * trim + 1 or span < 4:
+                continue  # too small to test
+            sub_diag = _test_structural_breaks_quandt_andrews(
+                X_train_z[start:end],
+                y_train[start:end],
+                lambda_star,
+                trimming_fraction,
+            )
+            # Track max statistic + min p-value across all sub-samples.
+            if sub_diag.break_test_statistic > max_wald:
+                max_wald = sub_diag.break_test_statistic
+            if sub_diag.break_test_p_value < min_p_value:
+                min_p_value = sub_diag.break_test_p_value
+            if sub_diag.n_breaks_detected > 0:
+                # Offset detected break index by sub-sample start.
+                new_breaks_this_round.append(
+                    start + sub_diag.break_dates_detected[0]
+                )
+        if not new_breaks_this_round:
+            break  # sequential procedure terminates
+        detected_breaks.extend(new_breaks_this_round)
+        # Re-partition sub-samples at the union of all detected breaks.
+        partitions = sorted(set([0] + detected_breaks + [n]))
+        sub_samples = [
+            (partitions[i], partitions[i + 1])
+            for i in range(len(partitions) - 1)
+        ]
+
+    sorted_breaks = tuple(sorted(set(detected_breaks)))
+    return StructuralBreakDiagnostics(
+        test_method="bai_perron_sequential_supF",
+        break_test_statistic=(
+            max_wald if max_wald > -np.inf else 0.0
+        ),
+        break_test_p_value=min_p_value,
+        break_dates_detected=sorted_breaks,
+        n_breaks_detected=len(sorted_breaks),
+        trimming_fraction=trimming_fraction,
+        max_breaks_tested=max_breaks,
+    )
 
 
 def _block_bootstrap_residual_se(
@@ -1252,6 +1702,11 @@ def fit_return_forecast_task_b1(
     rng = np.random.default_rng(random_seed)
     results: list[RidgeFitResult] = []
     fit_ts = pd.Timestamp.utcnow()
+    # L5b-B: cache the final-fold (X_train, y_train, lambda_star) for
+    # post-loop structural break testing (final-fold-only mitigation).
+    # Last assignment in the loop is the institutionally meaningful
+    # "final fold" — most data, most recent regime coverage.
+    final_fold_cache: Optional[tuple[np.ndarray, np.ndarray, float]] = None
 
     for fold in schedule.folds:
         X_train, y_train, _train_dates = _assemble_feature_matrix(
@@ -1300,6 +1755,12 @@ def fit_return_forecast_task_b1(
         lambda_star, lambda_log10_sd = _select_lambda_inner_cv_ridge(
             X_train, y_train, lambda_grid, inner_fold_count,
         )
+
+        # L5b-B: update final-fold cache (overwritten each iteration;
+        # final value at loop exit is the institutionally meaningful
+        # "final fold" for structural break testing per Strategic
+        # disposition 3 final-fold-only mitigation).
+        final_fold_cache = (X_train.copy(), y_train.copy(), lambda_star)
 
         # Refit closed-form Ridge on the full outer training window.
         beta, alpha = _fit_ridge_closed_form(X_train_z, y_train, lambda_star)
@@ -1410,6 +1871,12 @@ def fit_return_forecast_task_b1(
             bootstrap_diagnostics=bootstrap_diag,  # KICK-5: primary call diagnostics per AP-AUTH-54
             block_size_sensitivity_diagnostics=block_size_sensitivity_diag_map,  # KICK-5: per-sensitivity-size diagnostics
             inference_label="forecast_vs_realized",  # KICK-6: p_value_beta_hac is univariate calibration regression diagnostic, NOT Ridge per-feature inference; AP-AUTH-54 step #2
+            # L5b-B: structural break diagnostics populated at FINAL fold
+            # only (per Strategic disposition 3 final-fold-only mitigation;
+            # ITEM 3 of L5b-B read-and-plan documents the 133K-Ridge-fit
+            # per-fold cost). None for non-final folds; populated below
+            # via dataclasses.replace post-loop on the final fold.
+            structural_break_diagnostics=None,  # L5b-B: placeholder; replaced for final fold below
         ))
 
     # Post-pass: coefficient_sign_flip_rate vs immediately-prior outer fold
@@ -1425,6 +1892,36 @@ def fit_return_forecast_task_b1(
             ))
             updated.append(replace(results[i], coefficient_sign_flip_rate=flips))
         results = updated
+
+    # L5b-B post-pass: structural break diagnostics on the FINAL fold
+    # per (horizon, schedule_type) only (Strategic disposition 3 final-
+    # fold-only mitigation; ITEM 3 of L5b-B read-and-plan documents the
+    # 133K-Ridge-fit per-fold cost without this constraint). Earlier
+    # folds retain structural_break_diagnostics=None (already populated
+    # at constructor time above). Re-z-score the final fold's training
+    # data here (the loop-local X_train_z is not available post-loop;
+    # we recompute deterministically from the cached final-fold inputs).
+    #
+    # Rationale (Strategic-mandated docstring note): (1) final fold has
+    # most data; break-date estimate has maximum statistical power. (2)
+    # Operationally meaningful break date is the most-recent estimate.
+    # (3) Per-fold break testing remains accessible via direct helper
+    # invocation (_test_structural_breaks_bai_perron_sequential_supF)
+    # for diagnostics/research.
+    if results and final_fold_cache is not None:
+        cached_X_train, cached_y_train, cached_lambda_star = final_fold_cache
+        cached_X_train_z, _, _ = _zscore_fit_transform(cached_X_train)
+        break_diag = _test_structural_breaks_bai_perron_sequential_supF(
+            cached_X_train_z,
+            cached_y_train,
+            cached_lambda_star,
+            max_breaks=3,
+            trimming_fraction=0.15,
+        )
+        results[-1] = replace(
+            results[-1],
+            structural_break_diagnostics=break_diag,
+        )
 
     return tuple(results)
 

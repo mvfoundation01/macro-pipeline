@@ -3549,8 +3549,8 @@ def validate_gate19_l5b_task_b1_subcriteria() -> GateReport:
         )
 
         # Criterion 10 — RidgeFitResult schema (per spec §5.B.1.1 +
-        # KICK-4/-5/-6 no-default fields per AP-AUTH-53 step #3 /
-        # AP-AUTH-54 internal-implementation variant pattern).
+        # KICK-4/-5/-6 + L5b-A/-B no-default fields per AP-AUTH-53
+        # step #3 / AP-AUTH-54 internal-implementation variant pattern).
         expected_fields = {
             "fold_id", "horizon", "schedule_type", "lambda_selected",
             "lambda_grid", "lambda_log10_sd_across_5fold",
@@ -3566,6 +3566,7 @@ def validate_gate19_l5b_task_b1_subcriteria() -> GateReport:
             "bootstrap_diagnostics",            # KICK-5 no-default (primary)
             "block_size_sensitivity_diagnostics",  # KICK-5 no-default (sweep)
             "inference_label",                  # KICK-6 no-default (taxonomy)
+            "structural_break_diagnostics",     # L5b-B no-default (Optional)
         }
         actual_fields = set(RidgeFitResult.__dataclass_fields__.keys())
         missing = expected_fields - actual_fields
@@ -4083,6 +4084,184 @@ def validate_gate19_l5b_task_b1_subcriteria() -> GateReport:
         except Exception as exc:
             findings.append(
                 f"FAIL: Criterion 32 [L5b-A] - runtime probe error: {exc}"
+            )
+
+        # ===================================================================
+        # L5b-B Criteria 33-35 — structural break tests (Quandt-Andrews
+        # + Bai-Perron sequential supF). Closes ChatGPT 5.5 Dim-3 OOS
+        # rigor mandate on Ridge coefficient stability via the
+        # AP-AUTH-54 fifth-instance internal-implementation variant
+        # pattern. Envelope STAYS CLOSED at 4-instance characterization
+        # (Strategic disposition 7); novel sub-characteristics
+        # documented as within-envelope variants.
+        # ===================================================================
+        # Criterion 33 - structural_break_diagnostics field no-default.
+        l5b_b_field = "structural_break_diagnostics"
+        l5b_b_present = (
+            l5b_b_field in RidgeFitResult.__dataclass_fields__
+        )
+        l5b_b_no_default = (
+            l5b_b_present
+            and RidgeFitResult.__dataclass_fields__[l5b_b_field].default
+            is _MISSING
+            and RidgeFitResult.__dataclass_fields__[l5b_b_field].default_factory
+            is _MISSING
+        )
+        summary["criterion_33_l5b_b_field_no_default"] = l5b_b_no_default
+        if not l5b_b_present:
+            findings.append(
+                f"FAIL: Criterion 33 [L5b-B] - RidgeFitResult missing "
+                f"field {l5b_b_field!r}"
+            )
+        elif not l5b_b_no_default:
+            findings.append(
+                f"FAIL: Criterion 33 [L5b-B] - {l5b_b_field!r} has "
+                "default (must be no-default per AP-AUTH-54 step #2; "
+                "Optional/None disabling semantic for non-final folds + "
+                "horizons with insufficient observations)"
+            )
+        else:
+            findings.append(
+                f"Criterion 33 PASS [L5b-B]: RidgeFitResult exposes "
+                f"{l5b_b_field!r} field with no default (Optional/None "
+                "disabling semantic; Option Y signature inspection per "
+                "AP-AUTH-54 5th instance; closes ChatGPT 5.5 Dim-3 "
+                "Ridge coefficient stability mandate)"
+            )
+
+        # Criterion 34 - AST audit confirms structural break helper
+        # invoked at fit body. Substring _test_structural_breaks
+        # captures both _quandt_andrews and _bai_perron_sequential_supF
+        # invocations (sequential supF helper internally calls
+        # quandt_andrews).
+        fit_body_src = inspect.getsource(_rf_mod.fit_return_forecast_task_b1)
+        ast_break_present = (
+            "_test_structural_breaks_bai_perron_sequential_supF" in fit_body_src
+            or "_test_structural_breaks_quandt_andrews" in fit_body_src
+        )
+        summary["criterion_34_ast_break_helper_invoked"] = ast_break_present
+        if ast_break_present:
+            findings.append(
+                "Criterion 34 PASS [L5b-B]: AST audit confirms "
+                "fit_return_forecast_task_b1 body invokes structural "
+                "break helper at final-fold-only mitigation site "
+                "(Politis-Romano style sequential procedure per "
+                "Bai-Perron 1998; final-fold-only per Strategic "
+                "disposition 3 to bound 133K-Ridge-fit computational "
+                "cost identified at ITEM 3 of L5b-B read-and-plan)"
+            )
+        else:
+            findings.append(
+                "FAIL: Criterion 34 [L5b-B] - fit body missing "
+                "structural break helper invocation; expected substring "
+                "'_test_structural_breaks_quandt_andrews' OR "
+                "'_test_structural_breaks_bai_perron_sequential_supF'"
+            )
+
+        # Criterion 35 - runtime probe: synthesize Ridge fit at 5Y/
+        # expanding; assert FINAL fold has structural_break_diagnostics
+        # is not None AND test_method valid AND consistency invariant
+        # holds.
+        try:
+            import warnings as _warnings_mod_l5b_b
+            import numpy as _np_l5b_b
+            import pandas as _pd_l5b_b
+            from macro_pipeline.analysis.walk_forward_cv import (
+                generate_schedule as _generate_schedule_l5b_b,
+            )
+            from macro_pipeline.models.return_forecast import (
+                StructuralBreakDiagnostics as _SBD,
+            )
+
+            _rng_l5b_b = _np_l5b_b.random.default_rng(42)
+            _n_l5b_b = 480
+            _idx_l5b_b = _pd_l5b_b.date_range(
+                "1985-01-01", periods=_n_l5b_b, freq="MS",
+            )
+            _crps_l5b_b = _pd_l5b_b.DataFrame(
+                {"crps_cal": _rng_l5b_b.uniform(0.05, 0.95, _n_l5b_b)},
+                index=_idx_l5b_b,
+            )
+            _cdrs_cols_l5b_b = {
+                f"cdrs_h{h}_t{t}": _rng_l5b_b.uniform(0.05, 0.95, _n_l5b_b)
+                for h in ("1Y", "3Y", "5Y", "10Y")
+                for t in (10, 20, 35, 50, 65)
+            }
+            _cdrs_l5b_b = _pd_l5b_b.DataFrame(
+                _cdrs_cols_l5b_b, index=_idx_l5b_b,
+            )
+            _macro_l5b_b = _pd_l5b_b.DataFrame(
+                {"pe_cape": _rng_l5b_b.normal(20.0, 5.0, _n_l5b_b)},
+                index=_idx_l5b_b,
+            )
+            _fwd_l5b_b = _pd_l5b_b.Series(
+                _rng_l5b_b.normal(0.07, 0.15, _n_l5b_b),
+                index=_idx_l5b_b,
+            )
+            _sched_l5b_b = _generate_schedule_l5b_b(
+                horizon="5Y", schedule_type="expanding",
+                panel_index=_idx_l5b_b,
+            )
+            with _warnings_mod_l5b_b.catch_warnings():
+                _warnings_mod_l5b_b.simplefilter("ignore")
+                _probe_l5b_b = fit_return_forecast_task_b1(
+                    _sched_l5b_b, _crps_l5b_b, _cdrs_l5b_b,
+                    _macro_l5b_b, _fwd_l5b_b, bootstrap_iterations=5,
+                )
+            assert len(_probe_l5b_b) > 0, "probe yielded zero folds"
+            _final_diag = _probe_l5b_b[-1].structural_break_diagnostics
+            summary["criterion_35_final_fold_diagnostics_present"] = (
+                _final_diag is not None
+            )
+            if _final_diag is None:
+                findings.append(
+                    "FAIL: Criterion 35 [L5b-B] - final fold has "
+                    "structural_break_diagnostics is None; expected "
+                    "populated diagnostics on final fold per Strategic "
+                    "disposition 3 final-fold-only mitigation"
+                )
+            elif not isinstance(_final_diag, _SBD):
+                findings.append(
+                    f"FAIL: Criterion 35 [L5b-B] - final fold "
+                    f"structural_break_diagnostics is "
+                    f"{type(_final_diag).__name__}, expected "
+                    "StructuralBreakDiagnostics"
+                )
+            elif _final_diag.test_method not in (
+                "quandt_andrews", "bai_perron_sequential_supF",
+            ):
+                findings.append(
+                    f"FAIL: Criterion 35 [L5b-B] - test_method = "
+                    f"{_final_diag.test_method!r}, expected "
+                    "'quandt_andrews' or 'bai_perron_sequential_supF'"
+                )
+            elif _final_diag.n_breaks_detected != len(
+                _final_diag.break_dates_detected
+            ):
+                findings.append(
+                    f"FAIL: Criterion 35 [L5b-B] - consistency invariant "
+                    f"violation: n_breaks_detected="
+                    f"{_final_diag.n_breaks_detected} != "
+                    f"len(break_dates_detected)="
+                    f"{len(_final_diag.break_dates_detected)}"
+                )
+            else:
+                summary["criterion_35_test_method"] = _final_diag.test_method
+                summary["criterion_35_n_breaks_detected"] = (
+                    _final_diag.n_breaks_detected
+                )
+                findings.append(
+                    f"Criterion 35 PASS [L5b-B]: runtime probe confirms "
+                    f"final fold has structural_break_diagnostics with "
+                    f"test_method={_final_diag.test_method!r}, "
+                    f"n_breaks_detected={_final_diag.n_breaks_detected}, "
+                    "consistency invariant holds; non-final folds "
+                    "carry None per final-fold-only mitigation per "
+                    "Strategic disposition 3"
+                )
+        except Exception as exc:
+            findings.append(
+                f"FAIL: Criterion 35 [L5b-B] - runtime probe error: {exc}"
             )
     except ImportError as exc:
         findings.append(f"FAIL: Criterion 8 - import error: {exc}")
