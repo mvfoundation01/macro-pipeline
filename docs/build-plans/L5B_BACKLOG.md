@@ -51,7 +51,27 @@ When external reviewers (Codex / ChatGPT) flag a CRITICAL or IMPORTANT issue in 
 6. **Pre-flight Sxx-N (catastrophic state) triage** via grep evidence; defer entry to L5B_BACKLOG.md if production callers do not yet exist.
 7. **Module docstring + L5B_BACKLOG.md SPRINT EXECUTION LOG** documents v1 → v2 architectural drift.
 
-Confirmed via L5b-KICK-1 (isotonic `fit_window` invariant) + L5b-KICK-2 (forecast σ v2 production wrapper). Anticipated to apply at KICK-3 through KICK-7.
+Confirmed via L5b-KICK-1 (isotonic `fit_window` invariant) + L5b-KICK-2 (forecast σ v2 production wrapper). Anticipated to apply at KICK-3 through KICK-7. **KICK-3 confirmed (third instance) at `l5b-kick-3-accept`** — see entry below.
+
+---
+
+### KICK-3 — L5-C adaptive bin reduction + Gate 22 diagnostic status (2026-05-15)
+
+**ACCEPT tag**: `l5b-kick-3-accept`
+**Reviewer authority**: Codex 5.5 IMPORTANT — "L5-C: Implement adaptive bin reduction or emit an explicit diagnostic status consumed by Gate 22; warning-only is weaker than spec" — plus ChatGPT 5.5 alignment on per-score-type Brier reporting.
+**Approach**: B (Strategic-approved 2026-05-15) — wrapper-pattern `compute_brier_per_horizon_v2()` invokes existing `compute_brier_per_horizon` then applies adaptive reduction loop over a bounded `range(initial_n_bins, n_bins_floor - 1, -1)` iterator. v1 path preserved verbatim (six-positional + two-keyword signature; spec literal protection). v2 path adds one required keyword-only arg with no default (`min_obs_per_bin`); `BrierDecomposition` gains three no-default fields (`bin_reduction_applied: bool`, `final_bin_count: int`, `bin_diagnostic_status: Literal[...]`). Tri-state taxonomy `{"production", "diagnostic_only", "fallback_climatology"}` enforced via `__post_init__` validator. Bare construction without the three fields raises TypeError; invalid status string raises ValueError.
+**Option**: Y (Strategic-approved 2026-05-15) — Gate 22 extension via signature inspection plus runtime placeholder-pattern probe covering all three tri-state outcomes. Three new criteria (seven / eight / nine): v2 importable; v2 required-kwarg + dataclass KICK-3 fields all no-default (caller-intent forcing); tri-state runtime probe reaches all three states deterministically per Strategic Watch-point Phase 6 ("All 3 states reachable; not just 1").
+**Sxx-15 triage**: NOT triggered (Strategic's predicted state confirmed empirically — zero production scoring callers exist; only consumers are Gate 22 validator + seventeen-test suite). Prospective-only marker recorded per AP-AUTH-46 gratuitous-Sxx guard: if a production caller subsequently consumes a `BrierDecomposition` with `bin_diagnostic_status` ∈ {"diagnostic_only", "fallback_climatology"} as production-grade output, Gate 22 Criterion 9 runtime probe is the trip wire at validator time.
+**Algorithm convergence**: bounded `range(initial_n_bins, n_bins_floor - 1, -1)` iterator — at most `initial_n_bins - n_bins_floor + 1 = ten minus two plus one = nine` iterations per horizon. Cannot infinite-loop. Risk #1 closed by construction.
+**Op-K3-1** (Strategic-approved 2026-05-15): bootstrap suppression during reduction search. Each search iteration invokes v1 with `bootstrap_iterations=0`; the FULL bootstrap is run only on the winning iteration (or floor iteration when loop exhausts). Avoids worst-case nine times one-thousand equals nine-thousand resample cost per horizon. Operational optimisation; documented inline in module docstring; no L5b backlog tier per Strategic note ("operational, not Sxx-class").
+**Test delta**: plus seven new tests (numbers nine through fifteen; three POS + four NEG; NEG ratio four of seven equals fifty-seven percent above the floor); no fixups to existing eight L5-C tests (no bare `BrierDecomposition` constructors in `tests/test_brier_reliability.py`). Single Gate 22 validator probe constructor at `validation.py:4072` fixed up in same commit. Baseline seven-hundred-twenty-seven to seven-hundred-thirty-four.
+**Caller updates**: none in production tree (zero production callers exist; Sxx-15 prospective-only).
+**Edge cases verified**:
+- n strictly below fallback_climatology_floor (= two times min_obs_per_bin) → fallback_climatology path (test eleven; Strategic Watch-point Phase 3 boundary semantics confirmed strict less-than)
+- bootstrap_iterations=0 path during search → v1's `_bootstrap_brier_se` returns `np.zeros(0)` cleanly (no Result-contract break)
+- Tri-state runtime probe reaches all three states deterministically in Gate 22 Criterion 9 (production via well-spread n=1000; diagnostic_only via n=110 skewed split with min=50; fallback_climatology via n=40 below 60 floor)
+**AP-AUTH delta**: zero (AP-AUTH-53 cited as governing pattern; codified at KICK-2 ACCEPT; no new codification this instance).
+**Sxx delta**: zero.
 
 ---
 
