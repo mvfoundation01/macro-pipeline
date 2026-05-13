@@ -5865,6 +5865,258 @@ def _cli_gate25() -> int:
     return 0 if report.passed else 1
 
 
+def validate_gate26_fdr_gating() -> GateReport:
+    """Gate 26 - L5b-C Benjamini-Hochberg FDR gating discipline.
+
+    L5b-C (tag ``l5b-c-accept``, 2026-05-15): FIRST NEW gate since
+    Gate 25 SEALED at L5-G. First downstream-consumer gate (FDR
+    aggregates p-values produced by Gate 19-B1 Ridge plus L5b-B
+    structural break diagnostics) vs prior implementation-correctness
+    gates which inspect single-module output.
+
+    Closes ChatGPT 5.5 Dim-3 OOS rigor multiple-comparison burden via
+    the AP-AUTH-54 sixth-instance internal-implementation variant
+    pattern. AP-AUTH-54 envelope STAYS CLOSED at 4-instance
+    characterization (KICK-4 heaviest / KICK-5 medium / KICK-6
+    lightest / L5b-A heavy); L5b-C is the 6th instance with three
+    novel sub-characteristics documented as within-envelope variants
+    per Strategic disposition 4: (a) NEW module file
+    (``analysis/fdr_gating.py``); (b) NEW gate (this one);
+    (c) NEW test file (``test_fdr_gating.py``).
+
+    Four criteria:
+    * 26.1 API present: FDRGatingDiagnostics + 7 no-default fields +
+           BH helper + aggregator importable
+    * 26.2 BH algorithm correctness on canonical vector
+           [0.001, 0.01, 0.04, 0.05, 0.2] at q=0.10 → reject 4 of 5
+           (verified empirically; Strategic §6 suggested 3-of-5 but
+           hand-computation yields 4-of-5 — see test C.1)
+    * 26.3 Aggregator runtime probe: synthesize Ridge fits at 5Y/
+           expanding; assert returned FDRGatingDiagnostics has
+           consistent cardinality + valid q-threshold
+    * 26.4 Invariant validator probe: construct invalid q_threshold;
+           assert ValueError from __post_init__
+    """
+    import inspect
+
+    findings: list[str] = []
+    warnings_list: list[str] = []
+    summary: dict = {}
+
+    try:
+        from macro_pipeline.analysis.fdr_gating import (
+            FDRGatingDiagnostics,
+            _benjamini_hochberg_qvalues,
+            compute_fdr_gating_for_l5_chain,
+        )
+
+        # Criterion 26.1 - API present + 7 no-default fields.
+        from dataclasses import MISSING as _MISSING
+        expected_fields = {
+            "raw_p_values", "q_values", "q_threshold", "n_tests",
+            "n_rejected", "rejected_indices", "test_labels",
+        }
+        actual_fields = set(FDRGatingDiagnostics.__dataclass_fields__.keys())
+        all_no_default = all(
+            FDRGatingDiagnostics.__dataclass_fields__[f].default is _MISSING
+            and FDRGatingDiagnostics.__dataclass_fields__[f].default_factory
+            is _MISSING
+            for f in actual_fields
+        )
+        summary["criterion_26_1_fields"] = sorted(actual_fields)
+        summary["criterion_26_1_all_no_default"] = all_no_default
+        if actual_fields == expected_fields and all_no_default:
+            findings.append(
+                f"Criterion 26.1 PASS [L5b-C]: FDRGatingDiagnostics + "
+                "_benjamini_hochberg_qvalues + compute_fdr_gating_for_l5_chain "
+                f"importable; all {len(actual_fields)} fields no-default "
+                "per AP-AUTH-53 step #3 (raw_p_values, q_values, "
+                "q_threshold, n_tests, n_rejected, rejected_indices, "
+                "test_labels)"
+            )
+        elif actual_fields != expected_fields:
+            findings.append(
+                f"FAIL: Criterion 26.1 [L5b-C] - FDRGatingDiagnostics "
+                f"field set mismatch: expected {sorted(expected_fields)}, "
+                f"got {sorted(actual_fields)}"
+            )
+        else:
+            findings.append(
+                "FAIL: Criterion 26.1 [L5b-C] - one or more "
+                "FDRGatingDiagnostics fields have defaults; expected all "
+                "no-default per AP-AUTH-53 step #3"
+            )
+
+        # Criterion 26.2 - BH algorithm correctness on canonical vector.
+        # Hand-computed: [0.001, 0.01, 0.04, 0.05, 0.2] at q=0.10 →
+        # q-values approximately [0.005, 0.025, 0.0625, 0.0625, 0.2]
+        # → reject 4 of 5 (q <= 0.10 for first four).
+        import numpy as _np_gate26_alg
+        _p_canonical = _np_gate26_alg.array([0.001, 0.01, 0.04, 0.05, 0.2])
+        _q_result = _benjamini_hochberg_qvalues(_p_canonical)
+        _rejected_count = int(_np_gate26_alg.sum(_q_result <= 0.10))
+        _expected_q = _np_gate26_alg.array([0.005, 0.025, 0.0625, 0.0625, 0.2])
+        _q_close = bool(_np_gate26_alg.allclose(_q_result, _expected_q, atol=1e-10))
+        summary["criterion_26_2_canonical_q_values"] = _q_result.tolist()
+        summary["criterion_26_2_rejected_count_at_0_10"] = _rejected_count
+        if _q_close and _rejected_count == 4:
+            findings.append(
+                "Criterion 26.2 PASS [L5b-C]: BH step-up monotone "
+                "algorithm correctness verified on canonical test "
+                "vector [0.001, 0.01, 0.04, 0.05, 0.2]; q-values match "
+                "expected [0.005, 0.025, 0.0625, 0.0625, 0.2] to 1e-10; "
+                "reject 4 of 5 at q=0.10 (BH 1995 step-up form)"
+            )
+        else:
+            findings.append(
+                f"FAIL: Criterion 26.2 [L5b-C] - BH canonical-vector "
+                f"check failed: q_close={_q_close}, "
+                f"rejected_count={_rejected_count} (expected 4); "
+                f"q_values={_q_result.tolist()}"
+            )
+
+        # Criterion 26.3 - Aggregator runtime probe with synthesized
+        # RidgeFitResult iterable at 5Y/expanding.
+        try:
+            import warnings as _warnings_mod_gate26
+            import numpy as _np_gate26
+            import pandas as _pd_gate26
+            from macro_pipeline.analysis.walk_forward_cv import (
+                generate_schedule as _generate_schedule_gate26,
+            )
+            from macro_pipeline.models.return_forecast import (
+                fit_return_forecast_task_b1 as _fit_b1_gate26,
+            )
+
+            _rng_gate26 = _np_gate26.random.default_rng(42)
+            _n_gate26 = 480
+            _idx_gate26 = _pd_gate26.date_range(
+                "1985-01-01", periods=_n_gate26, freq="MS",
+            )
+            _crps_gate26 = _pd_gate26.DataFrame(
+                {"crps_cal": _rng_gate26.uniform(0.05, 0.95, _n_gate26)},
+                index=_idx_gate26,
+            )
+            _cdrs_cols_gate26 = {
+                f"cdrs_h{h}_t{t}": _rng_gate26.uniform(0.05, 0.95, _n_gate26)
+                for h in ("1Y", "3Y", "5Y", "10Y")
+                for t in (10, 20, 35, 50, 65)
+            }
+            _cdrs_gate26 = _pd_gate26.DataFrame(
+                _cdrs_cols_gate26, index=_idx_gate26,
+            )
+            _macro_gate26 = _pd_gate26.DataFrame(
+                {"pe_cape": _rng_gate26.normal(20.0, 5.0, _n_gate26)},
+                index=_idx_gate26,
+            )
+            _fwd_gate26 = _pd_gate26.Series(
+                _rng_gate26.normal(0.07, 0.15, _n_gate26),
+                index=_idx_gate26,
+            )
+            _sched_gate26 = _generate_schedule_gate26(
+                horizon="5Y", schedule_type="expanding",
+                panel_index=_idx_gate26,
+            )
+            with _warnings_mod_gate26.catch_warnings():
+                _warnings_mod_gate26.simplefilter("ignore")
+                _ridge_fits_gate26 = _fit_b1_gate26(
+                    _sched_gate26, _crps_gate26, _cdrs_gate26,
+                    _macro_gate26, _fwd_gate26, bootstrap_iterations=5,
+                )
+            _agg_diag = compute_fdr_gating_for_l5_chain(
+                _ridge_fits_gate26, q_threshold=0.10,
+            )
+            _consistent = (
+                isinstance(_agg_diag, FDRGatingDiagnostics)
+                and _agg_diag.n_tests == len(_agg_diag.raw_p_values)
+                and _agg_diag.n_tests == len(_agg_diag.q_values)
+                and _agg_diag.n_tests == len(_agg_diag.test_labels)
+                and _agg_diag.n_rejected == len(_agg_diag.rejected_indices)
+                and 0.0 < _agg_diag.q_threshold < 1.0
+            )
+            summary["criterion_26_3_aggregator_n_tests"] = _agg_diag.n_tests
+            summary["criterion_26_3_aggregator_n_rejected"] = _agg_diag.n_rejected
+            if _consistent:
+                findings.append(
+                    f"Criterion 26.3 PASS [L5b-C]: aggregator runtime "
+                    f"probe at 5Y/expanding synthesized fixture produces "
+                    f"valid FDRGatingDiagnostics; n_tests={_agg_diag.n_tests}, "
+                    f"n_rejected={_agg_diag.n_rejected}; all five "
+                    "consistency invariants hold post-__post_init__"
+                )
+            else:
+                findings.append(
+                    f"FAIL: Criterion 26.3 [L5b-C] - aggregator probe "
+                    f"consistency check failed: n_tests={_agg_diag.n_tests}, "
+                    f"raw_p_values_len={len(_agg_diag.raw_p_values)}, "
+                    f"q_values_len={len(_agg_diag.q_values)}, "
+                    f"test_labels_len={len(_agg_diag.test_labels)}"
+                )
+        except Exception as exc:
+            findings.append(
+                f"FAIL: Criterion 26.3 [L5b-C] - aggregator probe error: {exc}"
+            )
+
+        # Criterion 26.4 - Invariant validator probe: construct invalid
+        # q_threshold; assert ValueError from __post_init__.
+        try:
+            FDRGatingDiagnostics(
+                raw_p_values=(0.01,),
+                q_values=(0.05,),
+                q_threshold=0.0,  # endpoint; degenerate
+                n_tests=1,
+                n_rejected=0,
+                rejected_indices=(),
+                test_labels=("probe",),
+            )
+            findings.append(
+                "FAIL: Criterion 26.4 [L5b-C] - q_threshold=0.0 should "
+                "raise ValueError per invariant 5 (strict open interval); "
+                "no exception raised"
+            )
+        except ValueError:
+            findings.append(
+                "Criterion 26.4 PASS [L5b-C]: invariant validator probe "
+                "confirms q_threshold=0.0 raises ValueError per "
+                "FDRGatingDiagnostics.__post_init__ invariant 5 "
+                "(strict open interval (0.0, 1.0); endpoints degenerate)"
+            )
+        except Exception as exc:
+            findings.append(
+                f"FAIL: Criterion 26.4 [L5b-C] - q_threshold=0.0 raised "
+                f"unexpected exception type {type(exc).__name__}: {exc}"
+            )
+
+    except ImportError as exc:
+        findings.append(f"FAIL: Criterion 26.1 - import error: {exc}")
+
+    warnings_list.append(
+        "Criterion 26.5 (all 6 L5b-C tests in tests/test_fdr_gating.py "
+        "PASS) asserted via full pytest"
+    )
+    warnings_list.append(
+        "Gate 26 institutional significance: first NEW gate since "
+        "Gate 25 SEALED at L5-G; first downstream-consumer gate (FDR "
+        "aggregates p-values from Gate 19-B1 Ridge + L5b-B structural "
+        "break diagnostics) vs prior implementation-correctness gates"
+    )
+
+    passed = not any(f.startswith("FAIL") for f in findings)
+    return GateReport(
+        name="Gate 26 - L5b-C Benjamini-Hochberg FDR gating",
+        passed=passed, findings=findings, warnings=warnings_list,
+        summary=summary,
+    )
+
+
+def _cli_gate26() -> int:
+    import logging
+    logging.basicConfig(level="WARNING", format="%(message)s")
+    report = validate_gate26_fdr_gating()
+    print(report.render())
+    return 0 if report.passed else 1
+
+
 if __name__ == "__main__":
     import sys
     cmd = sys.argv[1] if len(sys.argv) > 1 else "gate1"
@@ -5920,11 +6172,13 @@ if __name__ == "__main__":
         sys.exit(_cli_gate24())
     if cmd == "gate25":
         sys.exit(_cli_gate25())
+    if cmd == "gate26":
+        sys.exit(_cli_gate26())
     print(
         f"Unknown command: {cmd}. Available: "
         "gate1, gate2, gate3, gate4a, gate4b, gate4c, gate4d, "
         "gate8, gate9, gate10, gate11, gate12, gate13, gate14, gate15, gate16, gate17, "
-        "gate18, gate19_b1, gate19_b2, gate20, gate21, gate22, gate23, gate24, gate25",
+        "gate18, gate19_b1, gate19_b2, gate20, gate21, gate22, gate23, gate24, gate25, gate26",
         file=sys.stderr,
     )
     sys.exit(2)
