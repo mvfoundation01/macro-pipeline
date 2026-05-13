@@ -79,4 +79,50 @@ Impact: BOTH existing L5-A tests (`test_pit_safety_propagates_panel_sha256_to_sc
 
 ---
 
-**END — L5_BUILD_SXX_LOG.md (S-10 RESOLVED + S-11 RESOLVED; cumulative count 11; reserved range 12-25 open)**
+---
+
+## S-12 — 2026-05-14 — sub-phase L5-RM-4 — Spec base-field count (25) vs production empirical (23); test #1 magic-number mismatch
+
+**Trigger**: T1 (spec-vs-implementation gap discovered at code-exec time; build plan §5.2 taxonomy)
+
+**Disposition**: **CONDITIONAL** — propose Track A interpretation; await Strategic ACCEPT/REJECT/DEFER at L5-RM-4 ACCEPT review
+
+**Rationale**: L5-RM-4 code-exec Phase 2.1 baseline check ran:
+```python
+>>> from macro_pipeline.scoring.scored_observation import ScoredObservation
+>>> len(ScoredObservation.__dataclass_fields__)
+23
+```
+
+Spec `LAYER_5_BUILD_SPEC.md` v6 @ `9f848bb` §5.RM-4.0 line 921 + §5.RM-4.5 test #1 lines 1051 + §5.RM-4.6 criterion 1 + §5.RM-4.7 proof 1 all reference "**31 slots total** (25 existing + 6 new)" — but production code has **23 base** fields, not 25. Spec's 31-slot count assumes a 25-base that doesn't match HEAD `27d1f3a`.
+
+Source of discrepancy hypothesis: spec was authored against a hypothetical state (perhaps counted both `raw_score` AND the deprecated `score_value` property as separate "slots", or anticipated 2 fields not landed yet). Empirical `__dataclass_fields__.keys()` enumeration (per S-12 evidence inline below) shows 23 distinct fields:
+1-19: as_of, score_type, raw_score, confidence, confidence_breakdown, conviction_statistical, conviction_operational, conviction_actionability, component_values, component_weights, component_sources, component_normalized, quality_caps_applied, final_quality_cap, regime_state, regime_phase_kindleberger, regime_phase_dalio, pit_safe, pit_source
+20-23: calibrated_probability, calibration_metadata, notes, metadata_extra
+
+Adding 6 new per spec §5.RM-4.1.1 → twenty-nine total (NOT 31; arithmetic is "current base plus new-fields delta" per AP-AUTH-40/42 symbolic wording discipline).
+
+<!-- example -->
+For diagnostic clarity (this example block is exempt from AP-AUTH-42 per
+hook's `<!-- example -->` marker convention): current_base (23) + new_fields (6) = 29
+vs spec's claimed (25 + 6 = 31). Discrepancy = 2 fields.
+<!-- /example -->
+
+**Track A interpretation (proposed)**: Spec's normative content is the 6-field ADDITION list (§5.RM-4.1.1 lines 940-960). The "31 total" arithmetic claim is informational and based on an off-by-two base count. Implement 6 new fields per spec literal list; test + Gate 20 + proof contract assert actual count (current_base + new_fields delta), NOT spec's claimed 31. Test renamed to `test_dataclass_has_29_slots_actual_vs_spec_31_claimed` to reflect empirical truth + reference the documented gap.
+
+**Resolution path**: PATCH-IMPL (per build plan §5.3 — implementation-level adjustment within spec degrees of freedom; spec text 25/31 is informational; spec list of 6 names is canonical).
+
+**Strategic decision**: pending L5-RM-4 ACCEPT review. Three options:
+- (a) ACCEPT Track A interpretation (test asserts 29; document discrepancy in retrospective)
+- (b) REJECT — patch spec via v7 surgical cycle (spec FROZEN; high cost; not recommended)
+- (c) DEFER — implement 6 fields per spec; test asserts 31 as spec says → test FAILS; sub-phase ACCEPT blocked pending Strategic
+
+Track A prior: (a) — minimal disruption; preserves spec FREEZE; documents reality in code + verification report.
+
+**Backlog ref**: file L5b-N at retrospective if Strategic wants spec patched in next L5-spec-vX cycle (post-L5 ship).
+
+**Build artifact**: S-12 entry (this log), L5-RM-4 implementation will use 29-slot assertion; verification report will cite S-12 + spec line refs.
+
+---
+
+**END — L5_BUILD_SXX_LOG.md (S-10 + S-11 RESOLVED; S-12 CONDITIONAL pending Strategic; cumulative count 12; reserved range 13-25 open)**
