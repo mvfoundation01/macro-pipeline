@@ -1,0 +1,804 @@
+"""Layer 5-B Task B1 — Ridge return-forecast regression.
+
+Spec ref: ``LAYER_5_BUILD_SPEC.md`` v6 @ ``9f848bb`` §5.B.1.0 (task split v3
+per S-9) + §5.B.1.1 (public API; lines 631-722) + §5.B.1.2/.3/.4 (nested
+walk-forward CV + HAC SE + block bootstrap) + §5.B.5.B (13 tests v3) +
+§5.B.6 (Gate 19 sub-criteria 8-14 + 19-22) + §5.B.7 (proof contract 1, 6-9,
+12-14). Closes S-9 RETURN_POSITIVE circularity (resolution: Task B1 does
+NOT consume ``positive_return_probability`` — it is downstream output of
+Task B2). Closes ChatGPT v2 §D.2.
+
+Public API
+----------
+``RidgeFitResult``                 Frozen dataclass; one fit per (horizon × schedule × fold).
+``fit_return_forecast_task_b1``    Task B1's public entry point.
+``LAMBDA_GRID_DEFAULT``            Re-exported from ``composite_refit`` for spec proof item 3 alignment.
+``BOOTSTRAP_ITERATIONS_DEFAULT``   B=1000 per spec §5.B.1.4.
+
+Method (per spec §5.B.3)
+------------------------
+* Estimator: closed-form Ridge ``β̂ = (X'X + λI)⁻¹X'y``; ``α̂ = ȳ − β̂x̄``.
+* Outer loop: ``schedule.folds`` (L5-A walk-forward).
+* Inner loop: time-ordered contiguous blocks (``inner_fold_count=5``)
+  WITHOUT contamination gap for λ selection (mirrors Task A inner-CV
+  policy at ``composite_refit.py:23-37``; outer CV preserves OOS integrity
+  via ``gap_months``).
+* Feature standardization: train-only z-score per spec §2.5 audit #5
+  (recomputed per fold; never reused across folds).
+* HAC SE: ``analysis.newey_west_hac.fit_ols_hac`` with
+  ``maxlags = horizon_months − 1`` (spec §5.B.1.3); bandwidth sensitivity
+  at ``{horizon_months − 1, Andrews, max(2, horizon_months // 4)}``.
+* Block bootstrap: B=1000 with ``block_size = horizon_months // 2``;
+  sensitivity at ``{h/4, h/2, h, 2h}`` (spec §5.B.1.4).
+
+Inputs (per spec §5.B.1.1)
+--------------------------
+* ``schedule`` — ``WalkForwardSchedule`` (L5-A output for ONE horizon ×
+  schedule_type pair).
+* ``crps_calibrated_panel`` — ``pd.DataFrame`` with one calibrated CRPS
+  probability column indexed by month (post-RM-6 CRPS isotonic output).
+* ``cdrs_calibrated_panel`` — ``pd.DataFrame`` with twenty calibrated CDRS
+  probability columns (4 horizons × 5 thresholds) indexed by month
+  (post-RM-6 CDRS isotonic output).
+* ``macro_features`` — ``pd.DataFrame`` of exogenous valuation / real-rate
+  features indexed by month (the regression covariates beyond the
+  calibrated probabilities).
+* ``forward_returns`` — ``pd.Series`` of forward real total returns
+  on ``PRIMARY_REGRESSION_TARGET = "SHILLER_TR_PRICE"`` aligned to
+  ``schedule.horizon`` (produced upstream by
+  ``analysis.regression_target.forward_return_series``).
+
+**``positive_return_probability`` / RETURN_POSITIVE column is REJECTED**
+by input schema validation: Task B1 produces the return forecast that
+Task B2 then calibrates into ``positive_return_probability`` — including
+it as a B1 input would re-introduce the ChatGPT v2 §D.2 circularity that
+S-9 resolved. The AST-audit test
+``test_task_b1_does_not_consume_return_positive_calibrated_probability``
+(promoted from §5.B.5.B2 per D-B1-3 disposition) enforces this contract.
+
+File-location note (D-B1-1 Strategic disposition 2026-05-13)
+-----------------------------------------------------------
+Spec proof contract item 1 references ``macro_pipeline.models.ridge_cv``;
+this module lives at ``macro_pipeline.models.return_forecast`` to mirror
+Task A's noun-based naming precedent (``composite_refit.py``) and keep
+the two L5-B estimator families in sibling modules. The wording drift is
+tracked in ``L5B_BACKLOG.md`` as ``L5b-7`` (doc-only); zero functional
+impact.
+"""
+from __future__ import annotations
+
+import warnings
+from dataclasses import dataclass, replace
+
+import numpy as np
+import pandas as pd
+import statsmodels.api as sm
+
+from macro_pipeline.analysis.newey_west_hac import fit_ols_hac
+from macro_pipeline.analysis.r_squared_panel import HORIZONS
+from macro_pipeline.analysis.walk_forward_cv import WalkForwardSchedule
+from macro_pipeline.models.composite_refit import LAMBDA_GRID_DEFAULT
+
+
+# Per spec §5.B.1.4 line 745: B = 1000 block-bootstrap iterations.
+BOOTSTRAP_ITERATIONS_DEFAULT: int = 1000
+
+# Per spec §5.B.2 item 4 + AP-AUTH-44: skip folds below this nominal-train
+# floor (mirrors UNDERPOWERED_N_NOMINAL_MIN from analysis.effective_sample_size).
+_MIN_N_TRAIN_OBS: int = 24
+_MIN_N_TEST_OBS: int = 1
+
+# Sentinel column name that must NEVER appear in Task B1 input panels
+# (closes ChatGPT v2 §D.2 circularity per S-9).
+_FORBIDDEN_INPUT_COLUMNS: frozenset[str] = frozenset({
+    "positive_return_probability",
+    "RETURN_POSITIVE",
+})
+
+# Spec §5.B.1.4: block-size sensitivity at {h/4, h/2, h, 2h}.
+# Spec §5.B.1.4: bandwidth sensitivity at {h−1, Andrews, max(2, h//4)}.
+_BLOCK_SIZE_LABELS: tuple[str, ...] = ("h/4", "h/2", "h", "2h")
+_HAC_BANDWIDTH_LABELS: tuple[str, ...] = ("h-1", "andrews", "h//4_floor")
+
+
+@dataclass(frozen=True)
+class RidgeFitResult:
+    """One Task B1 Ridge return-forecast result for a single
+    (horizon × schedule × fold).
+
+    Fields per spec §5.B.1.1 lines 631-661 plus two sensitivity-report
+    fields (``block_size_sensitivity_se``, ``hac_bandwidth_sensitivity_se``)
+    required by Gate 19 criteria 11 + 12 (spec §5.B.6) but not enumerated
+    in the spec dataclass definition itself (per spec §5.B.1.4 line 748:
+    "sensitivity profile stored in fit metadata"). Storing them on the
+    dataclass is the simplest route.
+    """
+
+    fold_id: int
+    horizon: str                                    # "1Y" | "3Y" | "5Y" | "10Y"
+    schedule_type: str                              # "expanding" | "rolling_20y"
+    lambda_selected: float                          # inner-CV-selected λ
+    lambda_grid: tuple[float, ...]
+    lambda_log10_sd_across_5fold: float             # diagnostic — log10(λ) SD across inner folds
+    coefficient_sign_flip_rate: float               # diagnostic — rate of β sign flips vs prior outer fold
+    coef: np.ndarray                                # β̂ vector (length = n_features)
+    intercept: float
+    forecast_train: np.ndarray                      # in-sample predictions
+    forecast_test: np.ndarray                       # OOS forecast on outer test window
+    r_squared: float                                # in-sample R²
+    r_squared_oos: float                            # OOS R²
+    residual_se_hac: float                          # HAC SE @ maxlags = horizon_months − 1
+    p_value_beta_hac: float                         # HAC p-value (single beta proxy: ridge fits y on full X — use overall F-test p surrogate)
+    bootstrap_residual_se_distribution: np.ndarray  # B=1000 block-bootstrap residual SEs
+    bootstrap_block_size: int                       # primary block size (= horizon_months // 2)
+    hac_maxlags: int                                # primary HAC maxlags (= horizon_months − 1)
+    n_train_obs: int
+    n_test_obs: int
+    n_eff_nonoverlap_train: int                     # = n_train_obs // horizon_months
+    grid_edge_bind: bool                            # True if lambda_selected ∈ {grid[0], grid[-1]}
+    block_size_sensitivity_se: dict[str, float]     # {"h/4": se, "h/2": se, "h": se, "2h": se}
+    hac_bandwidth_sensitivity_se: dict[str, float]  # {"h-1": se, "andrews": se, "h//4_floor": se}
+    fit_timestamp: pd.Timestamp
+
+
+def _zscore_fit_transform(
+    X_train: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Train-only z-scoring per spec §2.5 audit #5. Returns (X_train_z, mean, std).
+
+    Duplicates the helper at ``composite_refit.py:96`` (private to Task A;
+    same numerical contract).
+    """
+    mean = X_train.mean(axis=0)
+    std = X_train.std(axis=0, ddof=0)
+    # Avoid divide-by-zero on degenerate columns (zero-variance feature).
+    std = np.where(std < 1e-12, 1.0, std)
+    X_train_z = (X_train - mean) / std
+    return X_train_z, mean, std
+
+
+def _zscore_transform(
+    X: np.ndarray, mean: np.ndarray, std: np.ndarray,
+) -> np.ndarray:
+    return (X - mean) / std
+
+
+def _build_inner_blocks(
+    n_train: int, n_inner_folds: int,
+) -> list[tuple[slice, slice]]:
+    """Time-ordered contiguous blocks for inner CV (NO contamination gap).
+
+    Duplicates ``composite_refit.py:135``; same contract per spec §5.B.1.2.
+    """
+    fold_size = max(1, n_train // (n_inner_folds + 1))
+    blocks: list[tuple[slice, slice]] = []
+    for k in range(n_inner_folds):
+        train_end = fold_size * (k + 1)
+        test_start = train_end
+        test_end = min(test_start + fold_size, n_train)
+        if train_end >= test_end or train_end < 2:
+            break
+        blocks.append((slice(0, train_end), slice(test_start, test_end)))
+    return blocks
+
+
+def _fit_ridge_closed_form(
+    X: np.ndarray, y: np.ndarray, lam: float,
+) -> tuple[np.ndarray, float]:
+    """Closed-form Ridge per spec §5.B.3: β̂ = (X'X + λI)⁻¹X'y; α̂ = ȳ − β̂x̄.
+
+    Assumes X is already z-scored (so component-wise x̄ ≈ 0 and α̂ ≈ ȳ).
+    Uses ``np.linalg.solve`` for numerical stability over ``np.linalg.inv``.
+    """
+    n_features = X.shape[1]
+    XtX = X.T @ X
+    XtX_reg = XtX + lam * np.eye(n_features)
+    Xty = X.T @ y
+    beta = np.linalg.solve(XtX_reg, Xty)
+    # X is z-scored ⇒ column means ≈ 0 ⇒ intercept = y mean.
+    intercept = float(y.mean())
+    return beta, intercept
+
+
+def _select_lambda_inner_cv_ridge(
+    X_train_z: np.ndarray,
+    y_train: np.ndarray,
+    lambda_grid: tuple[float, ...],
+    inner_fold_count: int,
+) -> tuple[float, float]:
+    """Inner-CV λ selection: minimize mean OOS MSE across inner blocks.
+
+    Returns ``(lambda_star, lambda_log10_sd_across_5fold)``.
+
+    ``lambda_log10_sd_across_5fold`` is the SD of ``log10(per-inner-fold
+    best λ)`` across the inner folds — diagnostic for Gate 19 criterion 13
+    (closes ChatGPT E.6 / L5-RISK-6 per spec §5.B.5.B B8).
+    """
+    blocks = _build_inner_blocks(len(X_train_z), inner_fold_count)
+    if not blocks:
+        # Too few obs for inner CV: pick mid-grid λ (graceful degradation).
+        return float(lambda_grid[len(lambda_grid) // 2]), float("nan")
+
+    # mse_matrix[lam_idx][fold_idx]
+    mse_matrix: list[list[float]] = [[] for _ in lambda_grid]
+    for tr_slice, te_slice in blocks:
+        X_tr = X_train_z[tr_slice]
+        y_tr = y_train[tr_slice]
+        X_te = X_train_z[te_slice]
+        y_te = y_train[te_slice]
+        if len(X_tr) < 2 or len(X_te) == 0:
+            continue
+        for lam_idx, lam in enumerate(lambda_grid):
+            beta, alpha = _fit_ridge_closed_form(X_tr, y_tr, lam)
+            y_hat = X_te @ beta + alpha
+            mse_matrix[lam_idx].append(float(np.mean((y_te - y_hat) ** 2)))
+
+    mean_mse_per_lambda = [
+        (float(np.mean(m)) if m else float("inf"))
+        for m in mse_matrix
+    ]
+    best_idx = int(np.argmin(mean_mse_per_lambda))
+    lambda_star = float(lambda_grid[best_idx])
+
+    # Per-fold best λ → SD of log10 distribution.
+    n_inner = len(mse_matrix[0]) if mse_matrix and mse_matrix[0] else 0
+    per_fold_best_lam: list[float] = []
+    for fold_idx in range(n_inner):
+        mses_at_fold = [mse_matrix[lam_idx][fold_idx] for lam_idx in range(len(lambda_grid))]
+        argmin_lam_idx = int(np.argmin(mses_at_fold))
+        per_fold_best_lam.append(float(lambda_grid[argmin_lam_idx]))
+
+    if per_fold_best_lam:
+        lambda_log10_sd = float(
+            np.std(np.log10(np.asarray(per_fold_best_lam)), ddof=0)
+        )
+    else:
+        lambda_log10_sd = float("nan")
+
+    return lambda_star, lambda_log10_sd
+
+
+def _newey_west_automatic_maxlags(n_obs: int) -> int:
+    """Newey-West (1994) automatic bandwidth selector.
+
+    ``L = floor(4 * (T/100)^(2/9))`` where ``T`` = number of residuals.
+
+    Drop-in for the spec §5.B.1.4 "Andrews-automatic" label: statsmodels
+    does not accept the literal ``cov_kwds={'maxlags': 'andrews'}`` string
+    the spec sketches; this NW-1994 automatic rule is the reproducible
+    interpretation (commented in the bandwidth-sensitivity report under
+    the same ``"andrews"`` label for spec-mirror traceability).
+    """
+    if n_obs < 1:
+        return 0
+    return max(0, int(np.floor(4.0 * (n_obs / 100.0) ** (2.0 / 9.0))))
+
+
+def _hac_beta_se_at_maxlags(
+    y_test: np.ndarray, forecast_test: np.ndarray, maxlags: int,
+) -> float:
+    """Direct statsmodels HAC SE of the regression coefficient β at an
+    explicit ``maxlags`` override.
+
+    Returns ``nan`` when fewer than 2 aligned observations or the forecast
+    has zero variance. The HAC-corrected SE of β is the
+    bandwidth-DEPENDENT quantity per Andrews (1991) / NW (1987); the raw
+    residual SD reported in ``RidgeFitResult.residual_se_hac`` is
+    bandwidth-INVARIANT (so it would be a degenerate sensitivity
+    diagnostic). The bandwidth-sensitivity report below stores
+    ``bse[β]`` so spec test B6 ``..._h_minus_1_andrews_lower`` exercises
+    a quantity that actually varies with the maxlags choice.
+    """
+    n = len(y_test)
+    if n < 2:
+        return float("nan")
+    if float(np.std(forecast_test, ddof=0)) == 0.0:
+        return float("nan")
+    X = sm.add_constant(forecast_test)
+    try:
+        model = sm.OLS(y_test, X).fit(
+            cov_type="HAC",
+            cov_kwds={"maxlags": max(0, int(maxlags))},
+        )
+    except Exception:
+        return float("nan")
+    return float(model.bse[1])
+
+
+def _compute_hac_bandwidth_sensitivity(
+    y_test: np.ndarray, forecast_test: np.ndarray, horizon_months: int,
+) -> dict[str, float]:
+    """Three-bandwidth HAC SE-of-β sensitivity per spec §5.B.1.4 item 2.
+
+    Labels: ``"h-1"`` = ``horizon_months − 1`` (primary mirror);
+    ``"andrews"`` = NW-1994 automatic (see ``_newey_west_automatic_maxlags``);
+    ``"h//4_floor"`` = ``max(2, horizon_months // 4)``.
+
+    The values are HAC standard errors of the regression coefficient β
+    (not residual SDs), since those vary with the bandwidth choice and
+    therefore expose the sensitivity the spec test B6 is designed to
+    surface.
+    """
+    if len(y_test) < 2:
+        return {label: float("nan") for label in _HAC_BANDWIDTH_LABELS}
+    residuals_len = len(y_test)
+    bandwidths = {
+        "h-1": max(0, horizon_months - 1),
+        "andrews": _newey_west_automatic_maxlags(residuals_len),
+        "h//4_floor": max(2, horizon_months // 4),
+    }
+    sensitivity: dict[str, float] = {}
+    for label in _HAC_BANDWIDTH_LABELS:
+        sensitivity[label] = _hac_beta_se_at_maxlags(
+            y_test, forecast_test, bandwidths[label],
+        )
+    return sensitivity
+
+
+def _block_bootstrap_residual_se(
+    X_train_z: np.ndarray,
+    y_train: np.ndarray,
+    X_test_z: np.ndarray,
+    y_test: np.ndarray,
+    forecast_train: np.ndarray,
+    lambda_star: float,
+    bootstrap_iterations: int,
+    block_size: int,
+    rng: np.random.Generator,
+) -> np.ndarray:
+    """Residual block-bootstrap of OOS residual SE per spec §5.B.1.4.
+
+    Procedure (mirrors spec text "refit Ridge, compute raw_score_test per
+    resample, accumulate bootstrap_residual_se_distribution"):
+      1. Compute training residuals ``e = y_train − forecast_train``.
+      2. For ``b = 1..B``: block-bootstrap ``e → e*_b`` (concatenate
+         random contiguous blocks of length ``block_size``); form
+         ``y*_b = forecast_train + e*_b``; refit Ridge with the same
+         ``lambda_star`` on ``(X_train_z, y*_b) → (β*_b, α*_b)``;
+         compute new test forecast ``forecast_test_b = X_test_z β*_b
+         + α*_b``; ``se_b = std(y_test − forecast_test_b, ddof=1)``.
+      3. Return the length-``B`` array of ``se_b`` values.
+
+    R1 mitigation (pre-flight risk): if ``n_train // block_size < 4``,
+    emit a ``UserWarning`` and halve ``B`` for this call. If
+    ``n_train // block_size < 2``, fall back to ``block_size = 1`` and
+    emit a stronger warning (graceful degradation; Sxx-13 candidate at
+    ACCEPT report time).
+
+    Returns
+    -------
+    np.ndarray
+        Shape ``(B_effective,)``. ``B_effective`` may be < B per the R1
+        mitigation. Returns an empty array when ``n_test < 2`` (residual
+        SE undefined; common at "1Y" horizon with step=1).
+    """
+    if len(y_test) < 2:
+        return np.empty(0, dtype=float)
+
+    n_train = len(y_train)
+    bs = max(1, int(block_size))
+    block_count = n_train // bs if bs > 0 else 0
+
+    b_effective = bootstrap_iterations
+    if block_count < 2:
+        warnings.warn(
+            f"block_bootstrap: block_count={block_count} < 2 for "
+            f"n_train={n_train}, block_size={bs}; falling back to "
+            "block_size=1 (iid bootstrap)",
+            stacklevel=3,
+        )
+        bs = 1
+        block_count = n_train
+    elif block_count < 4:
+        b_effective = max(1, bootstrap_iterations // 2)
+        warnings.warn(
+            f"block_bootstrap: block_count={block_count} < 4 for "
+            f"n_train={n_train}, block_size={bs}; halving B to "
+            f"{b_effective} per R1 mitigation",
+            stacklevel=3,
+        )
+
+    residuals_train = y_train - forecast_train
+    se_dist = np.empty(b_effective, dtype=float)
+    n_blocks_needed = (n_train + bs - 1) // bs
+
+    for b in range(b_effective):
+        block_starts = rng.integers(0, n_train - bs + 1, size=n_blocks_needed)
+        e_star = np.concatenate(
+            [residuals_train[s:s + bs] for s in block_starts]
+        )[:n_train]
+        y_star = forecast_train + e_star
+        beta_b, alpha_b = _fit_ridge_closed_form(X_train_z, y_star, lambda_star)
+        forecast_test_b = X_test_z @ beta_b + alpha_b
+        se_dist[b] = float(np.std(y_test - forecast_test_b, ddof=1))
+    return se_dist
+
+
+def _compute_block_size_sensitivity(
+    X_train_z: np.ndarray,
+    y_train: np.ndarray,
+    X_test_z: np.ndarray,
+    y_test: np.ndarray,
+    forecast_train: np.ndarray,
+    lambda_star: float,
+    bootstrap_iterations: int,
+    horizon_months: int,
+    sensitivity_block_sizes: tuple[int, ...],
+    rng: np.random.Generator,
+) -> dict[str, float]:
+    """Four-block-size mean residual-SE sensitivity per spec §5.B.1.4 item 1.
+
+    Labels: ``"h/4"``, ``"h/2"`` (primary mirror), ``"h"``, ``"2h"``.
+
+    Each label runs a separate block-bootstrap; the dict stores the MEAN
+    of that distribution (a single number per label) so the result is
+    compact (full distributions per label would 4× the memory cost).
+    """
+    if len(y_test) < 2:
+        return {label: float("nan") for label in _BLOCK_SIZE_LABELS}
+    sizes = dict(zip(_BLOCK_SIZE_LABELS, sensitivity_block_sizes))
+    out: dict[str, float] = {}
+    for label in _BLOCK_SIZE_LABELS:
+        bs = max(1, sizes[label])
+        dist = _block_bootstrap_residual_se(
+            X_train_z, y_train, X_test_z, y_test, forecast_train,
+            lambda_star, bootstrap_iterations, bs, rng,
+        )
+        out[label] = float(np.mean(dist)) if dist.size > 0 else float("nan")
+    return out
+
+
+def _default_block_size_sensitivity_grid(horizon_months: int) -> tuple[int, int, int, int]:
+    """Spec §5.B.1.4 item 1 default block-size grid ``{h/4, h/2, h, 2h}``."""
+    return (
+        max(1, horizon_months // 4),
+        max(1, horizon_months // 2),
+        max(1, horizon_months),
+        max(1, 2 * horizon_months),
+    )
+
+
+def _validate_b1_input_schema(
+    crps_calibrated_panel: pd.DataFrame,
+    cdrs_calibrated_panel: pd.DataFrame,
+    macro_features: pd.DataFrame,
+    lambda_grid: tuple[float, ...],
+) -> None:
+    """Spec §5.B.1.1 + §5.B.5.B B1/B10 + Standing Order #4 AST-audit contract.
+
+    Raises ``ValueError`` on:
+      * empty ``lambda_grid`` or any non-positive value (test B10).
+      * any input panel containing a column in ``_FORBIDDEN_INPUT_COLUMNS``
+        (test B2-1 promoted per D-B1-3; closes ChatGPT v2 §D.2).
+      * CRPS panel column count != 1 (test B1 strict schema).
+      * CDRS panel column count != 20 (test B1 strict schema).
+    """
+    if not lambda_grid:
+        raise ValueError("lambda_grid must be non-empty")
+    for lam in lambda_grid:
+        if lam <= 0:
+            raise ValueError(
+                f"lambda_grid contains non-positive value {lam!r}; "
+                "Ridge requires λ > 0"
+            )
+
+    for panel_name, panel in (
+        ("crps_calibrated_panel", crps_calibrated_panel),
+        ("cdrs_calibrated_panel", cdrs_calibrated_panel),
+        ("macro_features", macro_features),
+    ):
+        forbidden = set(panel.columns) & _FORBIDDEN_INPUT_COLUMNS
+        if forbidden:
+            raise ValueError(
+                f"{panel_name} contains forbidden column(s) "
+                f"{sorted(forbidden)}: Task B1 does NOT consume "
+                "RETURN_POSITIVE outputs (would re-introduce ChatGPT v2 "
+                "§D.2 circularity resolved by S-9)"
+            )
+
+    if len(crps_calibrated_panel.columns) != 1:
+        raise ValueError(
+            f"crps_calibrated_panel must have exactly 1 calibrated column "
+            f"(post-RM-6 CRPS); got {len(crps_calibrated_panel.columns)}"
+        )
+    if len(cdrs_calibrated_panel.columns) != 20:
+        raise ValueError(
+            f"cdrs_calibrated_panel must have exactly 20 calibrated columns "
+            f"(post-RM-6 CDRS; 4 horizons × 5 thresholds); "
+            f"got {len(cdrs_calibrated_panel.columns)}"
+        )
+
+
+def _assemble_feature_matrix(
+    crps_calibrated_panel: pd.DataFrame,
+    cdrs_calibrated_panel: pd.DataFrame,
+    macro_features: pd.DataFrame,
+    forward_returns: pd.Series,
+    date_lo: pd.Timestamp,
+    date_hi: pd.Timestamp,
+) -> tuple[np.ndarray, np.ndarray, pd.DatetimeIndex]:
+    """Slice inputs to ``[date_lo, date_hi]``, inner-join on the monthly
+    index, drop NaN rows, return ``(X, y, dates_kept)``.
+
+    Column order in ``X``: CRPS (1) + CDRS (20) + macro (M) =
+    ``1 + 20 + len(macro_features.columns)``.
+    """
+    def _window(df_or_s):
+        return df_or_s.loc[(df_or_s.index >= date_lo) & (df_or_s.index <= date_hi)]
+
+    crps_w = _window(crps_calibrated_panel)
+    cdrs_w = _window(cdrs_calibrated_panel)
+    macro_w = _window(macro_features)
+    fr_w = _window(forward_returns).rename("__y__")
+
+    combined = pd.concat(
+        [crps_w, cdrs_w, macro_w, fr_w], axis=1, join="inner",
+    ).dropna()
+
+    if combined.empty:
+        n_features = 1 + 20 + len(macro_features.columns)
+        return (
+            np.empty((0, n_features)),
+            np.empty(0),
+            pd.DatetimeIndex([]),
+        )
+
+    y = combined["__y__"].to_numpy(dtype=float)
+    feature_cols = [c for c in combined.columns if c != "__y__"]
+    X = combined[feature_cols].to_numpy(dtype=float)
+    return X, y, combined.index
+
+
+def fit_return_forecast_task_b1(
+    schedule: WalkForwardSchedule,
+    crps_calibrated_panel: pd.DataFrame,
+    cdrs_calibrated_panel: pd.DataFrame,
+    macro_features: pd.DataFrame,
+    forward_returns: pd.Series,
+    *,
+    lambda_grid: tuple[float, ...] = LAMBDA_GRID_DEFAULT,
+    inner_fold_count: int = 5,
+    bootstrap_iterations: int = BOOTSTRAP_ITERATIONS_DEFAULT,
+    block_size_sensitivity: tuple[int, ...] | None = None,
+    random_seed: int = 42,
+) -> tuple[RidgeFitResult, ...]:
+    """Task B1 (v3 per S-9): Ridge return-forecast regression with
+    nested walk-forward λ selection + HAC SE + block bootstrap.
+
+    Parameters
+    ----------
+    schedule
+        ``WalkForwardSchedule`` from L5-A. One call processes one
+        (horizon × schedule_type) pair; the function emits one
+        ``RidgeFitResult`` per ``schedule.folds`` entry.
+    crps_calibrated_panel
+        ``pd.DataFrame`` indexed by month with exactly one calibrated
+        CRPS-probability column (post-RM-6 isotonic output).
+    cdrs_calibrated_panel
+        ``pd.DataFrame`` indexed by month with twenty calibrated
+        CDRS-probability columns (post-RM-6 isotonic output; 4 horizons
+        × 5 thresholds).
+    macro_features
+        ``pd.DataFrame`` of exogenous regression covariates (valuation,
+        real-rate, etc.) indexed by month.
+    forward_returns
+        ``pd.Series`` of forward real total returns on
+        ``PRIMARY_REGRESSION_TARGET`` aligned to ``schedule.horizon``.
+
+    Keyword-only
+    ------------
+    lambda_grid
+        λ values to search inner-CV. Default ``LAMBDA_GRID_DEFAULT``
+        (11 log-spaced points 1e-4..1e2). Widen via S-2 trigger if
+        ``grid_edge_bind`` rate >10% across folds.
+    inner_fold_count
+        Inner-CV fold count for λ selection. Default 5.
+    bootstrap_iterations
+        B-bootstrap residual resamples. Default 1000.
+    block_size_sensitivity
+        If ``None``, uses ``{h/4, h/2, h, 2h}`` default sweep per
+        spec §5.B.1.4. Explicit tuple overrides.
+    random_seed
+        Determinism control for bootstrap; default 42.
+
+    Returns
+    -------
+    tuple[RidgeFitResult, ...]
+        One result per ``schedule.folds`` entry. Underpowered folds
+        (per spec §5.B.2 item 4) are skipped with a warning; the
+        returned tuple may be shorter than ``len(schedule.folds)``.
+
+    Raises
+    ------
+    ValueError
+        If input schemas violate spec contract (e.g.,
+        ``positive_return_probability`` column present; lambda_grid
+        contains non-positive values; CRPS panel has !=1 calibrated
+        column or CDRS panel has !=20 calibrated columns under strict
+        validation).
+    """
+    _validate_b1_input_schema(
+        crps_calibrated_panel,
+        cdrs_calibrated_panel,
+        macro_features,
+        lambda_grid,
+    )
+
+    if schedule.horizon not in HORIZONS:
+        raise ValueError(
+            f"unknown horizon {schedule.horizon!r}; expected one of "
+            f"{sorted(HORIZONS.keys())}"
+        )
+    horizon_months = HORIZONS[schedule.horizon]
+
+    sensitivity_block_sizes = (
+        block_size_sensitivity
+        if block_size_sensitivity is not None
+        else _default_block_size_sensitivity_grid(horizon_months)
+    )
+
+    rng = np.random.default_rng(random_seed)
+    results: list[RidgeFitResult] = []
+    fit_ts = pd.Timestamp.utcnow()
+
+    for fold in schedule.folds:
+        X_train, y_train, _train_dates = _assemble_feature_matrix(
+            crps_calibrated_panel, cdrs_calibrated_panel,
+            macro_features, forward_returns,
+            fold.train_start, fold.train_end,
+        )
+        X_test, y_test, _test_dates = _assemble_feature_matrix(
+            crps_calibrated_panel, cdrs_calibrated_panel,
+            macro_features, forward_returns,
+            fold.test_start, fold.test_end,
+        )
+
+        n_train = len(y_train)
+        n_test = len(y_test)
+        n_eff_train = n_train // horizon_months if horizon_months > 0 else 0
+
+        # Underpowered fold guard (spec §5.B.2 item 4).
+        if (
+            n_train < _MIN_N_TRAIN_OBS
+            or n_eff_train < 3
+            or n_test < _MIN_N_TEST_OBS
+        ):
+            warnings.warn(
+                f"Skipping fold {fold.fold_id} "
+                f"(horizon={schedule.horizon}, "
+                f"schedule={schedule.schedule_type}): "
+                f"n_train={n_train}, n_eff={n_eff_train}, n_test={n_test} "
+                "below threshold (spec §5.B.2 item 4)",
+                stacklevel=2,
+            )
+            continue
+
+        # Train-only z-scoring; never reuse statistics across folds.
+        X_train_z, mean_tr, std_tr = _zscore_fit_transform(X_train)
+        X_test_z = _zscore_transform(X_test, mean_tr, std_tr)
+
+        # Inner-CV λ selection.
+        lambda_star, lambda_log10_sd = _select_lambda_inner_cv_ridge(
+            X_train_z, y_train, lambda_grid, inner_fold_count,
+        )
+
+        # Refit closed-form Ridge on the full outer training window.
+        beta, alpha = _fit_ridge_closed_form(X_train_z, y_train, lambda_star)
+        forecast_train = X_train_z @ beta + alpha
+        forecast_test = X_test_z @ beta + alpha
+
+        # R² in-sample + OOS.
+        ss_tot_tr = float(np.sum((y_train - y_train.mean()) ** 2))
+        ss_res_tr = float(np.sum((y_train - forecast_train) ** 2))
+        r_squared = (
+            1.0 - (ss_res_tr / ss_tot_tr) if ss_tot_tr > 0 else float("nan")
+        )
+
+        ss_tot_te = float(np.sum((y_test - y_test.mean()) ** 2))
+        ss_res_te = float(np.sum((y_test - forecast_test) ** 2))
+        r_squared_oos = (
+            1.0 - (ss_res_te / ss_tot_te) if ss_tot_te > 0 else float("nan")
+        )
+
+        # HAC SE on the (y_test, forecast_test) regression per spec §5.B.1.3.
+        # Wrapper used for the primary call (mirrors spec literal); direct
+        # statsmodels used inside ``_compute_hac_bandwidth_sensitivity`` for
+        # bandwidth overrides per spec §5.B.1.4 item 2.
+        if n_test >= 2:
+            hac_primary = fit_ols_hac(
+                pd.Series(y_test),
+                pd.Series(forecast_test),
+                horizon_months=horizon_months,
+            )
+            if hac_primary is not None:
+                residual_se_hac = float(hac_primary.residual_se)
+                p_value_beta_hac = float(hac_primary.p_value_beta_NW)
+            else:
+                residual_se_hac = float("nan")
+                p_value_beta_hac = float("nan")
+        else:
+            residual_se_hac = float("nan")
+            p_value_beta_hac = float("nan")
+
+        hac_bandwidth_sensitivity = _compute_hac_bandwidth_sensitivity(
+            y_test, forecast_test, horizon_months,
+        )
+
+        # Block bootstrap of residual SE per spec §5.B.1.4. Primary block
+        # size = horizon_months // 2; sensitivity sweep at {h/4, h/2, h, 2h}.
+        primary_block_size = max(1, horizon_months // 2)
+        bootstrap_dist = _block_bootstrap_residual_se(
+            X_train_z, y_train, X_test_z, y_test, forecast_train,
+            lambda_star, bootstrap_iterations, primary_block_size, rng,
+        )
+        block_size_sensitivity_map = _compute_block_size_sensitivity(
+            X_train_z, y_train, X_test_z, y_test, forecast_train,
+            lambda_star, bootstrap_iterations, horizon_months,
+            sensitivity_block_sizes, rng,
+        )
+
+        # Grid edge bind (spec §5.B.2 item 1).
+        grid_edge_bind = (
+            lambda_star == lambda_grid[0] or lambda_star == lambda_grid[-1]
+        )
+        if grid_edge_bind:
+            warnings.warn(
+                f"lambda_selected={lambda_star:.4g} binds at grid edge "
+                f"for fold {fold.fold_id} "
+                f"(horizon={schedule.horizon}, "
+                f"schedule={schedule.schedule_type}); "
+                "widen grid via S-2 trigger if >10% rate across folds",
+                stacklevel=2,
+            )
+
+        results.append(RidgeFitResult(
+            fold_id=fold.fold_id,
+            horizon=schedule.horizon,
+            schedule_type=schedule.schedule_type,
+            lambda_selected=lambda_star,
+            lambda_grid=lambda_grid,
+            lambda_log10_sd_across_5fold=lambda_log10_sd,
+            coefficient_sign_flip_rate=0.0,  # populated post-loop (Phase 5)
+            coef=beta,
+            intercept=alpha,
+            forecast_train=forecast_train,
+            forecast_test=forecast_test,
+            r_squared=r_squared,
+            r_squared_oos=r_squared_oos,
+            residual_se_hac=residual_se_hac,
+            p_value_beta_hac=p_value_beta_hac,
+            bootstrap_residual_se_distribution=bootstrap_dist,
+            bootstrap_block_size=primary_block_size,
+            hac_maxlags=horizon_months - 1,
+            n_train_obs=n_train,
+            n_test_obs=n_test,
+            n_eff_nonoverlap_train=n_eff_train,
+            grid_edge_bind=grid_edge_bind,
+            block_size_sensitivity_se=block_size_sensitivity_map,
+            hac_bandwidth_sensitivity_se=hac_bandwidth_sensitivity,
+            fit_timestamp=fit_ts,
+        ))
+
+    # Post-pass: coefficient_sign_flip_rate vs immediately-prior outer fold
+    # (Phase 5 portion; left at 0.0 for fold 0). Stored on the frozen
+    # dataclass via ``dataclasses.replace``.
+    if len(results) >= 2:
+        updated: list[RidgeFitResult] = [results[0]]
+        for i in range(1, len(results)):
+            b_curr = results[i].coef
+            b_prev = results[i - 1].coef
+            flips = float(np.mean(
+                (np.sign(b_curr) != np.sign(b_prev)).astype(float)
+            ))
+            updated.append(replace(results[i], coefficient_sign_flip_rate=flips))
+        results = updated
+
+    return tuple(results)
+
+
+__all__ = [
+    "BOOTSTRAP_ITERATIONS_DEFAULT",
+    "LAMBDA_GRID_DEFAULT",
+    "RidgeFitResult",
+    "fit_return_forecast_task_b1",
+]

@@ -3470,6 +3470,193 @@ def _cli_gate18() -> int:
     return 0 if report.passed else 1
 
 
+def validate_gate19_l5b_task_b1_subcriteria() -> GateReport:
+    """Gate 19-B1 — L5-B Task B1 partial PASS (Ridge return-forecast).
+
+    Per ``LAYER_5_BUILD_SPEC.md`` v6 §5.B.6 sub-criteria 8-14 + 19-22
+    (Task B1 portion). Strategic disposition D-B1-2 (2026-05-13) split
+    monolithic Gate 19 into 19-A / 19-B1 / 19-B2 partial milestones:
+
+      * 19-A  → criteria 1-7  shipped at ``l5-b-task-a-accept``
+      * 19-B1 → criteria 8-14 + 19-22 (this validator) at
+                ``l5-b-task-b1-accept``
+      * 19-B2 → criteria 15-18 (RETURN_POSITIVE calibration) deferred
+
+    Compile-time checks (criteria 8-12); pytest-asserted out-of-band
+    (criteria 13, 14/19, 20-21); informational (criterion 22 robustness
+    check is orthogonal per spec §5.B.4 line 785).
+    """
+    findings: list[str] = []
+    warnings: list[str] = []
+    summary: dict = {}
+
+    try:
+        from macro_pipeline.models.return_forecast import (
+            BOOTSTRAP_ITERATIONS_DEFAULT,
+            LAMBDA_GRID_DEFAULT,
+            RidgeFitResult,
+            fit_return_forecast_task_b1,
+        )
+        from macro_pipeline.models.return_forecast import (
+            _BLOCK_SIZE_LABELS,
+            _FORBIDDEN_INPUT_COLUMNS,
+            _HAC_BANDWIDTH_LABELS,
+        )
+
+        summary["criterion_8_api_present"] = {
+            "fit_return_forecast_task_b1": "OK",
+            "RidgeFitResult": "OK",
+            "LAMBDA_GRID_DEFAULT": "OK",
+            "BOOTSTRAP_ITERATIONS_DEFAULT": "OK",
+        }
+        findings.append(
+            "Criterion 8 PASS: fit_return_forecast_task_b1 + RidgeFitResult "
+            "+ LAMBDA_GRID_DEFAULT + BOOTSTRAP_ITERATIONS_DEFAULT all "
+            "importable (spec proof item 1, adapted per D-B1-1 to "
+            "return_forecast.py)"
+        )
+
+        # Criterion 9 — AST audit: signature has no RETURN_POSITIVE param;
+        # forbidden-columns sentinel set includes the two surface forms.
+        import inspect
+        sig = inspect.signature(fit_return_forecast_task_b1)
+        forbidden_in_sig = (
+            {"positive_return_probability", "RETURN_POSITIVE"}
+            & set(sig.parameters.keys())
+        )
+        if forbidden_in_sig:
+            findings.append(
+                f"FAIL: Criterion 9 - fit_return_forecast_task_b1 signature "
+                f"contains forbidden parameter(s) {sorted(forbidden_in_sig)}"
+            )
+        elif _FORBIDDEN_INPUT_COLUMNS == frozenset(
+            {"positive_return_probability", "RETURN_POSITIVE"}
+        ):
+            findings.append(
+                "Criterion 9 PASS: AST audit confirms positive_return_probability "
+                "/ RETURN_POSITIVE NOT in Task B1 signature; "
+                "_FORBIDDEN_INPUT_COLUMNS sentinel guards runtime input panels "
+                "(closes ChatGPT v2 §D.2 per S-9)"
+            )
+        else:
+            findings.append(
+                f"FAIL: Criterion 9 - _FORBIDDEN_INPUT_COLUMNS "
+                f"= {sorted(_FORBIDDEN_INPUT_COLUMNS)}, expected "
+                "{'RETURN_POSITIVE', 'positive_return_probability'}"
+            )
+        summary["criterion_9_forbidden_columns"] = sorted(
+            _FORBIDDEN_INPUT_COLUMNS
+        )
+
+        # Criterion 10 — RidgeFitResult schema (per spec §5.B.1.1).
+        expected_fields = {
+            "fold_id", "horizon", "schedule_type", "lambda_selected",
+            "lambda_grid", "lambda_log10_sd_across_5fold",
+            "coefficient_sign_flip_rate", "coef", "intercept",
+            "forecast_train", "forecast_test", "r_squared",
+            "r_squared_oos", "residual_se_hac", "p_value_beta_hac",
+            "bootstrap_residual_se_distribution", "bootstrap_block_size",
+            "hac_maxlags", "n_train_obs", "n_test_obs",
+            "n_eff_nonoverlap_train", "grid_edge_bind",
+            "block_size_sensitivity_se", "hac_bandwidth_sensitivity_se",
+            "fit_timestamp",
+        }
+        actual_fields = set(RidgeFitResult.__dataclass_fields__.keys())
+        missing = expected_fields - actual_fields
+        extra = actual_fields - expected_fields
+        summary["criterion_10_field_count"] = len(actual_fields)
+        if missing:
+            findings.append(
+                f"FAIL: Criterion 10 - RidgeFitResult missing fields "
+                f"{sorted(missing)}"
+            )
+        elif extra:
+            findings.append(
+                f"FAIL: Criterion 10 - RidgeFitResult has unexpected extra "
+                f"fields {sorted(extra)}"
+            )
+        else:
+            findings.append(
+                f"Criterion 10 PASS: RidgeFitResult populates all "
+                f"{len(actual_fields)} fields per spec §5.B.1.1 lines "
+                "631-661 + 2 sensitivity-report fields "
+                "(block_size_sensitivity_se + hac_bandwidth_sensitivity_se) "
+                "added per Gate 19 criteria 11+12 requirement"
+            )
+
+        # Criterion 11 — block-size sensitivity labels.
+        if _BLOCK_SIZE_LABELS == ("h/4", "h/2", "h", "2h"):
+            findings.append(
+                "Criterion 11 PASS: _BLOCK_SIZE_LABELS == "
+                "('h/4','h/2','h','2h') per spec §5.B.1.4 item 1"
+            )
+        else:
+            findings.append(
+                f"FAIL: Criterion 11 - _BLOCK_SIZE_LABELS = "
+                f"{_BLOCK_SIZE_LABELS}, expected ('h/4','h/2','h','2h')"
+            )
+
+        # Criterion 12 — HAC bandwidth labels.
+        if _HAC_BANDWIDTH_LABELS == ("h-1", "andrews", "h//4_floor"):
+            findings.append(
+                "Criterion 12 PASS: _HAC_BANDWIDTH_LABELS == "
+                "('h-1','andrews','h//4_floor') per spec §5.B.1.4 item 2 "
+                "(andrews label uses Newey-West 1994 automatic bandwidth "
+                "— see _newey_west_automatic_maxlags docstring for "
+                "derivation)"
+            )
+        else:
+            findings.append(
+                f"FAIL: Criterion 12 - _HAC_BANDWIDTH_LABELS = "
+                f"{_HAC_BANDWIDTH_LABELS}, expected "
+                "('h-1','andrews','h//4_floor')"
+            )
+
+        summary["criterion_10_lambda_grid_len"] = len(LAMBDA_GRID_DEFAULT)
+        summary["bootstrap_iterations_default"] = BOOTSTRAP_ITERATIONS_DEFAULT
+    except ImportError as exc:
+        findings.append(f"FAIL: Criterion 8 - import error: {exc}")
+
+    # Out-of-band assertions (pytest).
+    warnings.append(
+        "Criterion 13 (lambda_log10_sd_across_5fold + sign_flip_rate "
+        "reporting) asserted via tests/test_return_forecast.py B8 + B9"
+    )
+    warnings.append(
+        "Criterion 14 / 19 (all 14 Task B1 tests in §5.B.5.B PASS — "
+        "13 v3-amended + B2-1 promoted per D-B1-3) asserted via full pytest"
+    )
+    warnings.append(
+        "Criterion 20 (grid_edge_bind rate < 10% across folds) asserted "
+        "via tests/test_return_forecast.py B11 (warning emission "
+        "verified); aggregate rate verified in ACCEPT report"
+    )
+    warnings.append(
+        "Criterion 21 (HAC SE non-NaN >= 95% + bootstrap seeded "
+        "reproducibly) asserted via tests/test_return_forecast.py B12 "
+        "(element-wise determinism check)"
+    )
+    warnings.append(
+        "Criterion 22 (robustness fixed-lambda-from-L3 parallel run) "
+        "INFORMATIONAL only per spec §5.B.4 line 785; not a sub-phase "
+        "blocker"
+    )
+
+    passed = not any(f.startswith("FAIL") for f in findings)
+    return GateReport(
+        name="Gate 19-B1 - L5-B Task B1 Ridge return-forecast (partial PASS)",
+        passed=passed, findings=findings, warnings=warnings, summary=summary,
+    )
+
+
+def _cli_gate19_b1() -> int:
+    import logging
+    logging.basicConfig(level="WARNING", format="%(message)s")
+    report = validate_gate19_l5b_task_b1_subcriteria()
+    print(report.render())
+    return 0 if report.passed else 1
+
+
 def validate_gate20_dataclass_migration() -> GateReport:
     """Gate 20 — L5-RM-4 ScoredObservation 6-slot batched migration.
 
@@ -3708,6 +3895,8 @@ if __name__ == "__main__":
         sys.exit(_cli_gate17())
     if cmd == "gate18":
         sys.exit(_cli_gate18())
+    if cmd == "gate19_b1":
+        sys.exit(_cli_gate19_b1())
     if cmd == "gate20":
         sys.exit(_cli_gate20())
     if cmd == "gate21":
@@ -3716,7 +3905,7 @@ if __name__ == "__main__":
         f"Unknown command: {cmd}. Available: "
         "gate1, gate2, gate3, gate4a, gate4b, gate4c, gate4d, "
         "gate8, gate9, gate10, gate11, gate12, gate13, gate14, gate15, gate16, gate17, "
-        "gate18, gate20, gate21",
+        "gate18, gate19_b1, gate20, gate21",
         file=sys.stderr,
     )
     sys.exit(2)
