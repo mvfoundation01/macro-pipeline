@@ -177,7 +177,7 @@ Spec step 3 reads as speculative — anticipates a future state where pre-1978 t
 
 **Surfaced**: L5-B Task B1 pre-flight read-and-plan (this sub-phase).
 
-Spec `LAYER_5_BUILD_SPEC.md` v6 @ `9f848bb` contains three doc-vs-implementation drifts that do not affect behavior but should be reconciled at a future v7 spec patch:
+Spec `LAYER_5_BUILD_SPEC.md` v6 @ `9f848bb` contains four doc-vs-implementation drifts that do not affect behavior but should be reconciled at a future v7 spec patch:
 
 1. **§5.B.0 + §5.B.1.1 + §5.B.7 proof item 1**: spec literal `macro_pipeline/models/ridge_cv.py` does not exist in the implementation. Task A shipped at `macro_pipeline/models/composite_refit.py` (l5-b-task-a-accept). Task B1 shipped at `macro_pipeline/models/return_forecast.py` (l5-b-task-b1-accept; D-B1-1 disposition). Task B2 shipped at `macro_pipeline/models/return_calibration.py` (l5-b-task-b2-accept; D-B1-1 precedent continued). Spec proof item 1 reads "from macro_pipeline.models.ridge_cv import fit_composite_weights, fit_return_forecast_task_b1, calibrate_return_forecast_task_b2, ...". Actual: three separate import paths.
 
@@ -185,9 +185,11 @@ Spec `LAYER_5_BUILD_SPEC.md` v6 @ `9f848bb` contains three doc-vs-implementation
 
 3. **§5.D.0 metadata anchor stale vs §5.D.5/.6/.7 canonical (D-D-1 + D-D-2)**: spec §5.D.0 metadata table says "Test delta +8 (≥4 NEG = 50% floor; 5 NEG / 3 POS = 63% NEG)" but §5.D.5 header + §5.D.5 footer + §5.D.6 PASS criterion 8 + §5.D.7 proof item 2 + §5.D.7 proof item 9 all assert the canonical "+12 tests" (eight NEG / four POS = 67%). The §5.D.0 anchor is a stale v1 relic that v2/v3/v4 expansions left orphaned. Implementation followed §5.D.5/.6/.7 canonical at `l5-d-accept`. Symbolic derivation per AP-AUTH-52: "+12 = eight v2 baseline + four v2/v3 cell_label taxonomy expansion (test #9 Wilson interval + test #10 diagnostic_only label + test #11 hierarchical pooling v4 amended + test #12 no-raw-nan v3 taxonomy)". D-D-2: §5.D.7 proof item 2 references `tests/test_drawdown_conditional.py` (singular) while §5.D.0 metadata "New files" row uses `tests/test_drawdown_conditionals.py` (plural). Single-letter typo in §5.D.7; implementation followed plural per metadata canonical.
 
+4. **§5.E.0 metadata anchor stale vs §5.E.5 canonical (D-E-1)**: spec §5.E.0 metadata table says "Test delta +6 (≥3 NEG; 3 NEG / 3 POS = 50% NEG)" but §5.E.5 header explicitly contains a "wait recount" literal mid-line — the spec author noticed inconsistency in-place ("v2: +9; 4 NEG / 5 POS = 44% NEG ... wait recount") and the footer reconciles via reclassifying test #1 as NEG-invariant to canonical "+9 tests (five NEG / four POS = 56%)". The §5.E.0 anchor is stale v1 relic; the §5.E.5 mid-line "wait recount" artifact is itself a spec-authoring trace that should be cleaned in v7. Implementation followed §5.E.5 canonical at `l5-e-accept`. Symbolic derivation per AP-AUTH-52: "+9 tests = six v1 baseline + three v2 NEW per S-6 (test #7 joint bootstrap covariance + test #8 empirical coverage + test #9 coverage inflation factor)".
+
 **Effort estimate**: 1–2h ChatGPT review + 0.5h Track A surgical scrub + 0.5h Strategic disposition ≈ 2–3h cycle (similar to L5b-4).
 
-**Priority**: **LOW** — doc-only residue; zero functional impact. Implementation matches Strategic-approved D-B1-1/-2/-3 + D-D-1/-2 dispositions, validated through `l5-b-task-b2-accept` (Gate 19 closure) and `l5-d-accept` (drawdown_conditionals doc-residue).
+**Priority**: **LOW** — doc-only residue; zero functional impact. Implementation matches Strategic-approved D-B1-1/-2/-3 + D-D-1/-2 + D-E-1 dispositions, validated through `l5-b-task-b2-accept` (Gate 19 closure), `l5-d-accept` (drawdown_conditionals doc-residue), and `l5-e-accept` (forecast_sigma doc-residue + Op-E-1 path (b)+(c) v2 helper resolution).
 
 **Owner**: post-L5 retrospective (NOT during active L5 build; spec FROZEN per scope guard).
 
@@ -197,14 +199,16 @@ Spec `LAYER_5_BUILD_SPEC.md` v6 @ `9f848bb` contains three doc-vs-implementation
 3. AP-AUTH-52 magic-number discipline applied: each new total derives from `<base_grep_count> + <delta>` with grep evidence cited.
 4. v7 ChatGPT review confirms 0 new file-naming or gate-split inconsistencies introduced.
 5. v7 spec rewrites §5.D.0 metadata "+8 / 63% NEG" stale anchor to canonical "+12 / 67% NEG" per §5.D.5/.6/.7 mirror. Fixes §5.D.7 proof item 2 typo `test_drawdown_conditional.py` (singular) to plural per metadata "New files" row.
+6. v7 spec rewrites §5.E.0 metadata "+6 / 50% NEG" stale anchor to canonical "+9 / 56% NEG" per §5.E.5 mirror. Removes §5.E.5 header literal "wait recount" spec-authoring trace; consolidates the test #1 NEG-invariant reclassification into a clean header. Expands §5.E.7 proof contract (currently "parallel to §5.D.7 pattern; brevity") into explicit ten-item enumeration matching the §5.D.7 template.
 
 **Provenance trail**:
 - L5-B Task B1 ACCEPT report (2026-05-13) — initial entry surface
 - L5-B Task B2 ACCEPT report (2026-05-13) — extended for `return_calibration.py` + Gate 19 final-close confirmation + test-count miscount correction (prior entry asserted "twenty-nine" total; corrected to twenty-eight matching the spec literal mirror anchor since B2-1 is INSIDE the Task B1 file's fourteen, not an additional test)
 - L5-D ACCEPT report (2026-05-13) — extended for §5.D.0 stale anchor (D-D-1) + §5.D.7 proof item 2 typo (D-D-2)
+- L5-E ACCEPT report (2026-05-13) — extended for §5.E.0 stale anchor (D-E-1) + §5.E.5 header "wait recount" literal + §5.E.7 proof-contract brevity expansion + Op-E-1 path (b)+(c) v2 callable-helper resolution
 - AP-AUTH-52 codified at `docs/ap_register.md` (sibling discipline)
-- D-B1-1 / D-B1-2 / D-B1-3 + D-D-1 / D-D-2 Strategic dispositions (Track B chat, 2026-05-13)
+- D-B1-1 / D-B1-2 / D-B1-3 + D-D-1 / D-D-2 + D-E-1 Strategic dispositions (Track B chat, 2026-05-13)
 
 ---
 
-**END — L5B_BACKLOG.md (L5b-2 + L5b-3 + L5b-4 + L5b-5 + L5b-6 + L5b-7 as of 2026-05-13 post-L5-D; reserved L5b-1 + L5b-8..N open)**
+**END — L5B_BACKLOG.md (L5b-2 + L5b-3 + L5b-4 + L5b-5 + L5b-6 + L5b-7 as of 2026-05-13 post-L5-E; reserved L5b-1 + L5b-8..N open)**

@@ -4381,6 +4381,200 @@ def _cli_gate23() -> int:
     return 0 if report.passed else 1
 
 
+def validate_gate24_forecast_sigma() -> GateReport:
+    """Gate 24 - L5-E forecast sigma confidence band derivation.
+
+    Per ``LAYER_5_BUILD_SPEC.md`` v6 @ ``9f848bb`` §5.E.6 (Gate 24 v2
+    PASS criteria) + §5.E.7 proof contract (parallel to §5.D.7 pattern).
+
+    Compile-time checks (criteria partial; mirror Gate 22/23 pattern)
+    + Standing Order #2 AST audit for R4 leakage mitigation
+    (substring inspection confirms no fitting / estimator
+    instantiation); pytest-asserted out-of-band via
+    tests/test_forecast_sigma.py.
+    """
+    import inspect
+
+    findings: list[str] = []
+    warnings_list: list[str] = []
+    summary: dict = {}
+
+    try:
+        from macro_pipeline.analysis.forecast_sigma import (
+            ForecastSigmaResult,
+            derive_forecast_sigma,
+        )
+        import macro_pipeline.analysis.forecast_sigma as _fs_mod
+
+        summary["criterion_1_api_present"] = {
+            "ForecastSigmaResult": "OK",
+            "derive_forecast_sigma": "OK",
+        }
+        findings.append(
+            "Criterion 1 PASS: ForecastSigmaResult + derive_forecast_sigma "
+            "importable (spec §5.E.1 + §5.E.7 proof item 1)"
+        )
+
+        # Criterion 2 - signature matches spec §5.E.1 (6 scalar params).
+        expected_params = {
+            "ridge_residual_se_hac", "isotonic_bootstrap_se",
+            "historical_return_sigma", "analog_period_dispersion_sigma",
+            "calibrated_probability", "horizon",
+        }
+        sig = inspect.signature(derive_forecast_sigma)
+        actual_params = set(sig.parameters.keys())
+        missing = expected_params - actual_params
+        extra = actual_params - expected_params
+        summary["criterion_2_signature_params"] = sorted(actual_params)
+        if missing:
+            findings.append(
+                f"FAIL: Criterion 2 - derive_forecast_sigma missing "
+                f"params {sorted(missing)}"
+            )
+        elif extra:
+            findings.append(
+                f"FAIL: Criterion 2 - derive_forecast_sigma has "
+                f"unexpected params {sorted(extra)} (spec literal six "
+                "scalar params; per Op-E-1 path (b)+(c) the v2 math is "
+                "exposed via callable helpers, not signature extension)"
+            )
+        else:
+            findings.append(
+                "Criterion 2 PASS: derive_forecast_sigma signature matches "
+                "spec six-scalar contract (ridge_residual_se_hac, "
+                "isotonic_bootstrap_se, historical_return_sigma, "
+                "analog_period_dispersion_sigma, calibrated_probability, "
+                "horizon) — Op-E-1 path (b)+(c) preserves spec literal"
+            )
+
+        # Criterion 3 - ForecastSigmaResult v2-canonical field set
+        # (12 fields: 7 v1 + 5 v2 NEW per S-6).
+        expected_fields = {
+            "horizon", "forecast_sigma", "return_sigma",
+            "analog_dispersion_sigma",
+            "calibrated_probability_band_lower",
+            "calibrated_probability_band_upper", "z_value",
+            "joint_bootstrap_sigma", "covariance_ridge_isotonic",
+            "forecast_sigma_with_covariance", "empirical_coverage_95",
+            "coverage_inflation_factor",
+        }
+        actual_fields = set(ForecastSigmaResult.__dataclass_fields__.keys())
+        missing_f = expected_fields - actual_fields
+        extra_f = actual_fields - expected_fields
+        summary["criterion_3_field_count"] = len(actual_fields)
+        if missing_f:
+            findings.append(
+                f"FAIL: Criterion 3 - ForecastSigmaResult missing fields "
+                f"{sorted(missing_f)}"
+            )
+        elif extra_f:
+            findings.append(
+                f"FAIL: Criterion 3 - ForecastSigmaResult has unexpected "
+                f"fields {sorted(extra_f)}"
+            )
+        else:
+            findings.append(
+                f"Criterion 3 PASS: ForecastSigmaResult populates all "
+                f"{len(actual_fields)} v2-canonical fields per spec "
+                "§5.E.1 (seven v1 + five v2 NEW per S-6); symbolic "
+                "derivation per AP-AUTH-52"
+            )
+
+        # Criterion 4 - z_value default is the 95% two-sided normal
+        # quantile per spec §5.E.1 ForecastSigmaResult definition.
+        z_default = ForecastSigmaResult.__dataclass_fields__["z_value"].default
+        expected_z = 1.959963984540054
+        summary["criterion_4_z_default"] = z_default
+        if abs(z_default - expected_z) < 1e-12:
+            findings.append(
+                f"Criterion 4 PASS: z_value default == "
+                f"{z_default:.15f} (95% two-sided normal quantile) per "
+                "spec §5.E.1 ForecastSigmaResult.z_value default"
+            )
+        else:
+            findings.append(
+                f"FAIL: Criterion 4 - z_value default = {z_default}, "
+                f"expected {expected_z}"
+            )
+
+        # Standing Order #2 AST audit (R4 leakage mitigation; mirrors
+        # Gate 22/23 pattern). The docstring is carefully written to
+        # avoid the literal forbidden substrings.
+        source = inspect.getsource(_fs_mod)
+        forbidden_substrings = (
+            ".fit(",
+            "train_test_split",
+            "LogisticRegression",
+            "Ridge(",
+            "IsotonicRegression(",
+        )
+        found_substrings = [s for s in forbidden_substrings if s in source]
+        summary["standing_order_2_ast_audit_forbidden_found"] = found_substrings
+        if found_substrings:
+            findings.append(
+                f"FAIL: Standing Order #2 AST audit - forecast_sigma "
+                f"contains forbidden fitting/estimator substring(s) "
+                f"{found_substrings}; this module must be POST-HOC "
+                "scoring only (R4 mitigation)"
+            )
+        else:
+            findings.append(
+                "Standing Order #2 AST audit PASS: forecast_sigma source "
+                "contains no fitting / estimator instantiation - module "
+                "is pure post-hoc scoring (R4 mitigation; spec §5.E.3 "
+                "methodology rigor v2 per S-6)"
+            )
+    except ImportError as exc:
+        findings.append(f"FAIL: Criterion 1 - import error: {exc}")
+
+    # Out-of-band assertions (pytest).
+    warnings_list.append(
+        "Criterion 5 (quadrature + joint emitted per horizon to 1e-10) "
+        "asserted via tests/test_forecast_sigma.py test #1"
+    )
+    warnings_list.append(
+        "Criterion 6 (band invariant lower <= p <= upper) asserted via "
+        "test #2"
+    )
+    warnings_list.append(
+        "Criterion 7 (clipping at [0, 1] boundaries) asserted via test #3"
+    )
+    warnings_list.append(
+        "Criterion 8 (triple-sigma disambiguation: forecast / return / "
+        "analog) asserted via test #4 per spec §5.E.3.1"
+    )
+    warnings_list.append(
+        "Criterion 9 (joint bootstrap covariance helper closed-form to "
+        "1e-10) asserted via test #7 exercising "
+        "_compute_forecast_sigma_with_covariance per Op-E-1 path (c)"
+    )
+    warnings_list.append(
+        "Criterion 10 (empirical coverage + inflation factor) asserted "
+        "via tests #8 + #9; coverage_inflation_factor = sqrt(0.95/0.85) "
+        "machine-exact via _compute_coverage_inflation_factor"
+    )
+    warnings_list.append(
+        "Criterion 11 (all nine spec tests in §5.E.5 PASS per §5.E.5 "
+        "v2 canonical; symbolic +9 derivation per AP-AUTH-52: six v1 "
+        "baseline + three v2 NEW per S-6) asserted via full pytest"
+    )
+
+    passed = not any(f.startswith("FAIL") for f in findings)
+    return GateReport(
+        name="Gate 24 - L5-E forecast sigma confidence band",
+        passed=passed, findings=findings, warnings=warnings_list,
+        summary=summary,
+    )
+
+
+def _cli_gate24() -> int:
+    import logging
+    logging.basicConfig(level="WARNING", format="%(message)s")
+    report = validate_gate24_forecast_sigma()
+    print(report.render())
+    return 0 if report.passed else 1
+
+
 if __name__ == "__main__":
     import sys
     cmd = sys.argv[1] if len(sys.argv) > 1 else "gate1"
@@ -4432,11 +4626,13 @@ if __name__ == "__main__":
         sys.exit(_cli_gate22())
     if cmd == "gate23":
         sys.exit(_cli_gate23())
+    if cmd == "gate24":
+        sys.exit(_cli_gate24())
     print(
         f"Unknown command: {cmd}. Available: "
         "gate1, gate2, gate3, gate4a, gate4b, gate4c, gate4d, "
         "gate8, gate9, gate10, gate11, gate12, gate13, gate14, gate15, gate16, gate17, "
-        "gate18, gate19_b1, gate19_b2, gate20, gate21, gate22, gate23",
+        "gate18, gate19_b1, gate19_b2, gate20, gate21, gate22, gate23, gate24",
         file=sys.stderr,
     )
     sys.exit(2)
