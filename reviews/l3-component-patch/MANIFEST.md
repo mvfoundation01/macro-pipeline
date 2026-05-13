@@ -55,7 +55,9 @@ Source code (consult build branch directly):
 | File | sha256 (first 12) |
 |------|-------------------|
 | L3_COMPONENT_PANEL_VERIFICATION.md | 898786cddc1c |
-| test_transcript.txt | c03210a5f6ca |
+| test_transcript.txt | 5aa50cde909f |
+
+> **Hash provenance note**: sha256 first-12 hashes computed from served content (post git autocrlf normalization, what reviewers fetch via raw URL). For text files originating from shell redirection (e.g., `test_transcript.txt` captured via `pytest > file`), the on-disk hash before commit may differ from the blob hash after commit due to CRLF→LF normalization. AP-AUTH-48 spirit: reviewer-side hash MUST match the MANIFEST claim. Verified post-commit via curl + sha256sum on the served URL.
 
 ---
 
