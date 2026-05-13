@@ -3549,7 +3549,8 @@ def validate_gate19_l5b_task_b1_subcriteria() -> GateReport:
         )
 
         # Criterion 10 — RidgeFitResult schema (per spec §5.B.1.1 +
-        # KICK-4/-5 no-default fields per AP-AUTH-53 step #3 / AP-AUTH-54).
+        # KICK-4/-5/-6 no-default fields per AP-AUTH-53 step #3 /
+        # AP-AUTH-54 internal-implementation variant pattern).
         expected_fields = {
             "fold_id", "horizon", "schedule_type", "lambda_selected",
             "lambda_grid", "lambda_log10_sd_across_5fold",
@@ -3564,6 +3565,7 @@ def validate_gate19_l5b_task_b1_subcriteria() -> GateReport:
             "inner_cv_scaler_recomputed",       # KICK-4 no-default
             "bootstrap_diagnostics",            # KICK-5 no-default (primary)
             "block_size_sensitivity_diagnostics",  # KICK-5 no-default (sweep)
+            "inference_label",                  # KICK-6 no-default (taxonomy)
         }
         actual_fields = set(RidgeFitResult.__dataclass_fields__.keys())
         missing = expected_fields - actual_fields
@@ -3834,6 +3836,111 @@ def validate_gate19_l5b_task_b1_subcriteria() -> GateReport:
         except Exception as exc:
             findings.append(
                 f"FAIL: Criterion 27 [KICK-5] - runtime probe error: {exc}"
+            )
+
+        # ===================================================================
+        # L5b-KICK-6 Criteria 28-29 — Ridge inference labeling
+        # separation per AP-AUTH-53 sixth instance / AP-AUTH-54 third
+        # internal-implementation variant (lightest-weight envelope:
+        # dataclass discipline only, no helper refactor). Closes ChatGPT
+        # 5.5 IMPORTANT #5 reviewer flag on Ridge inference labeling.
+        # ===================================================================
+        # Criterion 28 - inference_label field no-default check.
+        kick6_field = "inference_label"
+        kick6_present = kick6_field in dataclass_fields
+        kick6_no_default = (
+            kick6_present
+            and dataclass_fields[kick6_field].default is _MISSING
+            and dataclass_fields[kick6_field].default_factory is _MISSING
+        )
+        summary["criterion_28_kick6_field_no_default"] = kick6_no_default
+        if not kick6_present:
+            findings.append(
+                f"FAIL: Criterion 28 [KICK-6] - RidgeFitResult missing "
+                f"field {kick6_field!r}"
+            )
+        elif not kick6_no_default:
+            findings.append(
+                f"FAIL: Criterion 28 [KICK-6] - {kick6_field!r} has "
+                "default (must be no-default per AP-AUTH-53 step #3 + "
+                "AP-AUTH-54 internal-implementation variant; forces "
+                "caller intent to express forecast-vs-realized labeling)"
+            )
+        else:
+            findings.append(
+                f"Criterion 28 PASS [KICK-6]: RidgeFitResult exposes "
+                f"{kick6_field!r} field with no default (Option Y "
+                "signature inspection per AP-AUTH-54; closes ChatGPT "
+                "5.5 IMPORTANT #5 Ridge inference labeling separation)"
+            )
+
+        # Criterion 29 - runtime probe: every fold's inference_label
+        # equals "forecast_vs_realized" (the institutionally correct
+        # label for the implementation). Reuses Criterion 27's probe
+        # fixture; no new probe construction.
+        try:
+            # Re-run a minimal probe (the Criterion 27 probe used
+            # bootstrap_iterations=5; we reuse its results semantics).
+            import warnings as _warnings_mod_k6
+            import numpy as _np_k6
+            import pandas as _pd_k6
+            from macro_pipeline.analysis.walk_forward_cv import (
+                generate_schedule as _generate_schedule_k6,
+            )
+
+            _rng_k6 = _np_k6.random.default_rng(42)
+            _n_k6 = 480
+            _idx_k6 = _pd_k6.date_range(
+                "1985-01-01", periods=_n_k6, freq="MS",
+            )
+            _crps_k6 = _pd_k6.DataFrame(
+                {"crps_cal": _rng_k6.uniform(0.05, 0.95, _n_k6)},
+                index=_idx_k6,
+            )
+            _cdrs_cols_k6 = {
+                f"cdrs_h{h}_t{t}": _rng_k6.uniform(0.05, 0.95, _n_k6)
+                for h in ("1Y", "3Y", "5Y", "10Y")
+                for t in (10, 20, 35, 50, 65)
+            }
+            _cdrs_k6 = _pd_k6.DataFrame(_cdrs_cols_k6, index=_idx_k6)
+            _macro_k6 = _pd_k6.DataFrame(
+                {"pe_cape": _rng_k6.normal(20.0, 5.0, _n_k6)},
+                index=_idx_k6,
+            )
+            _fwd_k6 = _pd_k6.Series(
+                _rng_k6.normal(0.07, 0.15, _n_k6), index=_idx_k6,
+            )
+            _sched_k6 = _generate_schedule_k6(
+                horizon="5Y", schedule_type="expanding",
+                panel_index=_idx_k6,
+            )
+            with _warnings_mod_k6.catch_warnings():
+                _warnings_mod_k6.simplefilter("ignore")
+                _probe_k6 = fit_return_forecast_task_b1(
+                    _sched_k6, _crps_k6, _cdrs_k6, _macro_k6, _fwd_k6,
+                    bootstrap_iterations=5,
+                )
+            assert len(_probe_k6) > 0, "probe yielded zero folds"
+            _labels = {r.inference_label for r in _probe_k6}
+            summary["criterion_29_inference_label_set"] = sorted(_labels)
+            if _labels == {"forecast_vs_realized"}:
+                findings.append(
+                    "Criterion 29 PASS [KICK-6]: runtime probe confirms "
+                    "every fold has inference_label='forecast_vs_realized' "
+                    "(institutionally correct label per ChatGPT 5.5 "
+                    "IMPORTANT #5; closes the labeling-clarity gap "
+                    "between misleading pre-KICK-6 docstring and actual "
+                    "univariate calibration regression semantic)"
+                )
+            else:
+                findings.append(
+                    f"FAIL: Criterion 29 [KICK-6] - runtime probe "
+                    f"inference_label set = {sorted(_labels)}, "
+                    "expected {'forecast_vs_realized'} only"
+                )
+        except Exception as exc:
+            findings.append(
+                f"FAIL: Criterion 29 [KICK-6] - runtime probe error: {exc}"
             )
     except ImportError as exc:
         findings.append(f"FAIL: Criterion 8 - import error: {exc}")

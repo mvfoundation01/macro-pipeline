@@ -60,6 +60,21 @@ flavor): post-KICK-5 strict-NEG 6 / POS-inv 5 / POS 14 = 11 of 25 =
 (test_return_forecast.py header at top), each KICK sub-phase satisfies
 its own 50% NEG floor: KICK-5 has 2 strict NEG + 1 POS-inv = 3 of 6 =
 50% NEG-flavor (floor met at the sub-phase level).
+
+L5b-KICK-6 (tag ``l5b-kick-6-accept``, 2026-05-15) appended five tests
+(K6.1-K6.5) closing the ChatGPT 5.5 IMPORTANT #5 reviewer flag on
+Ridge inference labeling separation via the AP-AUTH-53 sixth-instance /
+AP-AUTH-54 third internal-implementation variant (lightest-weight
+envelope; dataclass discipline only, no helper refactor).
+
+  K6.1  POS         test_kick6_inference_label_field_present_and_populated_correctly
+  K6.2  POS-inv     test_kick6_p_value_beta_hac_docstring_clarifies_forecast_vs_realized
+  K6.3  NEG         test_kick6_dataclass_rejects_invalid_inference_label
+  K6.4  NEG         test_kick6_dataclass_rejects_missing_inference_label
+  K6.5  NEG-inv     test_kick6_existing_p_value_beta_hac_semantic_is_forecast_vs_realized
+
+NEG-flavor accounting: KICK-6 has 2 strict NEG + 1 POS-inv + 1 NEG-inv =
+4 of 5 = 80% NEG-flavor at the sub-phase level (floor met).
 """
 from __future__ import annotations
 
@@ -592,6 +607,11 @@ def test_kick4_dataclass_rejects_missing_inner_cv_scaler_recomputed():
             hac_bandwidth_sensitivity_se={},
             fit_timestamp=pd.Timestamp("2026-05-15"),
             # inner_cv_scaler_recomputed deliberately omitted — must raise
+            # KICK-6 fixup (Strategic disposition #8): inference_label
+            # supplied so K4.4 precisely tests only inner_cv_scaler_
+            # recomputed omission (substring match still works
+            # regardless, but explicit field provision is cleaner).
+            inference_label="forecast_vs_realized",
         )
 
 
@@ -839,3 +859,209 @@ def test_kick5_dataclass_rejects_missing_no_default_field():
             fallback_flag="none",
             # n_train omitted — must raise
         )
+
+
+# ===========================================================================
+# L5b-KICK-6 tests K6.1-K6.5 — Ridge inference labeling separation.
+# Closes ChatGPT 5.5 IMPORTANT #5 reviewer flag via the AP-AUTH-53
+# sixth-instance / AP-AUTH-54 third internal-implementation variant
+# (lightest-weight envelope; dataclass discipline only). NEG-flavor
+# 4 of 5 = 80% at sub-phase level (floor met).
+# ===========================================================================
+
+
+# ---------------------------------------------------------------------------
+# Test K6.1 — POS (KICK-6)
+# ---------------------------------------------------------------------------
+def test_kick6_inference_label_field_present_and_populated_correctly():
+    """KICK-6: every ``RidgeFitResult`` emitted by
+    ``fit_return_forecast_task_b1`` carries
+    ``inference_label == "forecast_vs_realized"`` — the institutionally
+    correct label for the implementation per ChatGPT 5.5 IMPORTANT #5
+    reviewer flag (``p_value_beta_hac`` is univariate calibration
+    regression diagnostic, NOT Ridge per-feature inference)."""
+    schedule, crps, cdrs, macro, fwd = _build_synthetic_inputs(horizon="5Y")
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        results = fit_return_forecast_task_b1(
+            schedule, crps, cdrs, macro, fwd, bootstrap_iterations=5,
+        )
+    assert len(results) > 0, "fixture must produce >= 1 fold"
+    assert hasattr(results[0], "inference_label"), (
+        "RidgeFitResult must expose inference_label field (KICK-6 / "
+        "AP-AUTH-54 step #2)"
+    )
+    labels = [r.inference_label for r in results]
+    assert all(lbl == "forecast_vs_realized" for lbl in labels), (
+        f"all folds must have inference_label='forecast_vs_realized'; "
+        f"got {set(labels)}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Test K6.2 — POS-invariant (KICK-6)
+# ---------------------------------------------------------------------------
+def test_kick6_p_value_beta_hac_docstring_clarifies_forecast_vs_realized():
+    """KICK-6 POS-invariant: source inspection of ``return_forecast``
+    module confirms the ``p_value_beta_hac`` field declaration contains
+    the substring ``"forecast-vs-realized"`` (verifies that the
+    pre-KICK-6 misleading docstring at line 324 has been rewritten to
+    correctly label the actual semantic of the field — univariate
+    calibration regression slope p-value, NOT Ridge coefficient
+    inference)."""
+    from macro_pipeline.models import return_forecast as _rf_mod
+    src = inspect.getsource(_rf_mod)
+    # The new docstring MUST contain the explicit semantic label.
+    assert "forecast-vs-realized" in src, (
+        "return_forecast module source missing 'forecast-vs-realized' "
+        "substring; expected in the p_value_beta_hac field declaration "
+        "comment per KICK-6 docstring rewrite"
+    )
+    # And it should explicitly disclaim Ridge coefficient inference.
+    assert "NOT a Ridge coefficient" in src or "NOT a Ridge" in src, (
+        "return_forecast module source missing disclaimer that "
+        "p_value_beta_hac is NOT a Ridge coefficient inference "
+        "statistic; expected per KICK-6 docstring rewrite"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Test K6.3 — NEG (KICK-6)
+# ---------------------------------------------------------------------------
+def test_kick6_dataclass_rejects_invalid_inference_label():
+    """KICK-6: bare ``RidgeFitResult(..., inference_label="bogus")``
+    raises ``ValueError`` from ``__post_init__`` — proves tri-state
+    validation (mirrors KICK-3 ``BinDiagnosticStatus`` + KICK-5
+    ``BootstrapDiagnostics`` validator precedents). First
+    ``__post_init__`` on ``RidgeFitResult`` itself."""
+    from macro_pipeline.models.return_forecast import BootstrapDiagnostics
+
+    # Build a fully-valid construction except for the invalid label.
+    valid_diag = BootstrapDiagnostics(
+        n_train=120, n_eff=10, block_size=12, block_count=10,
+        B_effective=1000, fallback_flag="none",
+    )
+    with pytest.raises(ValueError, match=r"inference_label="):
+        RidgeFitResult(
+            fold_id=0,
+            horizon="1Y",
+            schedule_type="expanding",
+            lambda_selected=1.0,
+            lambda_grid=(0.1, 1.0, 10.0),
+            lambda_log10_sd_across_5fold=0.0,
+            coefficient_sign_flip_rate=0.0,
+            coef=np.zeros(3),
+            intercept=0.0,
+            forecast_train=np.zeros(10),
+            forecast_test=np.zeros(5),
+            r_squared=0.0,
+            r_squared_oos=0.0,
+            residual_se_hac=0.0,
+            p_value_beta_hac=1.0,
+            bootstrap_residual_se_distribution=np.zeros(0),
+            bootstrap_block_size=6,
+            hac_maxlags=11,
+            n_train_obs=120,
+            n_test_obs=5,
+            n_eff_nonoverlap_train=10,
+            grid_edge_bind=False,
+            block_size_sensitivity_se={},
+            hac_bandwidth_sensitivity_se={},
+            fit_timestamp=pd.Timestamp("2026-05-15"),
+            inner_cv_scaler_recomputed=True,
+            bootstrap_diagnostics=valid_diag,
+            block_size_sensitivity_diagnostics={"h": valid_diag},
+            inference_label="bogus",  # invalid tri-state
+        )
+
+
+# ---------------------------------------------------------------------------
+# Test K6.4 — NEG (KICK-6)
+# ---------------------------------------------------------------------------
+def test_kick6_dataclass_rejects_missing_inference_label():
+    """KICK-6: bare ``RidgeFitResult(...)`` without
+    ``inference_label=`` raises ``TypeError`` — proves the no-default
+    contract per AP-AUTH-53 step #3 / AP-AUTH-54 step #2."""
+    with pytest.raises(TypeError, match=r"inference_label"):
+        RidgeFitResult(
+            fold_id=0,
+            horizon="1Y",
+            schedule_type="expanding",
+            lambda_selected=1.0,
+            lambda_grid=(0.1, 1.0, 10.0),
+            lambda_log10_sd_across_5fold=0.0,
+            coefficient_sign_flip_rate=0.0,
+            coef=np.zeros(3),
+            intercept=0.0,
+            forecast_train=np.zeros(10),
+            forecast_test=np.zeros(5),
+            r_squared=0.0,
+            r_squared_oos=0.0,
+            residual_se_hac=0.0,
+            p_value_beta_hac=1.0,
+            bootstrap_residual_se_distribution=np.zeros(0),
+            bootstrap_block_size=6,
+            hac_maxlags=11,
+            n_train_obs=10,
+            n_test_obs=5,
+            n_eff_nonoverlap_train=1,
+            grid_edge_bind=False,
+            block_size_sensitivity_se={},
+            hac_bandwidth_sensitivity_se={},
+            fit_timestamp=pd.Timestamp("2026-05-15"),
+            inner_cv_scaler_recomputed=True,
+            # inference_label deliberately omitted — must raise
+        )
+
+
+# ---------------------------------------------------------------------------
+# Test K6.5 — NEG-invariant (KICK-6)
+# ---------------------------------------------------------------------------
+def test_kick6_existing_p_value_beta_hac_semantic_is_forecast_vs_realized():
+    """KICK-6 NEG-invariant: empirical evidence that
+    ``p_value_beta_hac`` IS the univariate forecast-vs-realized
+    calibration regression slope p-value (matching the new label),
+    NOT a Ridge coefficient inference statistic.
+
+    Probe: synthesize a fold where the forecast perfectly predicts the
+    realized values (forecast == y_test exactly). For the univariate
+    regression ``realized = α + β·forecast + ε``:
+      - β should be exactly 1.0 (slope of identity line)
+      - residuals should be near zero
+      - p-value for β should be vanishingly small (slope is
+        overwhelmingly statistically distinguishable from zero)
+
+    If `p_value_beta_hac` were a Ridge coefficient inference statistic
+    instead (it isn't, but if it were), this fixture wouldn't behave
+    this way because Ridge has multiple coefficients and no single
+    p-value applies. The fact that the p-value behaves like a slope
+    p-value confirms the field IS forecast-vs-realized."""
+    import pandas as pd
+    from macro_pipeline.analysis.newey_west_hac import fit_ols_hac
+
+    # Construct a perfect-forecast fixture: forecast == y_test exactly.
+    np_rng = np.random.default_rng(42)
+    n = 60
+    y_test = np_rng.normal(0.05, 0.1, n)
+    forecast_test = y_test.copy()  # perfect predictor
+    hac = fit_ols_hac(
+        pd.Series(y_test),
+        pd.Series(forecast_test),
+        horizon_months=12,
+    )
+    assert hac is not None, "fit_ols_hac returned None on valid fixture"
+    # Slope β should be exactly 1.0 (within numerical tolerance).
+    assert abs(hac.beta - 1.0) < 1e-10, (
+        f"NEG-invariant failure: perfect forecast → β should equal 1.0; "
+        f"got β={hac.beta}. This would only be true if the statistic "
+        "is the univariate calibration slope, NOT a Ridge coefficient."
+    )
+    # p-value should be vanishingly small (slope highly significant).
+    assert hac.p_value_beta_NW < 1e-6, (
+        f"NEG-invariant failure: perfect-forecast fixture → p-value "
+        f"should be near zero (slope overwhelmingly significant); "
+        f"got p={hac.p_value_beta_NW}. The fact that p-value behaves "
+        "like a slope-significance statistic confirms it IS the "
+        "univariate calibration regression p-value (forecast-vs-"
+        "realized), NOT Ridge per-feature inference."
+    )

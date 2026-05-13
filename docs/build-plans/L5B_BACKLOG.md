@@ -51,7 +51,7 @@ When external reviewers (Codex / ChatGPT) flag a CRITICAL or IMPORTANT issue in 
 6. **Pre-flight Sxx-N (catastrophic state) triage** via grep evidence; defer entry to L5B_BACKLOG.md if production callers do not yet exist.
 7. **Module docstring + L5B_BACKLOG.md SPRINT EXECUTION LOG** documents v1 → v2 architectural drift.
 
-Confirmed via L5b-KICK-1 (isotonic `fit_window` invariant) + L5b-KICK-2 (forecast σ v2 production wrapper). Anticipated to apply at KICK-3 through KICK-7. **KICK-3 confirmed (third instance) at `l5b-kick-3-accept`** — see entry below. **KICK-4 confirmed (fourth instance, internal-implementation variant) at `l5b-kick-4-accept`** — see entry below. **KICK-5 confirmed (fifth instance, second internal-implementation variant) at `l5b-kick-5-accept`** — AP-AUTH-54 codified at this commit (see entry below).
+Confirmed via L5b-KICK-1 (isotonic `fit_window` invariant) + L5b-KICK-2 (forecast σ v2 production wrapper). Anticipated to apply at KICK-3 through KICK-7. **KICK-3 confirmed (third instance) at `l5b-kick-3-accept`** — see entry below. **KICK-4 confirmed (fourth instance, internal-implementation variant) at `l5b-kick-4-accept`** — see entry below. **KICK-5 confirmed (fifth instance, second internal-implementation variant) at `l5b-kick-5-accept`** — AP-AUTH-54 codified at this commit (see entry below). **KICK-6 confirmed (sixth instance, third internal-implementation variant; lightest-weight envelope) at `l5b-kick-6-accept`** — see entry below.
 
 ---
 
@@ -135,7 +135,29 @@ When the reviewer-flagged surface is an internal helper (`_` prefix) or private 
 3. **Gate validator extension via Option Y** — signature inspection on the public dataclass + AST audit on the internal helper body OR runtime probe on a synthesized fit.
 4. **Pre-flight empirical evidence** — when reviewer concern targets an edge-case path (e.g., fallback, degenerate state), pre-flight read-and-plan should demonstrate the path is empirically reachable in production fixtures before Phase 0, to confirm the discipline isn't ceremonial.
 
-Confirmed via L5b-KICK-4 (inner-CV z-scaler purity; private helper `_select_lambda_inner_cv_ridge`; field `inner_cv_scaler_recomputed`) + L5b-KICK-5 (bootstrap diagnostics table; private helper `_block_bootstrap_residual_se`; fields `bootstrap_diagnostics` + `block_size_sensitivity_diagnostics`). Anticipated to apply at KICK-6+ when reviewer flags target internal estimator mechanics rather than public output contracts.
+Confirmed via L5b-KICK-4 (inner-CV z-scaler purity; private helper `_select_lambda_inner_cv_ridge`; field `inner_cv_scaler_recomputed`) + L5b-KICK-5 (bootstrap diagnostics table; private helper `_block_bootstrap_residual_se`; fields `bootstrap_diagnostics` + `block_size_sensitivity_diagnostics`). Anticipated to apply at KICK-6+ when reviewer flags target internal estimator mechanics rather than public output contracts. **KICK-6 confirmed (third instance, lightest-weight envelope) at `l5b-kick-6-accept`** — see entry below.
+
+---
+
+### KICK-6 — Ridge inference labeling separation (2026-05-15)
+
+**ACCEPT tag**: `l5b-kick-6-accept`
+**Reviewer authority**: ChatGPT 5.5 IMPORTANT #5 — "Separate Ridge forecast inference from feature significance. Affected sub-phase: L5-B / reporting. Regularized coefficients do not support naive per-feature inference. Ridge return p-values are necessarily proxy diagnostics, not coefficient-level inferential p-values for every feature. The final reports should label them as forecast-vs-realized or model-level diagnostics, not 'feature significance.'"
+**Approach**: A (Strategic-approved 2026-05-15; third internal-implementation variant of AP-AUTH-54; lightest-weight envelope) — add `inference_label: InferenceLabel` no-default field to `RidgeFitResult` plus rewrite misleading docstring at `p_value_beta_hac` field declaration. NO helper refactor (AP-AUTH-54 step #1 N/A); entire AP-AUTH-54 mechanism satisfied via steps #2-4 (no-default field + Option Y gate inspection + pre-flight empirical evidence chain). NOT a wrapper-pattern because no helper change required.
+**Option**: Y (Strategic-approved 2026-05-15) — Gate 19-B1 extension via signature inspection plus runtime probe asserting `inference_label == "forecast_vs_realized"` on every fold. Two new criteria (twenty-eight / twenty-nine).
+**Sxx-18 triage (Strategic §14 mandatory check)**: NOT triggered. Empirical evidence chain at read-and-plan ITEM 0 verified that `return_forecast.py:998-1005` calls `fit_ols_hac(y_test, forecast_test, ...)` which is univariate realized = alpha + beta times forecast + eps regression (one x variable); `newey_west_hac.py:48` docstring unambiguously confirms single-x regression. The `p_value_beta_hac` field IS forecast-vs-realized calibration slope p-value (NOT Ridge per-feature coefficient inference). Reviewer interpretation correct; sub-phase correctly scoped as labeling-clarity not algorithm-correction.
+**Misleading docstring rewritten** (Phase four): pre-KICK-6 line three-two-four inline comment said "ridge fits y on full X — use overall F-test p surrogate" — both misleading (Ridge does not admit per-feature p-values under standard sampling theory; no F-test surrogate is computed). Post-KICK-6 comment explicitly cites the univariate forecast-vs-realized regression and disclaims Ridge coefficient inference. K6.2 POS-invariant test pins this rewrite via source-substring inspection ("forecast-vs-realized" + "NOT a Ridge").
+**Tri-state taxonomy** (matches Strategic §3.2):
+- `"forecast_vs_realized"` — p-value from univariate calibration regression diagnostic (institutionally correct label for Ridge fits in this module; default post-KICK-6)
+- `"feature_significance"` — per-feature coefficient inference (reserved for future OLS variants; not used by Ridge)
+- `"diagnostic_only"` — p-value reported as illustrative but not statistically inferential
+**First `__post_init__` on `RidgeFitResult`** (Phase two): tri-state validation enforced at construction time. Mirrors KICK-3 `BinDiagnosticStatus` plus KICK-5 `BootstrapDiagnostics` validator precedents. Frozen-dataclass compatibility verified (validator is read-only; no `object.__setattr__` calls).
+**AP-AUTH-54 lightest-weight envelope variance** (Strategic disposition seven approved): KICK-4 was heaviest (helper refactor plus field plus AST audit); KICK-5 was medium (tuple-return helper plus dual fields plus runtime probe); KICK-6 is lightest (dataclass discipline plus docstring rewrite plus runtime probe — no helper change). All three are coherent internal-implementation variants. No sub-variant codification needed per Strategic; envelope range documented inline in module docstring for future reference.
+**Test delta**: plus five new tests (K6.1 through K6.5; one POS plus one POS-inv plus two strict NEG plus one NEG-inv; NEG-flavor four of five equals eighty percent at sub-phase level — floor met). Plus K4.4 cosmetic fixup at test line five-eight-three (Strategic disposition eight; `inference_label="forecast_vs_realized"` added so K4.4 precisely tests only `inner_cv_scaler_recomputed` omission; substring match still works regardless). Baseline seven-hundred-forty-five to seven-hundred-fifty.
+**Caller updates**: zero in production tree (no production caller of `fit_return_forecast_task_b1` exists; consistent shape with Sxx-13 through Sxx-17 prospective-only outcomes).
+**Effort variance**: smallest L5b sub-phase to date (1.0-1.5h actual estimated; one new field plus docstring rewrite plus five tests plus two-criterion gate extension).
+**AP-AUTH delta**: zero (AP-AUTH-53 plus AP-AUTH-54 cited as governing patterns; third internal-implementation variant; lightest-weight envelope variance documented inline; no new codification needed per Strategic disposition seven).
+**Sxx delta**: zero.
 
 ---
 

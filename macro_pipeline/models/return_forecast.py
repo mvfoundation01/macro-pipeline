@@ -65,6 +65,63 @@ the two L5-B estimator families in sibling modules. The wording drift is
 tracked in ``L5B_BACKLOG.md`` as ``L5b-7`` (doc-only); zero functional
 impact.
 
+L5b-KICK-6 (tag ``l5b-kick-6-accept``, 2026-05-15) — inference labeling
+-----------------------------------------------------------------------
+Closes the ChatGPT 5.5 IMPORTANT #5 reviewer flag ("Separate Ridge
+forecast inference from feature significance. Regularized coefficients
+do not support naive per-feature inference. Ridge return p-values are
+necessarily proxy diagnostics, not coefficient-level inferential
+p-values for every feature.") via the AP-AUTH-53 sixth instance /
+AP-AUTH-54 third internal-implementation variant pattern (lightest-
+weight envelope: dataclass discipline only, no helper refactor):
+
+* **Sxx-18 NOT triggered** (verified at read-and-plan ITEM 0).
+  Empirical evidence chain: ``return_forecast.py:998-1005`` calls
+  ``fit_ols_hac(y_test, forecast_test, ...)`` (univariate forecast-
+  vs-realized regression); ``newey_west_hac.py:48`` docstring
+  unambiguously states "Fit y = alpha + beta * x + eps with
+  Newey-West HAC SE" (single-x regression). The
+  ``p_value_beta_hac`` field IS the slope p-value of this calibration
+  regression, NOT a Ridge per-feature coefficient inference statistic.
+  Reviewer's interpretation correct; KICK-6 scope is labeling clarity
+  (not algorithm correction).
+* **Misleading docstring rewritten**: pre-KICK-6 line 324 inline
+  comment said "ridge fits y on full X — use overall F-test p
+  surrogate" — both misleading (Ridge doesn't admit per-feature
+  p-values; no F-test surrogate is computed). Rewritten to explicitly
+  cite the univariate forecast-vs-realized regression and disclaim
+  Ridge coefficient inference. K6.2 POS-invariant test pins the
+  rewrite via source-substring inspection.
+* **``InferenceLabel`` tri-state Literal**:
+    - ``"forecast_vs_realized"`` — institutionally correct label for
+      Ridge fits in this module; default post-KICK-6.
+    - ``"feature_significance"`` — per-feature coefficient inference;
+      reserved for future OLS variants where standard sampling theory
+      applies.
+    - ``"diagnostic_only"`` — reported as illustrative but not
+      statistically inferential.
+* **First ``__post_init__`` on ``RidgeFitResult``**: tri-state
+  validation enforced at construction time. Mirrors KICK-3
+  ``BinDiagnosticStatus`` + KICK-5 ``BootstrapDiagnostics`` validator
+  precedents. Frozen-dataclass compatibility verified (validator is
+  read-only; no ``object.__setattr__`` calls).
+* **AP-AUTH-54 lightest-weight envelope variance**: KICK-6 does not
+  refactor any helper (step #1 N/A); the entire AP-AUTH-54 mechanism
+  is satisfied via steps #2-4 (no-default field + Option Y gate
+  inspection + pre-flight empirical evidence). Strategic confirmed
+  this is within the natural AP-AUTH-54 envelope; no sub-variant
+  codification needed. KICK-4 was the heaviest instance (helper
+  refactor + field + AST audit); KICK-5 was medium (tuple-return
+  helper + dual fields + probe); KICK-6 is the lightest.
+* **Gate 19-B1 extension**: criteria 28-29 (KICK-6 NEW) verify (i)
+  ``inference_label`` no-default field via Option Y signature
+  inspection; (ii) runtime probe confirms every fold has
+  ``inference_label == "forecast_vs_realized"``.
+
+AP-AUTH-54 cited as governing pattern (third instance after KICK-4 +
+KICK-5; lightest-weight envelope variance documented inline). No new
+AP-AUTH codification at KICK-6.
+
 L5b-KICK-5 (tag ``l5b-kick-5-accept``, 2026-05-15) — bootstrap diagnostics
 --------------------------------------------------------------------------
 Closes the ChatGPT 5.5 IMPORTANT #6 reviewer flag ("Add a bootstrap
@@ -209,6 +266,35 @@ _VALID_BOOTSTRAP_FALLBACK_FLAGS: frozenset[str] = frozenset({
 })
 
 
+# L5b-KICK-6 (tag ``l5b-kick-6-accept``, 2026-05-15): Ridge inference
+# labeling taxonomy per ChatGPT 5.5 IMPORTANT #5 reviewer flag.
+# Mirrors KICK-5 ``BootstrapFallbackFlag`` Literal precedent. Per
+# AP-AUTH-53 step #3 / AP-AUTH-54 step #2, the dataclass field carrying
+# this value has no default — caller intent forced at construction.
+#
+# Semantic taxonomy:
+#   "forecast_vs_realized" — p-value is from univariate
+#       ``realized = α + β·forecast + ε`` regression diagnostic
+#       (the institutionally correct label for Ridge fits in this
+#       module; this IS what ``p_value_beta_hac`` computes).
+#   "feature_significance" — per-feature coefficient inference (NOT
+#       applicable to Ridge under standard sampling theory; reserved
+#       for future OLS variants).
+#   "diagnostic_only" — p-value reported as illustrative but not
+#       statistically inferential (regime instability or sample-size
+#       conditions invalidating standard inference).
+InferenceLabel = Literal[
+    "forecast_vs_realized",
+    "feature_significance",
+    "diagnostic_only",
+]
+_VALID_INFERENCE_LABELS: frozenset[str] = frozenset({
+    "forecast_vs_realized",
+    "feature_significance",
+    "diagnostic_only",
+})
+
+
 @dataclass(frozen=True)
 class BootstrapDiagnostics:
     """Per-bootstrap-call diagnostics surface for the L5-B1 block
@@ -321,7 +407,7 @@ class RidgeFitResult:
     r_squared: float                                # in-sample R²
     r_squared_oos: float                            # OOS R²
     residual_se_hac: float                          # HAC SE @ maxlags = horizon_months − 1
-    p_value_beta_hac: float                         # HAC p-value (single beta proxy: ridge fits y on full X — use overall F-test p surrogate)
+    p_value_beta_hac: float                         # L5b-KICK-6: Newey-West HAC p-value for the slope coefficient of the univariate forecast-vs-realized regression (realized = α + β·forecast + ε), computed via fit_ols_hac(y_test, forecast_test). NOT a Ridge coefficient inference statistic — Ridge does not admit per-feature p-values under standard sampling theory. See inference_label field for taxonomy.
     bootstrap_residual_se_distribution: np.ndarray  # B=1000 block-bootstrap residual SEs
     bootstrap_block_size: int                       # primary block size (= horizon_months // 2)
     hac_maxlags: int                                # primary HAC maxlags (= horizon_months − 1)
@@ -335,6 +421,24 @@ class RidgeFitResult:
     inner_cv_scaler_recomputed: bool                # L5b-KICK-4: True iff inner-CV re-fit z-scaler per inner block (Task A parity); no default per AP-AUTH-53 step #3
     bootstrap_diagnostics: BootstrapDiagnostics     # L5b-KICK-5: primary block-bootstrap call diagnostics surface; no default per AP-AUTH-54 step #2
     block_size_sensitivity_diagnostics: dict[str, BootstrapDiagnostics]  # L5b-KICK-5: per-sensitivity-block-size diagnostics; keys match _BLOCK_SIZE_LABELS; no default
+    inference_label: InferenceLabel                 # L5b-KICK-6: tri-state taxonomy labeling p_value_beta_hac as forecast-vs-realized model diagnostic (NOT per-feature Ridge inference); no default per AP-AUTH-54 step #2
+
+    def __post_init__(self) -> None:
+        # L5b-KICK-6 NEG test K6.3 contract: tri-state validation
+        # enforced at construction time. Mirrors KICK-3
+        # ``BinDiagnosticStatus`` + KICK-5 ``BootstrapDiagnostics``
+        # ``__post_init__`` validator precedents. First
+        # ``__post_init__`` on ``RidgeFitResult`` itself; frozen-
+        # dataclass compatibility identical to the precedents
+        # (object.__setattr__ not invoked; validator is read-only).
+        if self.inference_label not in _VALID_INFERENCE_LABELS:
+            raise ValueError(
+                f"inference_label={self.inference_label!r} must be one of "
+                f"{sorted(_VALID_INFERENCE_LABELS)} "
+                "(spec L5b-KICK-6 tri-state per ChatGPT 5.5 IMPORTANT "
+                "#5; AP-AUTH-53 step #3 + AP-AUTH-54 internal-"
+                "implementation variant)"
+            )
 
 
 def _zscore_fit_transform(
@@ -1080,6 +1184,7 @@ def fit_return_forecast_task_b1(
             inner_cv_scaler_recomputed=True,  # KICK-4: Task A parity per AP-AUTH-53 step #3
             bootstrap_diagnostics=bootstrap_diag,  # KICK-5: primary call diagnostics per AP-AUTH-54
             block_size_sensitivity_diagnostics=block_size_sensitivity_diag_map,  # KICK-5: per-sensitivity-size diagnostics
+            inference_label="forecast_vs_realized",  # KICK-6: p_value_beta_hac is univariate calibration regression diagnostic, NOT Ridge per-feature inference; AP-AUTH-54 step #2
         ))
 
     # Post-pass: coefficient_sign_flip_rate vs immediately-prior outer fold
