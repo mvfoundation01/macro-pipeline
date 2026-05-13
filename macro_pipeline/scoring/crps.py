@@ -266,58 +266,14 @@ def _load_component(
     )
 
 
-def _format_pit_lineage_notes(loads: list) -> list[str]:
-    """Layer 3.5D shared helper: collect PIT-lineage notes from
-    component ``IndicatorBundle`` objects, dedup while preserving
-    insertion order, and return a list[str] suitable for the
-    ``ScoredObservation.notes`` field.
-
-    Migrates the pre-3.5D ``metadata_extra["pit_safe_basis_per_component"]``,
-    ``metadata_extra["derived_confidence_cap_applied"]``, and
-    ``metadata_extra["pit_construction_notes"]`` entries into a single
-    ordered, deduped list.
-
-    Per Decision Lock 3.5D-AM25: each non-empty source produces one
-    note line; ``dict.fromkeys`` preserves order while removing
-    equivalent strings.
-    """
-    notes: list[str] = []
-
-    # 1. Per-component PIT basis (one summary line if any non-default)
-    bases = {
-        cl.name: getattr(cl.bundle, "pit_safe_basis", "n/a")
-        for cl in loads
-    }
-    non_default = {
-        name: basis
-        for name, basis in bases.items()
-        if basis not in ("n/a", "release_lag", "asof_truncation")
-    }
-    if non_default:
-        notes.append(
-            "PIT-safe basis per component: "
-            + ", ".join(f"{name}={basis}" for name, basis in non_default.items())
-        )
-
-    # 2. Derived-cap summary (single line if any component carries a cap)
-    derived_caps = [
-        getattr(cl.bundle, "derived_confidence_cap", None) for cl in loads
-    ]
-    bound_caps = [c for c in derived_caps if c is not None]
-    if bound_caps:
-        notes.append(
-            f"Derived confidence cap applied: MIN={min(bound_caps):.2f} "
-            f"(from {sum(1 for c in derived_caps if c is not None)} component(s))"
-        )
-
-    # 3. Per-component construction notes (already strings)
-    for cl in loads:
-        for note in getattr(cl.bundle, "notes", []):
-            if note:
-                notes.append(note)
-
-    # Dedup preserving order.
-    return list(dict.fromkeys(notes))
+# Layer 5-RM-4 (L5-13 absorption): the PIT-lineage formatter is now in the
+# shared ``scoring/notes_formatter.py`` module so CDRS + future scorers
+# inherit the same discipline. Local alias preserves existing call sites
+# in this module (``crps_score`` continues to call ``_format_pit_lineage_notes``)
+# without churning the import surface.
+from macro_pipeline.scoring.notes_formatter import (
+    format_pit_lineage_notes as _format_pit_lineage_notes,
+)
 
 
 def _compute_quality_cap(loads: list[_ComponentLoad], ctx: PitDataContext) -> tuple[float, dict[str, float | None]]:

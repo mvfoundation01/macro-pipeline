@@ -3470,6 +3470,110 @@ def _cli_gate18() -> int:
     return 0 if report.passed else 1
 
 
+def validate_gate20_dataclass_migration() -> GateReport:
+    """Gate 20 — L5-RM-4 ScoredObservation 6-slot batched migration.
+
+    Per ``LAYER_5_BUILD_SPEC.md`` v6 §5.RM-4.6 (lines 1062-1075).
+
+    Criteria (verifiable at runtime):
+    1. ``ScoredObservation.__dataclass_fields__`` count = empirical post-RM-4
+       (29 = 23 base + 6 new; spec claimed 31 per S-12 documented gap).
+    2. The 6 new slot names exactly match spec §5.RM-4.1.1 list:
+       ``calibrated_probability_band_lower``,
+       ``calibrated_probability_band_upper``,
+       ``drawdown_conditional_distribution``,
+       ``dms_adjustment_bps``,
+       ``bayesian_shrinkage_weight``,
+       ``positive_return_probability``
+    3. Parquet roundtrip smoke-test PASSes (asserted out-of-band via
+       ``pytest tests/test_scored_observation.py::test_parquet_roundtrip_preserves_6_new_slots``;
+       cite in verification report).
+    4. L5-13 absorption confirmed: CDRS ``metadata_extra`` has 0 V_*/T_* keys
+       (asserted out-of-band via
+       ``pytest tests/test_cdrs.py::test_notes_field_carries_L5_provenance_post_L5_13_absorption``;
+       cite in verification report).
+    5. All 8 §5.RM-4.5 tests PASS (asserted out-of-band via pytest).
+    6. Existing test baseline preserved (asserted out-of-band via full
+       ``pytest -x``).
+    """
+    from macro_pipeline.scoring.scored_observation import ScoredObservation
+
+    findings: list[str] = []
+    warnings: list[str] = []
+    summary: dict = {}
+
+    fields = list(ScoredObservation.__dataclass_fields__.keys())
+    summary["criterion_1_field_count"] = len(fields)
+    # Per S-12 disposition (a): empirical truth is 29 (NOT spec-claimed 31)
+    if len(fields) == 29:
+        findings.append(
+            f"Criterion 1 PASS: {len(fields)} __dataclass_fields__ "
+            "(empirical; spec §5.RM-4.6 claimed 31 per S-12 documented gap)"
+        )
+    else:
+        findings.append(
+            f"FAIL: Criterion 1 - expected 29 fields (per S-12 empirical "
+            f"truth); got {len(fields)}"
+        )
+
+    expected_new_slots = {
+        "calibrated_probability_band_lower",
+        "calibrated_probability_band_upper",
+        "drawdown_conditional_distribution",
+        "dms_adjustment_bps",
+        "bayesian_shrinkage_weight",
+        "positive_return_probability",
+    }
+    missing = expected_new_slots - set(fields)
+    extra_new = set(fields) - set(fields[:23])  # last 6 should be the new ones
+    summary["criterion_2_new_slots_present"] = sorted(
+        expected_new_slots & set(fields)
+    )
+    summary["criterion_2_new_slots_missing"] = sorted(missing)
+    if not missing:
+        findings.append(
+            "Criterion 2 PASS: all 6 new slot names per spec §5.RM-4.1.1 "
+            "present in __dataclass_fields__"
+        )
+    else:
+        for s in missing:
+            findings.append(
+                f"FAIL: Criterion 2 - new slot {s!r} missing from dataclass"
+            )
+
+    warnings.append(
+        "Criterion 3 (parquet roundtrip) asserted via "
+        "pytest tests/test_scored_observation.py::"
+        "test_parquet_roundtrip_preserves_6_new_slots"
+    )
+    warnings.append(
+        "Criterion 4 (L5-13 absorption: 0 V_*/T_* keys) asserted via "
+        "pytest tests/test_cdrs.py::"
+        "test_notes_field_carries_L5_provenance_post_L5_13_absorption"
+    )
+    warnings.append(
+        "Criterion 5 (all 8 §5.RM-4.5 tests PASS) asserted via full pytest"
+    )
+    warnings.append(
+        "Criterion 6 (baseline preserved) asserted via "
+        "`pytest -x --no-header -q`; cite pass count in verification report"
+    )
+
+    passed = not any(f.startswith("FAIL") for f in findings)
+    return GateReport(
+        name="Gate 20 - L5-RM-4 ScoredObservation 6-slot batched migration",
+        passed=passed, findings=findings, warnings=warnings, summary=summary,
+    )
+
+
+def _cli_gate20() -> int:
+    import logging
+    logging.basicConfig(level="WARNING", format="%(message)s")
+    report = validate_gate20_dataclass_migration()
+    print(report.render())
+    return 0 if report.passed else 1
+
+
 if __name__ == "__main__":
     import sys
     cmd = sys.argv[1] if len(sys.argv) > 1 else "gate1"
@@ -3509,11 +3613,13 @@ if __name__ == "__main__":
         sys.exit(_cli_gate17())
     if cmd == "gate18":
         sys.exit(_cli_gate18())
+    if cmd == "gate20":
+        sys.exit(_cli_gate20())
     print(
         f"Unknown command: {cmd}. Available: "
         "gate1, gate2, gate3, gate4a, gate4b, gate4c, gate4d, "
         "gate8, gate9, gate10, gate11, gate12, gate13, gate14, gate15, gate16, gate17, "
-        "gate18",
+        "gate18, gate20",
         file=sys.stderr,
     )
     sys.exit(2)

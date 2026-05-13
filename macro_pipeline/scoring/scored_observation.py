@@ -95,6 +95,31 @@ class ScoredObservation:
     # ---- Bag of everything else (regime_state_source, model_version, ...) ----
     metadata_extra: dict[str, Any] = field(default_factory=dict)
 
+    # ---- Layer 5 calibration band slots (L5-RM-4 NEW; L5-E populates) ----
+    # Spec ref: LAYER_5_BUILD_SPEC.md v6 §5.RM-4.1.1 (lines 945-947).
+    calibrated_probability_band_lower: float | None = None    # ∈ [0, 1] when present
+    calibrated_probability_band_upper: float | None = None    # ∈ [0, 1] when present; band_lower ≤ band_upper
+
+    # ---- Layer 5 drawdown conditional distribution slot (L5-RM-4 NEW; L5-D populates) ----
+    # Spec ref: §5.RM-4.1.1 line 950. CDF percentiles keyed by drawdown threshold.
+    drawdown_conditional_distribution: dict[str, float] | None = None
+
+    # ---- Layer 5 DMS survivorship adjustment slot (L5-RM-4 NEW; L5-F populates) ----
+    # Spec ref: §5.RM-4.1.1 line 953. Negative bps for 5Y/10Y; 0.0 for 1Y/3Y.
+    # Validator domain: ∈ [-200, 0] bps per §5.RM-4.1.2.
+    dms_adjustment_bps: float = 0.0
+
+    # ---- Layer 5 Bayesian shrinkage weight slot (L5-RM-4 NEW; L5-G populates) ----
+    # Spec ref: §5.RM-4.1.1 line 956. k/(k+n) form ∈ [0, 1].
+    bayesian_shrinkage_weight: float = 0.0
+
+    # ---- Layer 5 positive return probability slot (L5-RM-4 NEW v2 per S-2; ----
+    # ---- L5-RM-6 Task B return-forecast path populates) ----
+    # Spec ref: §5.RM-4.1.1 line 959 + §3.3 calibration target schema.
+    # Implicit ∈ [0, 1] when present (no explicit validator in spec; aligns with
+    # calibrated_probability validator pattern).
+    positive_return_probability: float | None = None
+
     def __post_init__(self) -> None:
         if not 0.0 <= self.raw_score <= 1.0:
             raise ValueError(
@@ -131,6 +156,52 @@ class ScoredObservation:
         ):
             raise ValueError(
                 f"calibrated_probability={self.calibrated_probability} "
+                "must be in [0, 1] when present"
+            )
+
+        # ---- L5-RM-4 NEW validators per spec §5.RM-4.1.2 (lines 962-1000) ----
+        if self.calibrated_probability_band_lower is not None and not (
+            0.0 <= self.calibrated_probability_band_lower <= 1.0
+        ):
+            raise ValueError(
+                f"calibrated_probability_band_lower={self.calibrated_probability_band_lower} "
+                "must be in [0, 1] when present"
+            )
+        if self.calibrated_probability_band_upper is not None and not (
+            0.0 <= self.calibrated_probability_band_upper <= 1.0
+        ):
+            raise ValueError(
+                f"calibrated_probability_band_upper={self.calibrated_probability_band_upper} "
+                "must be in [0, 1] when present"
+            )
+        if (
+            self.calibrated_probability_band_lower is not None
+            and self.calibrated_probability_band_upper is not None
+            and self.calibrated_probability_band_lower
+            > self.calibrated_probability_band_upper
+        ):
+            raise ValueError(
+                f"band_lower={self.calibrated_probability_band_lower} must be "
+                f"<= band_upper={self.calibrated_probability_band_upper}"
+            )
+        # DMS bps band: ∈ [-200, 0] (negative, no positive, no more-negative-than-200)
+        if not -200.0 <= self.dms_adjustment_bps <= 0.0:
+            raise ValueError(
+                f"dms_adjustment_bps={self.dms_adjustment_bps} "
+                "must be in [-200, 0] bps"
+            )
+        # Bayesian shrinkage weight
+        if not 0.0 <= self.bayesian_shrinkage_weight <= 1.0:
+            raise ValueError(
+                f"bayesian_shrinkage_weight={self.bayesian_shrinkage_weight} "
+                "must be in [0, 1]"
+            )
+        # positive_return_probability (implicit ∈ [0, 1]; mirrors calibrated_probability)
+        if self.positive_return_probability is not None and not (
+            0.0 <= self.positive_return_probability <= 1.0
+        ):
+            raise ValueError(
+                f"positive_return_probability={self.positive_return_probability} "
                 "must be in [0, 1] when present"
             )
 
@@ -178,6 +249,17 @@ class ScoredObservation:
             "pit_source": self.pit_source,
             "notes": list(self.notes),
             "metadata_extra": dict(self.metadata_extra),
+            # ---- L5-RM-4 NEW slots (spec §5.RM-4.2 #5 mandates inclusion) ----
+            "calibrated_probability_band_lower": self.calibrated_probability_band_lower,
+            "calibrated_probability_band_upper": self.calibrated_probability_band_upper,
+            "drawdown_conditional_distribution": (
+                dict(self.drawdown_conditional_distribution)
+                if self.drawdown_conditional_distribution is not None
+                else None
+            ),
+            "dms_adjustment_bps": self.dms_adjustment_bps,
+            "bayesian_shrinkage_weight": self.bayesian_shrinkage_weight,
+            "positive_return_probability": self.positive_return_probability,
         }
 
 

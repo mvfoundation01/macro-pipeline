@@ -42,6 +42,9 @@ from macro_pipeline.models.quality_caps import (
 from macro_pipeline.regime import build_regime_context
 from macro_pipeline.scoring.cdrs_trigger import compute_trigger
 from macro_pipeline.scoring.cdrs_vulnerability import compute_vulnerability
+from macro_pipeline.scoring.notes_formatter import (
+    format_cdrs_v_t_lineage_notes,
+)
 from macro_pipeline.scoring.scored_observation import (
     CompositeBuildError,
     ScoredObservation,
@@ -303,6 +306,13 @@ def compute_cdrs(ctx: PitDataContext) -> ScoredObservation:
     # CRPS-only); but if any V/T component bundle carries
     # derived_confidence_cap or pit_safe_basis="by_construction" notes,
     # propagate them here for symmetry with CRPS.
+
+    # L5-RM-4 (L5-13 absorption): migrate V_score + T_score from
+    # metadata_extra into notes per spec §5.RM-4.1.4 step 1.
+    notes_list.extend(format_cdrs_v_t_lineage_notes(
+        v_score=v_result.score, t_score=t_result.score,
+    ))
+
     notes_list = list(dict.fromkeys(notes_list))  # dedup preserving order
 
     return ScoredObservation(
@@ -334,8 +344,11 @@ def compute_cdrs(ctx: PitDataContext) -> ScoredObservation:
             "regime_neutralized": regime_neutralized,
             "regime_state_source": source,
             "regime_state_confidence_haircut": conf_haircut,
-            "V_score": v_result.score,
-            "T_score": t_result.score,
+            # NOTE (L5-RM-4 / L5-13 absorption): V_score + T_score MIGRATED
+            # to ScoredObservation.notes via format_cdrs_v_t_lineage_notes()
+            # per spec §5.RM-4.1.4 step 1 + proof contract item 3 grep
+            # enforcement. R_multiplier preserved (out of V_*/T_* migration
+            # scope per spec literal at line 1015).
             "R_multiplier": r,
             "raw_cdrs_pre_clip": raw_cdrs,
             "v_active_components": list(v_result.active_components),

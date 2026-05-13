@@ -148,18 +148,34 @@ def test_cdrs_1973_unreachable_raises():
 # --- Two-stage decomposition + metadata ------------------------------------
 
 def test_cdrs_metadata_carries_stage_decomposition_and_proxies():
-    """Spec §6.10 #5 + kickoff items 16, 19, 20 — V_score, T_score,
-    R_multiplier individually present; cdrs_proxy_substitutions and
-    method tag populated."""
+    """Spec §6.10 #5 + kickoff items 16, 19, 20 — R_multiplier in metadata_extra;
+    V_score / T_score MIGRATED to notes per L5-RM-4 / L5-13 absorption
+    (spec §5.RM-4.1.4 step 1); cdrs_proxy_substitutions + method tag populated."""
     so = compute_cdrs(PitDataContext(as_of=pd.Timestamp("2007-09-15")))
     md = so.metadata_extra
     assert md["cdrs_method"] == "two_stage_v1"
-    assert "V_score" in md
-    assert "T_score" in md
+    # L5-RM-4 migration: V_score + T_score MOVED to so.notes; absence here
+    # is the spec contract (proof item 3 grep enforces 0 V_*/T_* keys in
+    # cdrs.py metadata_extra dict).
+    assert "V_score" not in md, (
+        "L5-RM-4: V_score should be migrated to notes, not in metadata_extra"
+    )
+    assert "T_score" not in md, (
+        "L5-RM-4: T_score should be migrated to notes, not in metadata_extra"
+    )
+    # R_multiplier stays in metadata_extra (out of V_*/T_* migration scope
+    # per spec literal §5.RM-4.1.4 line 1015).
     assert "R_multiplier" in md
-    assert 0.0 <= md["V_score"] <= 1.0
-    assert 0.0 <= md["T_score"] <= 1.0
     assert md["R_multiplier"] in {0.6, 1.0, 1.4, 0.6 * 0.95, 1.0 * 0.95, 1.4 * 0.95}
+    # V_score + T_score now in notes (post-L5-RM-4); regression test.
+    v_score_notes = [n for n in so.notes if "V_score" in n]
+    t_score_notes = [n for n in so.notes if "T_score" in n]
+    assert len(v_score_notes) >= 1, (
+        f"L5-RM-4: V_score lineage note missing from notes; got {so.notes}"
+    )
+    assert len(t_score_notes) >= 1, (
+        f"L5-RM-4: T_score lineage note missing from notes; got {so.notes}"
+    )
     assert "V3_RSP_SPX_proxy" in md["cdrs_proxy_substitutions"]
     assert "V5_DAMODARAN_EY_proxy" in md["cdrs_proxy_substitutions"]
     assert isinstance(md["regime_neutralized"], bool)
@@ -215,3 +231,47 @@ def test_cdrs_clipped_to_unit_interval():
     for asof in ("2017-06-01", "2007-09-15", "2025-06-01"):
         so = compute_cdrs(PitDataContext(as_of=pd.Timestamp(asof)))
         assert 0.0 <= so.raw_score <= 1.0
+
+
+# --- L5-RM-4 / L5-13 absorption regression test ---------------------------
+
+def test_notes_field_carries_L5_provenance_post_L5_13_absorption():
+    """§5.RM-4.5 test #3 — L5-13 absorption regression.
+
+    After L5-RM-4 migration, CDRS ``scored_obs.notes`` contains formatted
+    V/T lineage (via format_cdrs_v_t_lineage_notes), AND
+    ``scored_obs.metadata_extra`` does NOT contain V_*/T_* keys (per spec
+    §5.RM-4.1.4 step 1 + proof contract item 3 grep enforcement on
+    scoring/cdrs.py source).
+    """
+    so = compute_cdrs(PitDataContext(as_of=pd.Timestamp("2007-09-15")))
+
+    # Positive: V/T lineage notes present
+    v_score_notes = [n for n in so.notes if "V_score" in n]
+    t_score_notes = [n for n in so.notes if "T_score" in n]
+    assert len(v_score_notes) >= 1, (
+        f"V_score lineage note missing from notes (L5-13 regression). "
+        f"Got: {so.notes}"
+    )
+    assert len(t_score_notes) >= 1, (
+        f"T_score lineage note missing from notes (L5-13 regression). "
+        f"Got: {so.notes}"
+    )
+    # Both notes follow the format_cdrs_v_t_lineage_notes() pattern
+    assert any("vulnerability stage" in n for n in v_score_notes), (
+        "V_score note format drifted from format_cdrs_v_t_lineage_notes()"
+    )
+    assert any("trigger stage" in n for n in t_score_notes), (
+        "T_score note format drifted from format_cdrs_v_t_lineage_notes()"
+    )
+
+    # Negative: V_*/T_* keys absent from metadata_extra (spec mandate)
+    for k in so.metadata_extra:
+        assert not k.startswith("V_"), (
+            f"L5-13 absorption violated: V_*-prefixed key {k!r} still in "
+            "metadata_extra"
+        )
+        assert not k.startswith("T_"), (
+            f"L5-13 absorption violated: T_*-prefixed key {k!r} still in "
+            "metadata_extra"
+        )
