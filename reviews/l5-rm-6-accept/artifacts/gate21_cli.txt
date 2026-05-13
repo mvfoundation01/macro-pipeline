@@ -1,0 +1,14 @@
+=== Gate 21 - L5-RM-6 isotonic regression calibration: PASS ===
+  [x] Criterion 1 PASS: fit_isotonic_calibrators + build_event_labels + should_recalibrate + calibrate_raw_score all importable (v3 per S-8)
+  [x] Criterion 2 PASS: SAHM_RULE_TRIGGER_THRESHOLD == 0.30 (spec §5.RM-6.1.1 + Q5 lock)
+  [!] Criterion 3 (PAV monotonicity invariant) asserted via pytest tests/test_isotonic_calibrator.py::test_pav_monotonicity_grep_audit (test #2; 25 calibrators × 1000-point grid = 25000 grid points; 0 violations)
+  [!] Criterion 4 (quarterly + Sahm + yield-curve triggers) asserted via pytest tests #3, #4, #5
+  [!] Criterion 5 (calibrate_raw_score returns in [0, 1]) asserted via pytest test #6
+  [!] Criterion 6 (bootstrap seeded reproducibly) asserted via pytest test #9
+  [!] Criterion 7 (all 14 §5.RM-6.5 tests PASS) asserted via full pytest
+  [!] Criterion 8 (cross-(score_type × horizon) consistency report) asserted via pytest test #12 (PSI/KS metadata surface verified)
+  [!] Criterion 9 (empirical Sahm trigger frequency) asserted via build-time §5.RM-6.2 smoke-test; cite in verification report
+  Summary:
+    criterion_1_api_present: {'fit_isotonic_calibrators': 'OK', 'build_event_labels': 'OK', 'should_recalibrate': 'OK', 'calibrate_raw_score': 'OK'}
+    sahm_threshold: 0.3
+    yield_curve_min_consecutive_months: 2

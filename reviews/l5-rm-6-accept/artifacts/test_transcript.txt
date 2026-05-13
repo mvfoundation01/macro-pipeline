@@ -1,0 +1,19 @@
+============================= test session starts =============================
+collecting ... collected 14 items
+
+tests/test_isotonic_calibrator.py::test_isotonic_calibrators_yields_25_per_3_3_schema PASSED [  7%]
+tests/test_isotonic_calibrator.py::test_pav_monotonicity_grep_audit PASSED [ 14%]
+tests/test_isotonic_calibrator.py::test_quarterly_recalibration_cadence_fires_on_mar_jun_sep_dec PASSED [ 21%]
+tests/test_isotonic_calibrator.py::test_sahm_rule_trigger_at_threshold_0_30 PASSED [ 28%]
+tests/test_isotonic_calibrator.py::test_yield_curve_2_consecutive_inversion_triggers_refit PASSED [ 35%]
+tests/test_isotonic_calibrator.py::test_calibrated_probability_in_zero_one_post_clip PASSED [ 42%]
+tests/test_isotonic_calibrator.py::test_rejects_non_monotone_input_via_warning PASSED [ 50%]
+tests/test_isotonic_calibrator.py::test_rejects_calibration_with_insufficient_samples_min_50 PASSED [ 57%]
+tests/test_isotonic_calibrator.py::test_bootstrap_se_seeded_for_reproducibility PASSED [ 64%]
+tests/test_isotonic_calibrator.py::test_rejects_horizon_outside_1Y_3Y_5Y_10Y_in_calibrator_dict PASSED [ 71%]
+tests/test_isotonic_calibrator.py::test_calibration_target_matches_score_type_per_3_3_table PASSED [ 78%]
+tests/test_isotonic_calibrator.py::test_isotonic_calibrator_drift_psi_ks_reported_quarterly PASSED [ 85%]
+tests/test_isotonic_calibrator.py::test_rolling_brier_delta_negative_for_2_consecutive_refits_triggers_warning PASSED [ 92%]
+tests/test_isotonic_calibrator.py::test_sahm_curve_trigger_coalescing_within_90_day_cooldown PASSED [100%]
+
+============================= 14 passed in 1.26s ==============================
