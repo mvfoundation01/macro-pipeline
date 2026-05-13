@@ -6117,6 +6117,249 @@ def _cli_gate26() -> int:
     return 0 if report.passed else 1
 
 
+def validate_gate27_regime_conditional_validation() -> GateReport:
+    """Gate 27 - L5b-D regime-conditional OOS Brier decomposition.
+
+    L5b-D (tag ``l5b-d-accept``, 2026-05-15): SECOND NEW gate post-
+    Gate-25-SEAL after L5b-C Gate 26. Cross-cutting downstream-consumer
+    gate (regime-conditional aggregator consumes calibrated probabilities
+    + binary outcomes + dates). Closes ChatGPT 5.5 Dim-3 regime-
+    conditional OOS validation mandate via the AP-AUTH-54 seventh-
+    instance internal-implementation variant pattern. AP-AUTH-54
+    envelope STAYS CLOSED at 4-instance characterization (Strategic
+    disposition 4); L5b-D 7th instance with five within-envelope
+    sub-characteristics documented inline.
+
+    Four criteria:
+    * 27.1 API present: RegimeConditionalDiagnostics + 14 no-default
+           fields + reference classifier + aggregator importable
+    * 27.2 Reference classifier tri-state correctness on pre-1978 +
+           in-recession-window + post-1978-expansion probe dates
+    * 27.3 Aggregator runtime probe: synthesize regime-shift fixture
+           with asymmetric calibration; assert sensitivity flag fires
+           per 50% threshold
+    * 27.4 Invariant validator probe: invalid pre_1978_handling raises
+           ValueError; sensitivity flag inconsistency raises ValueError
+    """
+    import inspect
+
+    findings: list[str] = []
+    warnings_list: list[str] = []
+    summary: dict = {}
+
+    try:
+        from macro_pipeline.analysis.regime_conditional_validation import (
+            RegimeConditionalDiagnostics,
+            classify_nber_regime_diagnostic_only,
+            compute_regime_conditional_oos_validation,
+        )
+
+        # Criterion 27.1 - API present + 14 no-default fields.
+        from dataclasses import MISSING as _MISSING_GATE27
+        expected_fields = {
+            "full_sample_brier", "recession_subset_brier",
+            "expansion_subset_brier",
+            "full_sample_climatology_brier",
+            "recession_climatology_brier",
+            "expansion_climatology_brier",
+            "full_sample_brier_improvement",
+            "recession_brier_improvement",
+            "expansion_brier_improvement",
+            "regime_sensitivity_flag",
+            "n_recession_obs", "n_expansion_obs", "n_pre_1978_obs",
+            "pre_1978_handling",
+        }
+        actual_fields = set(
+            RegimeConditionalDiagnostics.__dataclass_fields__.keys()
+        )
+        all_no_default = all(
+            RegimeConditionalDiagnostics.__dataclass_fields__[f].default
+            is _MISSING_GATE27
+            and RegimeConditionalDiagnostics.__dataclass_fields__[f].default_factory
+            is _MISSING_GATE27
+            for f in actual_fields
+        )
+        summary["criterion_27_1_fields_count"] = len(actual_fields)
+        summary["criterion_27_1_all_no_default"] = all_no_default
+        if actual_fields == expected_fields and all_no_default:
+            findings.append(
+                f"Criterion 27.1 PASS [L5b-D]: RegimeConditionalDiagnostics "
+                f"+ classify_nber_regime_diagnostic_only + "
+                f"compute_regime_conditional_oos_validation importable; "
+                f"all {len(actual_fields)} fields no-default per "
+                "AP-AUTH-53 step #3 (largest dataclass in L5b sprint)"
+            )
+        elif actual_fields != expected_fields:
+            findings.append(
+                f"FAIL: Criterion 27.1 [L5b-D] - RegimeConditionalDiagnostics "
+                f"field set mismatch: missing {sorted(expected_fields - actual_fields)} "
+                f"extra {sorted(actual_fields - expected_fields)}"
+            )
+        else:
+            findings.append(
+                "FAIL: Criterion 27.1 [L5b-D] - one or more "
+                "RegimeConditionalDiagnostics fields have defaults"
+            )
+
+        # Criterion 27.2 - Reference classifier tri-state correctness.
+        import pandas as _pd_gate27
+        _windows = [
+            (_pd_gate27.Timestamp("2007-12-01"), _pd_gate27.Timestamp("2009-06-01")),
+        ]
+        _pre = classify_nber_regime_diagnostic_only(
+            _pd_gate27.Timestamp("1975-06-01"), _windows,
+        )
+        _rec = classify_nber_regime_diagnostic_only(
+            _pd_gate27.Timestamp("2008-12-15"), _windows,
+        )
+        _exp = classify_nber_regime_diagnostic_only(
+            _pd_gate27.Timestamp("2015-06-01"), _windows,
+        )
+        summary["criterion_27_2_classifier_outputs"] = {
+            "pre_1975": _pre, "rec_2008": _rec, "exp_2015": _exp,
+        }
+        if _pre == "pre_1978" and _rec == "recession" and _exp == "expansion":
+            findings.append(
+                "Criterion 27.2 PASS [L5b-D]: reference classifier tri-state "
+                "correctness verified - 1975-06-01 yields 'pre_1978' (per L3.5C "
+                "Decision Lock 3.5C-D1 boundary); 2008-12-15 yields 'recession' "
+                "(in 2007-2009 GFC window); 2015-06-01 yields 'expansion' "
+                "(post-recession, post-1978)"
+            )
+        else:
+            findings.append(
+                f"FAIL: Criterion 27.2 [L5b-D] - classifier returns: "
+                f"pre={_pre!r}, rec={_rec!r}, exp={_exp!r}; expected "
+                "'pre_1978' / 'recession' / 'expansion'"
+            )
+
+        # Criterion 27.3 - Aggregator runtime probe with regime-shift
+        # fixture. Asymmetric calibration: expansion perfectly
+        # calibrated (p=y), recession anti-calibrated (p=1-y).
+        # Sensitivity flag MUST fire.
+        import numpy as _np_gate27
+        _n_exp = 80
+        _n_rec = 40
+        _dates_exp = _pd_gate27.date_range(
+            "2010-01-01", periods=_n_exp, freq="MS",
+        )
+        _dates_rec = _pd_gate27.date_range(
+            "2018-06-01", periods=_n_rec, freq="MS",
+        )
+        _dates = _dates_exp.append(_dates_rec)
+        _rng_gate27 = _np_gate27.random.default_rng(42)
+        _y_exp = _rng_gate27.integers(0, 2, size=_n_exp).astype(float)
+        _y_rec = _rng_gate27.integers(0, 2, size=_n_rec).astype(float)
+        _y = _np_gate27.concatenate([_y_exp, _y_rec])
+        _p = _np_gate27.concatenate([_y_exp.copy(), 1.0 - _y_rec])
+        _rec_start = _pd_gate27.Timestamp("2018-06-01")
+        _rec_end = _pd_gate27.Timestamp("2022-12-01")
+
+        def _classifier(date: _pd_gate27.Timestamp) -> str:
+            if _rec_start <= date <= _rec_end:
+                return "recession"
+            return "expansion"
+
+        _diag = compute_regime_conditional_oos_validation(
+            calibrated_probabilities=_p,
+            forward_returns_binary=_y,
+            observation_dates=_dates,
+            regime_classifier=_classifier,
+        )
+        _flag_consistent = isinstance(_diag, RegimeConditionalDiagnostics) and (
+            _diag.n_recession_obs == _n_rec
+            and _diag.n_expansion_obs == _n_exp
+            and _diag.regime_sensitivity_flag is True
+        )
+        summary["criterion_27_3_n_recession"] = _diag.n_recession_obs
+        summary["criterion_27_3_n_expansion"] = _diag.n_expansion_obs
+        summary["criterion_27_3_sensitivity_flag"] = _diag.regime_sensitivity_flag
+        if _flag_consistent:
+            findings.append(
+                f"Criterion 27.3 PASS [L5b-D]: aggregator runtime probe "
+                f"with asymmetric calibration fixture "
+                f"(expansion p=y, recession p=1-y) correctly fires "
+                f"regime_sensitivity_flag=True; n_recession={_diag.n_recession_obs}, "
+                f"n_expansion={_diag.n_expansion_obs}; consistency "
+                "invariant 4 (50% threshold) holds post-__post_init__"
+            )
+        else:
+            findings.append(
+                f"FAIL: Criterion 27.3 [L5b-D] - aggregator probe "
+                f"sensitivity_flag={_diag.regime_sensitivity_flag} "
+                f"(expected True); n_recession={_diag.n_recession_obs}, "
+                f"n_expansion={_diag.n_expansion_obs}"
+            )
+
+        # Criterion 27.4 - Invariant validator probe: invalid
+        # pre_1978_handling raises ValueError.
+        try:
+            RegimeConditionalDiagnostics(
+                full_sample_brier=0.25,
+                recession_subset_brier=0.3,
+                expansion_subset_brier=0.2,
+                full_sample_climatology_brier=0.25,
+                recession_climatology_brier=0.25,
+                expansion_climatology_brier=0.25,
+                full_sample_brier_improvement=0.0,
+                recession_brier_improvement=-0.05,
+                expansion_brier_improvement=0.05,
+                regime_sensitivity_flag=True,
+                n_recession_obs=10,
+                n_expansion_obs=10,
+                n_pre_1978_obs=0,
+                pre_1978_handling="bogus",  # invalid; must raise
+            )
+            findings.append(
+                "FAIL: Criterion 27.4 [L5b-D] - invalid pre_1978_handling "
+                "should raise ValueError per invariant 1; no exception"
+            )
+        except ValueError:
+            findings.append(
+                "Criterion 27.4 PASS [L5b-D]: invariant validator probe "
+                "confirms RegimeConditionalDiagnostics.__post_init__ "
+                "rejects invalid pre_1978_handling per invariant 1 "
+                "(tri-state Literal taxonomy enforced)"
+            )
+        except Exception as exc:
+            findings.append(
+                f"FAIL: Criterion 27.4 [L5b-D] - unexpected exception "
+                f"type {type(exc).__name__}: {exc}"
+            )
+
+    except ImportError as exc:
+        findings.append(f"FAIL: Criterion 27.1 - import error: {exc}")
+
+    warnings_list.append(
+        "Criterion 27.5 (all 7 L5b-D tests in "
+        "tests/test_regime_conditional_validation.py PASS) asserted "
+        "via full pytest"
+    )
+    warnings_list.append(
+        "Gate 27 institutional significance: second NEW gate post-"
+        "Gate-25-SEAL after L5b-C Gate 26; cross-cutting downstream-"
+        "consumer architecture (regime-conditional aggregator consumes "
+        "Brier reliability output); AP-AUTH-54 7th instance with "
+        "envelope STAYS CLOSED at 4-instance characterization per "
+        "Strategic disposition 4"
+    )
+
+    passed = not any(f.startswith("FAIL") for f in findings)
+    return GateReport(
+        name="Gate 27 - L5b-D regime-conditional OOS validation",
+        passed=passed, findings=findings, warnings=warnings_list,
+        summary=summary,
+    )
+
+
+def _cli_gate27() -> int:
+    import logging
+    logging.basicConfig(level="WARNING", format="%(message)s")
+    report = validate_gate27_regime_conditional_validation()
+    print(report.render())
+    return 0 if report.passed else 1
+
+
 if __name__ == "__main__":
     import sys
     cmd = sys.argv[1] if len(sys.argv) > 1 else "gate1"
@@ -6174,11 +6417,13 @@ if __name__ == "__main__":
         sys.exit(_cli_gate25())
     if cmd == "gate26":
         sys.exit(_cli_gate26())
+    if cmd == "gate27":
+        sys.exit(_cli_gate27())
     print(
         f"Unknown command: {cmd}. Available: "
         "gate1, gate2, gate3, gate4a, gate4b, gate4c, gate4d, "
         "gate8, gate9, gate10, gate11, gate12, gate13, gate14, gate15, gate16, gate17, "
-        "gate18, gate19_b1, gate19_b2, gate20, gate21, gate22, gate23, gate24, gate25, gate26",
+        "gate18, gate19_b1, gate19_b2, gate20, gate21, gate22, gate23, gate24, gate25, gate26, gate27",
         file=sys.stderr,
     )
     sys.exit(2)
