@@ -17,8 +17,41 @@ Reviewer-driven KICK-N sub-phases addressing CRITICAL findings from Codex 5.5 + 
 **Test delta**: plus four tests (two mandatory NEG/POS-inv + two bonus NEG/POS); seven-hundred-seventeen to seven-hundred-twenty-one.
 **Caller updates**: `return_calibration.py` Task B2 builds panel with synthesised monthly DatetimeIndex from `fit_window[0]` plus defensive overrun guard.
 **Docstring correction**: `isotonic_calibrator.py:376` "inclusive-exclusive" wording corrected to "inclusive-inclusive" per Strategic ruling two (2026-05-13).
-**AP-AUTH delta**: zero (AP-AUTH-53 "Reviewer-driven L5b kickoff item" pattern DEFERRED per AP-AUTH-46 gratuitous-codification guard; re-evaluate at KICK-2 ACCEPT if pattern repeats).
+**AP-AUTH delta**: zero (AP-AUTH-53 "Reviewer-driven L5b kickoff item" pattern DEFERRED per AP-AUTH-46 gratuitous-codification guard; re-evaluate at KICK-2 ACCEPT if pattern repeats). **CODIFIED at KICK-2 ACCEPT** — pattern repeated; see entry below.
 **Sxx delta**: zero.
+
+---
+
+### KICK-2 — L5-E v2 production wrapper + Gate 24 hard gate (2026-05-13)
+
+**ACCEPT tag**: `l5b-kick-2-accept`
+**Reviewer authority**: Codex 5.5 IMPORTANT + ChatGPT 5.5 CRITICAL #2 (independent convergence on "diagnostic-helpers-only" → production-mandatory pathway promotion).
+**Approach**: B (Strategic-approved 2026-05-13) — wrapper-pattern `derive_forecast_sigma_v2()` invokes existing `derive_forecast_sigma` then overrides the four independence-assumption placeholder fields with caller-supplied joint covariance + empirical coverage. v1 path preserved verbatim (six-scalar signature + spec literal protection); v2 path adds two required keyword-only args with no defaults (`joint_bootstrap_covariance` + `empirical_coverage_95`). `ForecastSigmaResult` gains a thirteenth field `diagnostic_only` (bool, no default): v1 wrapper passes True; v2 wrapper passes False. Bare construction without the field raises TypeError (KICK-2 test thirteen contract).
+**Option**: Y (Strategic-approved 2026-05-13) — Gate 24 extension via signature inspection plus runtime placeholder-pattern probe. Three new criteria (twelve / thirteen / fourteen): v2 importable; v2 required-kwargs have no defaults (caller-intent forcing); v2 vs v1 `diagnostic_only` flag distinguishes production from diagnostic at gate time.
+**Sxx-14 triage**: NOT triggered (Strategic's predicted state confirmed empirically — zero production scoring callers exist; only consumers are Gate 24 validator + fifteen-test suite). Prospective-only marker recorded here per AP-AUTH-46 gratuitous-Sxx guard: if a production caller subsequently lands and invokes legacy `derive_forecast_sigma` instead of the v2 wrapper, the resulting `diagnostic_only=True` value MUST be detected by a downstream consumer (Gate 24 criterion fourteen probe covers exactly this case at gate time).
+**Test delta**: plus six new tests (numbers ten through fifteen; three POS + three NEG; NEG ratio one-half satisfies the floor); plus two fixups to existing tests six + eight (bare `ForecastSigmaResult(...)` constructors now pass `diagnostic_only=` explicitly). Baseline seven-hundred-twenty-one to seven-hundred-twenty-seven.
+**Caller updates**: none in production tree (no production callers exist yet; Sxx-14 prospective-only).
+**Math note (NEG test fifteen)**: `joint_bootstrap_covariance` MAY legitimately be negative (anti-correlated noise admissible); inner-term guard at `_compute_forecast_sigma_with_covariance` line two-six-three rejects only `|cov| > σ_ridge × σ_isotonic` (i.e., `|rho| > 1`). Test fifteen probes finiteness (NaN/inf rejected), valid negative covariance (must succeed), invalid `|rho| > 1` (helper propagates ValueError), plus coverage bounds `(0, 1]`.
+**AP-AUTH delta**: plus one (AP-AUTH-53 codified — see codification block below).
+**Sxx delta**: zero.
+
+---
+
+### AP-AUTH-53 codification (2026-05-13, anchored at `l5b-kick-2-accept`)
+
+**AP-AUTH-53 — Reviewer-driven L5b kickoff item pattern.**
+
+When external reviewers (Codex / ChatGPT) flag a CRITICAL or IMPORTANT issue in a previously-passed gate, the standard institutional closure mechanism is:
+
+1. **Preserve existing API verbatim** (no breaking change to spec literals — protects existing test surface and spec freeze integrity).
+2. **Add side-by-side hardened API** with `_v2` suffix function, new dataclass field, OR equivalent isolation pattern.
+3. **No-default required kwargs on hardened API** (forces caller intent; closes "silent placeholder" reviewer concerns).
+4. **Gate validator extension** via signature-inspection criteria for both legacy and hardened paths (mirrors existing gate idiom).
+5. **Test coverage**: minimum five tests, fifty-percent NEG ratio floor, bounds-check NEG when v2 inputs admit invalid ranges, plus missing-kwarg NEG behaviors.
+6. **Pre-flight Sxx-N (catastrophic state) triage** via grep evidence; defer entry to L5B_BACKLOG.md if production callers do not yet exist.
+7. **Module docstring + L5B_BACKLOG.md SPRINT EXECUTION LOG** documents v1 → v2 architectural drift.
+
+Confirmed via L5b-KICK-1 (isotonic `fit_window` invariant) + L5b-KICK-2 (forecast σ v2 production wrapper). Anticipated to apply at KICK-3 through KICK-7.
 
 ---
 

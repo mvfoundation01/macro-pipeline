@@ -5,7 +5,15 @@ v2; five NEG / four POS = 56% NEG after spec author's reclassification
 of test #1 as NEG-invariant; supersedes stale §5.E.0 metadata "+6"
 anchor per Strategic D-E-1 disposition 2026-05-13).
 
-Test inventory (mirrors §5.E.5 row order):
+L5b-KICK-2 (tag ``l5b-kick-2-accept``) appended six tests (#10-#15)
+closing the Codex 5.5 IMPORTANT + ChatGPT 5.5 CRITICAL #2 reviewer
+"diagnostic-helpers-only" flag via the AP-AUTH-53 reviewer-driven-
+kickoff-item pattern. New tests cover the v2 production wrapper
+``derive_forecast_sigma_v2`` + the no-default ``diagnostic_only``
+field. Post-KICK-2 NEG ratio for the L5-E suite: eight NEG / seven
+POS = 53% NEG (above the 50% floor).
+
+Test inventory (mirrors §5.E.5 row order; KICK-2 entries flagged):
   1   NEG-inv  test_forecast_sigma_quadrature_and_joint_emitted_per_horizon
   2   POS-inv  test_band_lower_le_calibrated_le_band_upper
   3   POS      test_band_clipped_to_zero_one
@@ -15,6 +23,12 @@ Test inventory (mirrors §5.E.5 row order):
   7   POS      test_joint_bootstrap_pipeline_emits_covariance_term
   8   POS      test_empirical_coverage_reported_per_horizon
   9   NEG      test_coverage_inflation_factor_applied_when_coverage_below_90
+  10  POS      test_kick2_v2_wrapper_emits_diagnostic_only_false       [KICK-2]
+  11  POS      test_kick2_v1_legacy_emits_diagnostic_only_true         [KICK-2]
+  12  NEG      test_kick2_v2_rejects_missing_required_kwargs           [KICK-2]
+  13  NEG      test_kick2_dataclass_rejects_missing_diagnostic_only    [KICK-2]
+  14  POS      test_kick2_v2_covariance_and_coverage_propagate_to_result [KICK-2]
+  15  NEG      test_kick2_v2_rejects_invalid_covariance_or_coverage_bounds [KICK-2]
 """
 from __future__ import annotations
 
@@ -27,6 +41,7 @@ from macro_pipeline.analysis.forecast_sigma import (
     _compute_coverage_inflation_factor,
     _compute_forecast_sigma_with_covariance,
     derive_forecast_sigma,
+    derive_forecast_sigma_v2,
 )
 
 
@@ -144,6 +159,7 @@ def test_rejects_z_value_below_one():
             analog_dispersion_sigma=0.12,
             calibrated_probability_band_lower=0.40,
             calibrated_probability_band_upper=0.60,
+            diagnostic_only=True,  # KICK-2: no-default field; this construction is diagnostic-flavoured
             z_value=0.5,  # below allowed minimum
         )
 
@@ -195,9 +211,11 @@ def test_empirical_coverage_reported_per_horizon():
         analog_dispersion_sigma=0.12,
         calibrated_probability_band_lower=0.40,
         calibrated_probability_band_upper=0.60,
+        diagnostic_only=False,  # KICK-2: caller-supplied empirical coverage = production-grade
         empirical_coverage_95=0.92,
     )
     assert custom.empirical_coverage_95 == 0.92
+    assert custom.diagnostic_only is False
 
 
 # ---------------------------------------------------------------------------
@@ -227,3 +245,245 @@ def test_coverage_inflation_factor_applied_when_coverage_below_90():
         _compute_coverage_inflation_factor(0.0)
     with pytest.raises(ValueError, match=r"empirical_coverage_95="):
         _compute_coverage_inflation_factor(1.5)
+
+
+# ===========================================================================
+# L5b-KICK-2 tests #10-#15 — v2 production wrapper / diagnostic_only flag
+# ---------------------------------------------------------------------------
+# Closes Codex 5.5 IMPORTANT + ChatGPT 5.5 CRITICAL #2 reviewer flag
+# ("diagnostic-helpers-only" v2 path → production-mandatory pathway) via
+# the AP-AUTH-53 reviewer-driven-kickoff-item pattern. Tests probe both
+# the v2 wrapper contract (POS) and the no-default field forcing
+# semantics (NEG). NEG ratio 3/6 = 50% (floor met).
+# ===========================================================================
+
+
+# ---------------------------------------------------------------------------
+# Test #10 — POS (KICK-2)
+# ---------------------------------------------------------------------------
+def test_kick2_v2_wrapper_emits_diagnostic_only_false():
+    """KICK-2: ``derive_forecast_sigma_v2(...)`` returns a Result whose
+    ``diagnostic_only is False`` — flags production-grade band derivation
+    (caller supplied joint covariance + empirical coverage, not the
+    independence-assumption placeholders)."""
+    r = derive_forecast_sigma_v2(
+        ridge_residual_se_hac=0.07,
+        isotonic_bootstrap_se=0.11,
+        historical_return_sigma=0.15,
+        analog_period_dispersion_sigma=0.12,
+        calibrated_probability=0.50,
+        horizon="1Y",
+        joint_bootstrap_covariance=0.004,
+        empirical_coverage_95=0.93,
+    )
+    assert r.diagnostic_only is False
+    # Cross-check: production-grade Result carries the caller-supplied
+    # covariance verbatim (not the v1 zero placeholder).
+    assert r.covariance_ridge_isotonic == 0.004
+
+
+# ---------------------------------------------------------------------------
+# Test #11 — POS (KICK-2)
+# ---------------------------------------------------------------------------
+def test_kick2_v1_legacy_emits_diagnostic_only_true():
+    """KICK-2: legacy ``derive_forecast_sigma(...)`` returns a Result
+    whose ``diagnostic_only is True`` — flags the independence-
+    assumption / placeholder-coverage path so downstream consumers can
+    detect miswiring."""
+    r = derive_forecast_sigma(0.07, 0.11, 0.15, 0.12, 0.50, "1Y")
+    assert r.diagnostic_only is True
+    # Sanity: v1 path populates v2 fields with placeholders (cov=0,
+    # coverage=1.0, inflation=1.0).
+    assert r.covariance_ridge_isotonic == 0.0
+    assert r.empirical_coverage_95 == 1.0
+    assert r.coverage_inflation_factor == 1.0
+
+
+# ---------------------------------------------------------------------------
+# Test #12 — NEG (KICK-2)
+# ---------------------------------------------------------------------------
+def test_kick2_v2_rejects_missing_required_kwargs():
+    """KICK-2: omitting either ``joint_bootstrap_covariance`` or
+    ``empirical_coverage_95`` raises ``TypeError`` — no-default
+    contract forces caller intent (Sxx-14 catastrophic-state
+    mitigation)."""
+    # Omit joint_bootstrap_covariance entirely.
+    with pytest.raises(TypeError, match=r"joint_bootstrap_covariance"):
+        derive_forecast_sigma_v2(
+            ridge_residual_se_hac=0.07,
+            isotonic_bootstrap_se=0.11,
+            historical_return_sigma=0.15,
+            analog_period_dispersion_sigma=0.12,
+            calibrated_probability=0.50,
+            horizon="1Y",
+            empirical_coverage_95=0.93,
+        )
+    # Omit empirical_coverage_95 entirely.
+    with pytest.raises(TypeError, match=r"empirical_coverage_95"):
+        derive_forecast_sigma_v2(
+            ridge_residual_se_hac=0.07,
+            isotonic_bootstrap_se=0.11,
+            historical_return_sigma=0.15,
+            analog_period_dispersion_sigma=0.12,
+            calibrated_probability=0.50,
+            horizon="1Y",
+            joint_bootstrap_covariance=0.004,
+        )
+
+
+# ---------------------------------------------------------------------------
+# Test #13 — NEG (KICK-2)
+# ---------------------------------------------------------------------------
+def test_kick2_dataclass_rejects_missing_diagnostic_only():
+    """KICK-2: bare ``ForecastSigmaResult(...)`` construction without
+    ``diagnostic_only=`` raises ``TypeError`` — proves the no-default
+    contract; protects against silent production-grade flag
+    misclassification."""
+    with pytest.raises(TypeError, match=r"diagnostic_only"):
+        ForecastSigmaResult(
+            horizon="1Y",
+            forecast_sigma=0.10,
+            return_sigma=0.15,
+            analog_dispersion_sigma=0.12,
+            calibrated_probability_band_lower=0.40,
+            calibrated_probability_band_upper=0.60,
+            # diagnostic_only deliberately omitted — must raise
+        )
+
+
+# ---------------------------------------------------------------------------
+# Test #14 — POS (KICK-2)
+# ---------------------------------------------------------------------------
+def test_kick2_v2_covariance_and_coverage_propagate_to_result():
+    """KICK-2: caller-supplied ``joint_bootstrap_covariance`` +
+    ``empirical_coverage_95`` propagate verbatim to the result fields;
+    ``forecast_sigma_with_covariance`` recomputed using the supplied
+    covariance; ``coverage_inflation_factor`` recomputed via the
+    helper. Closed-form to 1e-10."""
+    sigma_r, sigma_i = 0.10, 0.15
+    cov_in, cov_emp_in = 0.005, 0.85   # coverage below 0.90 → inflation triggers
+    r = derive_forecast_sigma_v2(
+        ridge_residual_se_hac=sigma_r,
+        isotonic_bootstrap_se=sigma_i,
+        historical_return_sigma=0.18,
+        analog_period_dispersion_sigma=0.14,
+        calibrated_probability=0.50,
+        horizon="3Y",
+        joint_bootstrap_covariance=cov_in,
+        empirical_coverage_95=cov_emp_in,
+    )
+    # Covariance propagation.
+    assert r.covariance_ridge_isotonic == cov_in
+    expected_fsc = math.sqrt(sigma_r * sigma_r + sigma_i * sigma_i + 2.0 * cov_in)
+    assert abs(r.forecast_sigma_with_covariance - expected_fsc) < 1e-10
+    # joint_bootstrap_sigma populated with the v2 (with-covariance) estimate.
+    assert abs(r.joint_bootstrap_sigma - expected_fsc) < 1e-10
+    # Coverage propagation.
+    assert r.empirical_coverage_95 == cov_emp_in
+    expected_inflation = math.sqrt(0.95 / cov_emp_in)
+    assert abs(r.coverage_inflation_factor - expected_inflation) < 1e-10
+    # diagnostic_only flag flipped to production-grade.
+    assert r.diagnostic_only is False
+
+
+# ---------------------------------------------------------------------------
+# Test #15 — NEG (KICK-2 §revision bounds-check per Strategic ruling #4)
+# ---------------------------------------------------------------------------
+def test_kick2_v2_rejects_invalid_covariance_or_coverage_bounds():
+    """KICK-2 §revision: v2 wrapper enforces bounds on the two new
+    required kwargs.
+
+    Math note: ``joint_bootstrap_covariance`` MAY legitimately be
+    negative (anti-correlated noise admissible per
+    ``_compute_forecast_sigma_with_covariance`` line 263); the inner-
+    term guard ``|cov| <= sigma_ridge * sigma_isotonic`` (i.e.,
+    ``|rho| <= 1``) provides the natural bound, not a flat non-
+    negativity assertion. Coverage_95 is bounded strict-positive ≤ 1.0.
+
+    Asserts:
+    * NaN covariance rejected at v2 entry (finiteness guard)
+    * inf covariance rejected at v2 entry (finiteness guard)
+    * NEGATIVE covariance ACCEPTED when within |rho|<=1 (sanity:
+      mathematically valid anti-correlated case must not raise)
+    * Covariance violating |rho|<=1 propagates ValueError from helper
+    * Coverage = 0.0 rejected (strict-positive bound)
+    * Coverage = 1.5 rejected (above 1.0 bound)
+    """
+    sigma_r, sigma_i = 0.10, 0.15
+    # ---- Finiteness guard ----
+    with pytest.raises(ValueError, match=r"joint_bootstrap_covariance.*must be finite"):
+        derive_forecast_sigma_v2(
+            ridge_residual_se_hac=sigma_r,
+            isotonic_bootstrap_se=sigma_i,
+            historical_return_sigma=0.15,
+            analog_period_dispersion_sigma=0.12,
+            calibrated_probability=0.50,
+            horizon="1Y",
+            joint_bootstrap_covariance=float("nan"),
+            empirical_coverage_95=0.95,
+        )
+    with pytest.raises(ValueError, match=r"joint_bootstrap_covariance.*must be finite"):
+        derive_forecast_sigma_v2(
+            ridge_residual_se_hac=sigma_r,
+            isotonic_bootstrap_se=sigma_i,
+            historical_return_sigma=0.15,
+            analog_period_dispersion_sigma=0.12,
+            calibrated_probability=0.50,
+            horizon="1Y",
+            joint_bootstrap_covariance=float("inf"),
+            empirical_coverage_95=0.95,
+        )
+
+    # ---- Sanity: negative covariance WITHIN |rho|<=1 must succeed
+    # (anti-correlated noise is mathematically admissible). ----
+    safe_negative_cov = -0.5 * sigma_r * sigma_i   # |rho|=0.5
+    r = derive_forecast_sigma_v2(
+        ridge_residual_se_hac=sigma_r,
+        isotonic_bootstrap_se=sigma_i,
+        historical_return_sigma=0.15,
+        analog_period_dispersion_sigma=0.12,
+        calibrated_probability=0.50,
+        horizon="1Y",
+        joint_bootstrap_covariance=safe_negative_cov,
+        empirical_coverage_95=0.95,
+    )
+    assert r.covariance_ridge_isotonic == safe_negative_cov
+    assert r.diagnostic_only is False
+
+    # ---- |rho|>1 propagates ValueError from helper ----
+    impossible_cov = -2.0 * sigma_r * sigma_i   # implies |rho|=2
+    with pytest.raises(ValueError, match=r"forecast_sigma_with_covariance inner term"):
+        derive_forecast_sigma_v2(
+            ridge_residual_se_hac=sigma_r,
+            isotonic_bootstrap_se=sigma_i,
+            historical_return_sigma=0.15,
+            analog_period_dispersion_sigma=0.12,
+            calibrated_probability=0.50,
+            horizon="1Y",
+            joint_bootstrap_covariance=impossible_cov,
+            empirical_coverage_95=0.95,
+        )
+
+    # ---- Coverage bounds ----
+    with pytest.raises(ValueError, match=r"empirical_coverage_95.*must be in"):
+        derive_forecast_sigma_v2(
+            ridge_residual_se_hac=sigma_r,
+            isotonic_bootstrap_se=sigma_i,
+            historical_return_sigma=0.15,
+            analog_period_dispersion_sigma=0.12,
+            calibrated_probability=0.50,
+            horizon="1Y",
+            joint_bootstrap_covariance=0.004,
+            empirical_coverage_95=0.0,
+        )
+    with pytest.raises(ValueError, match=r"empirical_coverage_95.*must be in"):
+        derive_forecast_sigma_v2(
+            ridge_residual_se_hac=sigma_r,
+            isotonic_bootstrap_se=sigma_i,
+            historical_return_sigma=0.15,
+            analog_period_dispersion_sigma=0.12,
+            calibrated_probability=0.50,
+            horizon="1Y",
+            joint_bootstrap_covariance=0.004,
+            empirical_coverage_95=1.5,
+        )

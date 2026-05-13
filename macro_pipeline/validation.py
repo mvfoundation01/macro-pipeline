@@ -4448,7 +4448,7 @@ def validate_gate24_forecast_sigma() -> GateReport:
             )
 
         # Criterion 3 - ForecastSigmaResult v2-canonical field set
-        # (12 fields: 7 v1 + 5 v2 NEW per S-6).
+        # (13 fields: 7 v1 + 5 v2 NEW per S-6 + 1 KICK-2 diagnostic_only).
         expected_fields = {
             "horizon", "forecast_sigma", "return_sigma",
             "analog_dispersion_sigma",
@@ -4457,6 +4457,7 @@ def validate_gate24_forecast_sigma() -> GateReport:
             "joint_bootstrap_sigma", "covariance_ridge_isotonic",
             "forecast_sigma_with_covariance", "empirical_coverage_95",
             "coverage_inflation_factor",
+            "diagnostic_only",                  # KICK-2: production-grade flag
         }
         actual_fields = set(ForecastSigmaResult.__dataclass_fields__.keys())
         missing_f = expected_fields - actual_fields
@@ -4476,8 +4477,8 @@ def validate_gate24_forecast_sigma() -> GateReport:
             findings.append(
                 f"Criterion 3 PASS: ForecastSigmaResult populates all "
                 f"{len(actual_fields)} v2-canonical fields per spec "
-                "§5.E.1 (seven v1 + five v2 NEW per S-6); symbolic "
-                "derivation per AP-AUTH-52"
+                "§5.E.1 (seven v1 + five v2 NEW per S-6 + one KICK-2 "
+                "diagnostic_only); symbolic derivation per AP-AUTH-52"
             )
 
         # Criterion 4 - z_value default is the 95% two-sided normal
@@ -4523,6 +4524,106 @@ def validate_gate24_forecast_sigma() -> GateReport:
                 "contains no fitting / estimator instantiation - module "
                 "is pure post-hoc scoring (R4 mitigation; spec §5.E.3 "
                 "methodology rigor v2 per S-6)"
+            )
+
+        # ===================================================================
+        # L5b-KICK-2 Criteria 12-14 — v2 production wrapper + no-default
+        # diagnostic_only field + placeholder-pattern runtime probe.
+        # Closes Codex 5.5 IMPORTANT + ChatGPT 5.5 CRITICAL #2 reviewer
+        # "diagnostic-helpers-only" flag via the AP-AUTH-53 reviewer-
+        # driven-kickoff-item pattern. Option Y (signature inspection +
+        # runtime probe) approved by Strategic disposition 2026-05-13.
+        # ===================================================================
+        try:
+            from macro_pipeline.analysis.forecast_sigma import (
+                derive_forecast_sigma_v2,
+            )
+            # Criterion 12 - v2 wrapper importable + callable.
+            summary["criterion_12_v2_api_present"] = "OK"
+            findings.append(
+                "Criterion 12 PASS [KICK-2]: derive_forecast_sigma_v2 "
+                "importable (AP-AUTH-53 production wrapper closes "
+                "Codex IMPORTANT + ChatGPT CRITICAL #2 reviewer flag)"
+            )
+
+            # Criterion 13 - v2 signature has required no-default kwargs.
+            v2_sig = inspect.signature(derive_forecast_sigma_v2)
+            v2_params = v2_sig.parameters
+            required_v2_kwargs = (
+                "joint_bootstrap_covariance",
+                "empirical_coverage_95",
+            )
+            missing_kwargs = [
+                k for k in required_v2_kwargs if k not in v2_params
+            ]
+            no_default_kwargs = [
+                k for k in required_v2_kwargs
+                if k in v2_params
+                and v2_params[k].default is inspect.Parameter.empty
+            ]
+            summary["criterion_13_v2_required_kwargs"] = list(required_v2_kwargs)
+            summary["criterion_13_v2_no_default_kwargs"] = no_default_kwargs
+            if missing_kwargs:
+                findings.append(
+                    f"FAIL: Criterion 13 [KICK-2] - derive_forecast_sigma_v2 "
+                    f"missing required kwargs {missing_kwargs} "
+                    "(Sxx-14 catastrophic-state mitigation requires both "
+                    "joint_bootstrap_covariance + empirical_coverage_95)"
+                )
+            elif set(no_default_kwargs) != set(required_v2_kwargs):
+                findings.append(
+                    f"FAIL: Criterion 13 [KICK-2] - v2 kwargs "
+                    f"{sorted(set(required_v2_kwargs) - set(no_default_kwargs))} "
+                    "have defaults (must be no-default to force caller "
+                    "intent per Sxx-14 mitigation)"
+                )
+            else:
+                findings.append(
+                    "Criterion 13 PASS [KICK-2]: derive_forecast_sigma_v2 "
+                    "exposes required kwargs joint_bootstrap_covariance + "
+                    "empirical_coverage_95 with no defaults (Option Y "
+                    "signature inspection per AP-AUTH-53)"
+                )
+
+            # Criterion 14 - runtime placeholder-pattern probe.
+            # v2 call with explicit non-placeholder values must return
+            # diagnostic_only=False; legacy v1 call must return
+            # diagnostic_only=True. Closes the silent-placeholder
+            # production-caller hole.
+            v2_probe = derive_forecast_sigma_v2(
+                ridge_residual_se_hac=0.05,
+                isotonic_bootstrap_se=0.07,
+                historical_return_sigma=0.15,
+                analog_period_dispersion_sigma=0.12,
+                calibrated_probability=0.50,
+                horizon="1Y",
+                joint_bootstrap_covariance=0.003,
+                empirical_coverage_95=0.93,
+            )
+            v1_probe = derive_forecast_sigma(
+                0.05, 0.07, 0.15, 0.12, 0.50, "1Y",
+            )
+            summary["criterion_14_v2_diagnostic_only"] = v2_probe.diagnostic_only
+            summary["criterion_14_v1_diagnostic_only"] = v1_probe.diagnostic_only
+            if v2_probe.diagnostic_only is False and v1_probe.diagnostic_only is True:
+                findings.append(
+                    "Criterion 14 PASS [KICK-2]: runtime placeholder-"
+                    "pattern probe distinguishes production "
+                    "(v2.diagnostic_only=False) from diagnostic "
+                    "(v1.diagnostic_only=True); Option Y runtime probe "
+                    "closes Sxx-14 catastrophic-state surface"
+                )
+            else:
+                findings.append(
+                    f"FAIL: Criterion 14 [KICK-2] - placeholder probe "
+                    f"misaligned (v2={v2_probe.diagnostic_only}, "
+                    f"v1={v1_probe.diagnostic_only}); expected v2=False / "
+                    "v1=True"
+                )
+        except ImportError as exc:
+            findings.append(
+                f"FAIL: Criterion 12 [KICK-2] - derive_forecast_sigma_v2 "
+                f"import error: {exc}"
             )
     except ImportError as exc:
         findings.append(f"FAIL: Criterion 1 - import error: {exc}")
