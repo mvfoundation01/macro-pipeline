@@ -132,4 +132,43 @@ Spec step 3 reads as speculative — anticipates a future state where pre-1978 t
 
 ---
 
-**END — L5B_BACKLOG.md (L5b-2 + L5b-3 + L5b-4 + L5b-5 as of 2026-05-15; reserved L5b-1 + L5b-6..N open)**
+---
+
+## L5b-6 — Gate 20 criterion 3 wording-vs-implementation drift (L5-E awareness)
+
+**Source**: ChatGPT 5.5 post-RM-4 gate review §D.1 + §B.E (PASS-WITH-NOTE).
+
+**Surfaced**: 2026-05-15 post-RM-4 gate review.
+
+**Issue**: Spec `LAYER_5_BUILD_SPEC.md` v6 §5.RM-4 Gate 20 PASS criterion 3 says "Parquet roundtrip smoke-test PASSes (test #2)". RM-4 implementation (commit `056d198`) used a **JSON roundtrip** in `test_parquet_roundtrip_preserves_6_new_slots` because real parquet would require wrapping ScoredObservation into a DataFrame schema that's not in scope for RM-4. The JSON form preserves the same invariant (new fields survive a round-trip via `to_dict()`) but is wording-vs-implementation drift relative to spec criterion 3.
+
+**Acceptable for RM-4** because:
+- RM-4 deliverable is the dataclass migration (fields + validators), NOT a production parquet schema
+- JSON roundtrip via `to_dict()` exercises the same field-preservation contract
+- ChatGPT post-RM-4 gate review explicitly marked this PASS-WITH-NOTE (not REVISE)
+
+**L5-E future scope**: L5-E (forecast σ confidence band) is the sub-phase that builds the production parquet schema for ScoredObservation export. L5-E pre-flight MUST:
+1. Implement a real parquet roundtrip (pyarrow schema declaration + write + read + element-wise comparison)
+2. NOT cite RM-4 Gate 20 criterion 3 as precedent (RM-4 used JSON; L5-E must use parquet)
+3. Verify all 6 RM-4 new fields survive parquet roundtrip (especially `drawdown_conditional_distribution: dict[str, float]` which requires pyarrow Map type)
+
+**Effort estimate**: 0.25h doc-only ticket (this backlog entry); L5-E implementation cost separate (~1-2h for parquet schema declaration + test).
+
+**Priority**: **LOW** (informational; prevents future L5-E error; ChatGPT review accepted current RM-4 state).
+
+**Owner**: L5-E pre-flight + L5b OOS hardening cycle.
+
+**Acceptance criteria** (L5-E):
+1. L5-E implements `tests/test_*::test_parquet_roundtrip_*` using actual parquet (NOT JSON)
+2. Schema declaration verified for all 6 RM-4 new fields + 23 pre-existing
+3. Round-trip element-wise equality
+4. L5-E verification report explicitly notes "Gate 20 RM-4 used JSON per L5b-6; L5-E provides real parquet"
+
+**Provenance trail**:
+- ChatGPT 5.5 post-RM-4 gate review (2026-05-15; ACCEPT-WITH-NOTES at 86% conf / 8.4/10)
+- RM-4 commit `056d198` + L5_RM_4_VERIFICATION.md §2.2 (cites JSON variant)
+- Spec §5.RM-4.6 criterion 3 + §5.RM-4.7 proof item 2
+
+---
+
+**END — L5B_BACKLOG.md (L5b-2 + L5b-3 + L5b-4 + L5b-5 + L5b-6 as of 2026-05-15; reserved L5b-1 + L5b-7..N open)**
