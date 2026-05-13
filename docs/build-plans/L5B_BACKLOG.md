@@ -51,7 +51,7 @@ When external reviewers (Codex / ChatGPT) flag a CRITICAL or IMPORTANT issue in 
 6. **Pre-flight Sxx-N (catastrophic state) triage** via grep evidence; defer entry to L5B_BACKLOG.md if production callers do not yet exist.
 7. **Module docstring + L5B_BACKLOG.md SPRINT EXECUTION LOG** documents v1 → v2 architectural drift.
 
-Confirmed via L5b-KICK-1 (isotonic `fit_window` invariant) + L5b-KICK-2 (forecast σ v2 production wrapper). Anticipated to apply at KICK-3 through KICK-7. **KICK-3 confirmed (third instance) at `l5b-kick-3-accept`** — see entry below.
+Confirmed via L5b-KICK-1 (isotonic `fit_window` invariant) + L5b-KICK-2 (forecast σ v2 production wrapper). Anticipated to apply at KICK-3 through KICK-7. **KICK-3 confirmed (third instance) at `l5b-kick-3-accept`** — see entry below. **KICK-4 confirmed (fourth instance, internal-implementation variant) at `l5b-kick-4-accept`** — see entry below.
 
 ---
 
@@ -71,6 +71,31 @@ Confirmed via L5b-KICK-1 (isotonic `fit_window` invariant) + L5b-KICK-2 (forecas
 - bootstrap_iterations=0 path during search → v1's `_bootstrap_brier_se` returns `np.zeros(0)` cleanly (no Result-contract break)
 - Tri-state runtime probe reaches all three states deterministically in Gate 22 Criterion 9 (production via well-spread n=1000; diagnostic_only via n=110 skewed split with min=50; fallback_climatology via n=40 below 60 floor)
 **AP-AUTH delta**: zero (AP-AUTH-53 cited as governing pattern; codified at KICK-2 ACCEPT; no new codification this instance).
+**Sxx delta**: zero.
+
+---
+
+### KICK-4 — L5-B1 inner-CV z-scaler recomputation (Task A parity) (2026-05-15)
+
+**ACCEPT tag**: `l5b-kick-4-accept`
+**Reviewer authority**: Codex 5.5 IMPORTANT — "L5-B1: Recompute z-score scalers inside inner λ CV blocks, matching Task A's pattern. Inner λ selection receives outer-train-z-scored data (`return_forecast.py:677-682`) and does not recompute scalers inside inner blocks (`return_forecast.py:203-234`). This does not leak outer test data, but it weakens nested-CV purity."
+**Approach**: B-variant (Strategic-approved 2026-05-15; internal-implementation variant of AP-AUTH-53) — in-place refactor of the private helper `_select_lambda_inner_cv_ridge` (parameter rename `X_train_z` → `X_train`; per-fold body adds `_zscore_fit_transform(X_tr_raw)` + `_zscore_transform(X_te_raw, ...)` matching Task A precedent at `composite_refit.py:177-178`) plus one new no-default field `inner_cv_scaler_recomputed: bool` on `RidgeFitResult` exposing the post-refactor invariant for downstream gating. NOT a `_v2` wrapper-pattern because the helper is private (`_` prefix); no public boundary to wrap. The flag exists for downstream observability + Gate inspection, NOT to allow legacy impure behavior to be selected (correctness fix, not policy).
+**Option**: Y (Strategic-approved 2026-05-15) — Gate 19-B1 extension via signature inspection plus AST audit of helper body. Two new criteria (twenty-three / twenty-four): `inner_cv_scaler_recomputed` no-default field check; AST substring audit verifies `_zscore_fit_transform(X_tr` AND `_zscore_transform(X_te` present in `_select_lambda_inner_cv_ridge` source.
+**Internal-implementation variant note**: KICK-2 + KICK-3 wrapped PUBLIC production boundaries (`derive_forecast_sigma_v2`, `compute_brier_per_horizon_v2`). KICK-4 modifies an INTERNAL nested-CV helper, not a public boundary. The wrapper-pattern doesn't apply naturally; in-place refactor + no-default field flag is the equivalent AP-AUTH-53-conformant pattern for internal-implementation cases. If this variant repeats at KICK-5+, Strategic codifies as AP-AUTH-54. **No new AP-AUTH codification at KICK-4** — variant documented inline in module docstring + this entry.
+**Sxx-16 triage**: NOT triggered (Strategic's predicted state confirmed empirically — zero production scoring callers of `fit_return_forecast_task_b1` exist; only consumers are nineteen-test L5-B1 suite + Gate 19-B1 validator). Prospective-only marker recorded per AP-AUTH-46 gratuitous-Sxx guard: if a production caller subsequently consumes a `RidgeFitResult` with `inner_cv_scaler_recomputed=False`, downstream gate should detect (no such caller exists at KICK-4 ACCEPT).
+**Pre-vs-post λ delta** (Strategic deliverable checklist; empirically captured at Phase 4):
+- `lambda_selected`: UNCHANGED across three-hundred-ninety-six synthetic-fixture folds across 1Y plus 3Y plus 5Y horizons; every single fold binds at grid-edge λ equal to one-hundred both pre and post refactor. This is the synthetic-fixture characteristic (high-noise white-noise data wants maximal Ridge shrinkage regardless of scaler statistics).
+- `lambda_log10_sd_across_5fold`: CHANGED on 1Y/expanding — six of two-hundred-seventeen 1Y folds now report nonzero σ with max σ equal to zero-point-two-four. Methodological signature of the refactor: re-fit scalers per inner block introduce natural inner-fold variance previously suppressed by the shared-scaler pattern. 3Y/expanding + 5Y/expanding remain at σ equal to zero (larger inner blocks → scaler statistics converge regardless of re-fit).
+- `inner_cv_scaler_recomputed` flag: True on three-hundred-ninety-six of three-hundred-ninety-six folds (one-hundred-percent post-refactor coverage).
+**Test delta**: plus five new tests (K4.1 through K4.5; one POS + two POS-inv + one NEG + one NEG-inv = NEG-flavor four of five equals eighty percent per L5-B1 accounting convention where POS-inv counts as NEG-flavor; above floor). No fixups to existing fourteen L5-B1 tests (none assert specific λ values; outer-CV behavior unchanged by design). Baseline seven-hundred-thirty-four to seven-hundred-thirty-nine.
+**Caller updates**: zero in production tree (no production caller of `fit_return_forecast_task_b1` exists; Sxx-16 prospective-only).
+**Algorithm verification**:
+- AST substring `_zscore_fit_transform(X_tr` present in `_select_lambda_inner_cv_ridge` source (Gate 19-B1 Criterion twenty-four verified)
+- AST substring `_zscore_transform(X_te` present (inner statistics applied to inner-test slice)
+- Caller at `return_forecast.py:684` passes RAW `X_train` to helper (not `X_train_z`); K4.3 structural invariant test verifies this
+- Outer Ridge fit at `return_forecast.py:686-688` continues to use outer-train scaler `(mean_tr, std_tr)` for outer-test projection (K4.3 verifies provenance)
+**R1 (λ-drift methodologically expected) closure**: empirical pre-flight snapshot at Phase 0 bounded R1 from HIGH to MED before code-exec began; Phase 4 mid-stream pytest checkpoint confirmed fourteen of fourteen L5-B1 tests pass post-refactor with zero recalibration needed (no test asserts specific λ values; B11 grid-edge warning preserved; B8 lambda_log10_sd field populated regardless of refactor).
+**AP-AUTH delta**: zero (AP-AUTH-53 cited as governing pattern; fourth instance; internal-implementation variant documented inline; AP-AUTH-54 deferred per Strategic until variant repeats at KICK-5+).
 **Sxx delta**: zero.
 
 ---

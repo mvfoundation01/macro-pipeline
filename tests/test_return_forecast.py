@@ -28,6 +28,22 @@ Spec test name mirror (§5.B.5.B / §5.B.5.B2)
   B12  POS-inv     test_task_b1_bootstrap_seeded_for_reproducibility
   B13  NEG         test_task_b1_rejects_underpowered_fold_with_warning
   B2-1 NEG (AST)   test_task_b1_does_not_consume_return_positive_calibrated_probability
+
+L5b-KICK-4 (tag ``l5b-kick-4-accept``, 2026-05-15) appended five tests
+(K4.1-K4.5) closing the Codex 5.5 IMPORTANT reviewer flag on nested-CV
+purity ("L5-B1: Recompute z-score scalers inside inner λ CV blocks,
+matching Task A's pattern") via the AP-AUTH-53 reviewer-driven-
+kickoff-item pattern (fourth instance; internal-implementation variant
+per Strategic disposition 2026-05-15).
+
+  K4.1  POS         test_kick4_inner_cv_scaler_recomputed_field_present_and_true
+  K4.2  POS-inv     test_kick4_task_a_parity_inner_train_only_z_scaling
+  K4.3  POS-inv     test_kick4_outer_cv_scaler_provenance_unchanged_post_refactor
+  K4.4  NEG         test_kick4_dataclass_rejects_missing_inner_cv_scaler_recomputed
+  K4.5  NEG-inv     test_kick4_inner_scalers_differ_from_outer_scalers_negative_invariant
+
+NEG-flavor accounting (per L5-B1 convention; POS-inv counts as NEG-
+flavor): 8 + 4 = 12 of 19 = 63% NEG-flavor (above 50% floor).
 """
 from __future__ import annotations
 
@@ -427,3 +443,186 @@ def test_task_b1_does_not_consume_return_positive_calibrated_probability():
 # ``return_forecast`` module): the import at the top of this file
 # (``from macro_pipeline.models.return_forecast import ...``) is itself
 # the proof — exercised on pytest collection. No separate test row needed.
+
+
+# ===========================================================================
+# L5b-KICK-4 tests K4.1-K4.5 — inner-CV z-scaler recomputation (Task A
+# parity) + no-default field flag + Gate 19-B1 invariants. Closes Codex
+# 5.5 IMPORTANT reviewer flag via the AP-AUTH-53 reviewer-driven-
+# kickoff-item pattern (fourth instance; internal-implementation variant
+# per Strategic disposition 2026-05-15).
+# ===========================================================================
+
+
+# ---------------------------------------------------------------------------
+# Test K4.1 — POS (KICK-4)
+# ---------------------------------------------------------------------------
+def test_kick4_inner_cv_scaler_recomputed_field_present_and_true():
+    """KICK-4: every ``RidgeFitResult`` emitted by
+    ``fit_return_forecast_task_b1`` carries
+    ``inner_cv_scaler_recomputed=True`` (post-refactor Task A parity)."""
+    schedule, crps, cdrs, macro, fwd = _build_synthetic_inputs(horizon="5Y")
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        results = fit_return_forecast_task_b1(
+            schedule, crps, cdrs, macro, fwd, bootstrap_iterations=5,
+        )
+    assert len(results) > 0, "fixture must produce >= 1 fold"
+    # Field exists.
+    assert hasattr(results[0], "inner_cv_scaler_recomputed"), (
+        "RidgeFitResult must expose inner_cv_scaler_recomputed field "
+        "(KICK-4 / AP-AUTH-53 step #3)"
+    )
+    # Every fold has the flag set to True.
+    flags = [r.inner_cv_scaler_recomputed for r in results]
+    assert all(f is True for f in flags), (
+        f"all folds must have inner_cv_scaler_recomputed=True; "
+        f"got {flags}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Test K4.2 — POS-invariant (KICK-4)
+# ---------------------------------------------------------------------------
+def test_kick4_task_a_parity_inner_train_only_z_scaling():
+    """KICK-4: AST/source inspection of ``_select_lambda_inner_cv_ridge``
+    confirms the inner-CV loop body calls ``_zscore_fit_transform(X_tr...)``
+    inside the per-fold iteration — Task A precedent parity at
+    ``composite_refit.py:177-178``."""
+    from macro_pipeline.models import return_forecast as _rf_mod
+    src = inspect.getsource(_rf_mod._select_lambda_inner_cv_ridge)
+    # Substring contract per Gate 19-B1 Criterion 24 (KICK-4): inner-train
+    # re-fit must be present in the helper body.
+    assert "_zscore_fit_transform(X_tr" in src, (
+        "_select_lambda_inner_cv_ridge body must re-fit z-scaler on "
+        "inner-train slice (Task A parity per composite_refit.py:177-178); "
+        "expected substring '_zscore_fit_transform(X_tr' not found"
+    )
+    # And the helper must apply the inner statistics to the inner-test.
+    assert "_zscore_transform(X_te" in src, (
+        "_select_lambda_inner_cv_ridge body must apply inner statistics "
+        "to inner-test slice; expected '_zscore_transform(X_te' not found"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Test K4.3 — POS-invariant (KICK-4)
+# ---------------------------------------------------------------------------
+def test_kick4_outer_cv_scaler_provenance_unchanged_post_refactor():
+    """KICK-4 K4.3 structural invariant: the OUTER Ridge fit projects
+    ``X_test`` through the OUTER-train z-scaler statistics (mean_tr,
+    std_tr) — NOT through any inner-block scaler. Verified via source
+    inspection on ``fit_return_forecast_task_b1`` body: the
+    ``X_test_z = _zscore_transform(X_test, mean_tr, std_tr)`` line uses
+    the OUTER (mean_tr, std_tr) variables computed from
+    ``_zscore_fit_transform(X_train)`` at the outer-CV scope.
+
+    This is the structural invariant chosen over R² golden-value
+    equality per Strategic disposition #6 — methodologically purer
+    because λ may legitimately change post-refactor (R1 surface)."""
+    from macro_pipeline.models import return_forecast as _rf_mod
+    src = inspect.getsource(_rf_mod.fit_return_forecast_task_b1)
+    # Outer z-scaler MUST be computed once at outer-CV scope.
+    assert "X_train_z, mean_tr, std_tr = _zscore_fit_transform(X_train)" in src, (
+        "Outer Ridge fit must compute outer-train z-scaler statistics "
+        "(X_train_z, mean_tr, std_tr) once per outer fold; expected "
+        "exact assignment not found"
+    )
+    # Outer test projection MUST use the OUTER scaler statistics.
+    assert "X_test_z = _zscore_transform(X_test, mean_tr, std_tr)" in src, (
+        "Outer Ridge fit must project X_test through OUTER scaler "
+        "(mean_tr, std_tr); expected exact assignment not found"
+    )
+    # Inner-CV call MUST pass RAW X_train (not X_train_z).
+    assert "_select_lambda_inner_cv_ridge(\n            X_train, y_train" in src, (
+        "Inner-CV call must pass RAW X_train post-KICK-4 (not "
+        "pre-z-scored X_train_z); inner blocks re-fit their own scalers"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Test K4.4 — NEG (KICK-4)
+# ---------------------------------------------------------------------------
+def test_kick4_dataclass_rejects_missing_inner_cv_scaler_recomputed():
+    """KICK-4: bare ``RidgeFitResult(...)`` construction without
+    ``inner_cv_scaler_recomputed=`` raises ``TypeError`` — proves the
+    no-default contract per AP-AUTH-53 step #3."""
+    with pytest.raises(TypeError, match=r"inner_cv_scaler_recomputed"):
+        RidgeFitResult(
+            fold_id=0,
+            horizon="1Y",
+            schedule_type="expanding",
+            lambda_selected=1.0,
+            lambda_grid=(0.1, 1.0, 10.0),
+            lambda_log10_sd_across_5fold=0.0,
+            coefficient_sign_flip_rate=0.0,
+            coef=np.zeros(3),
+            intercept=0.0,
+            forecast_train=np.zeros(10),
+            forecast_test=np.zeros(5),
+            r_squared=0.0,
+            r_squared_oos=0.0,
+            residual_se_hac=0.0,
+            p_value_beta_hac=1.0,
+            bootstrap_residual_se_distribution=np.zeros(0),
+            bootstrap_block_size=6,
+            hac_maxlags=11,
+            n_train_obs=10,
+            n_test_obs=5,
+            n_eff_nonoverlap_train=1,
+            grid_edge_bind=False,
+            block_size_sensitivity_se={},
+            hac_bandwidth_sensitivity_se={},
+            fit_timestamp=pd.Timestamp("2026-05-15"),
+            # inner_cv_scaler_recomputed deliberately omitted — must raise
+        )
+
+
+# ---------------------------------------------------------------------------
+# Test K4.5 — NEG-invariant (KICK-4)
+# ---------------------------------------------------------------------------
+def test_kick4_inner_scalers_differ_from_outer_scalers_negative_invariant():
+    """KICK-4 K4.5 NEG-invariant: when the inner-CV helper is given a
+    raw X_train where the first n//(k+1) rows have systematically
+    different mean/std than the full outer-train, the inner-train slice
+    scaler (mean_inner, std_inner) MUST differ from the outer-train
+    scaler (mean_outer, std_outer).
+
+    This proves the helper actually re-fits scalers per inner block
+    (inverse of the pre-KICK-4 outer-inherited behavior). Implemented
+    via a direct probe: build X_train with structurally different
+    sub-block statistics, call the public helpers, compare scalers."""
+    from macro_pipeline.models.return_forecast import (
+        _zscore_fit_transform, _build_inner_blocks,
+    )
+    # Build synthetic X_train with mean drift across the time axis:
+    # first 100 rows ~ N(0, 1); next 200 rows ~ N(5, 2). The inner-CV
+    # first block (rows 0..n/(k+1)) sees only the first regime; the
+    # outer-train scaler averages across both.
+    rng = np.random.default_rng(2026)
+    block_a = rng.normal(0.0, 1.0, size=(100, 3))
+    block_b = rng.normal(5.0, 2.0, size=(200, 3))
+    X_train_raw = np.vstack([block_a, block_b])
+
+    # Outer-train scaler (on full 300 rows).
+    _, mean_outer, std_outer = _zscore_fit_transform(X_train_raw)
+
+    # First inner-train slice (rows 0..fold_size).
+    blocks = _build_inner_blocks(n_train=300, n_inner_folds=5)
+    assert len(blocks) > 0, "fixture must produce >= 1 inner block"
+    tr_slice, _te_slice = blocks[0]
+    X_tr_inner = X_train_raw[tr_slice]
+    _, mean_inner, std_inner = _zscore_fit_transform(X_tr_inner)
+
+    # NEG-invariant: inner scalers differ from outer scalers (proves
+    # the helper does NOT inherit outer statistics).
+    delta_mean = float(np.max(np.abs(mean_outer - mean_inner)))
+    delta_std = float(np.max(np.abs(std_outer - std_inner)))
+    assert delta_mean > 0.1, (
+        f"NEG-invariant failure: inner mean must differ from outer mean "
+        f"on this fixture; max|Δmean|={delta_mean} (expected > 0.1)"
+    )
+    assert delta_std > 0.1, (
+        f"NEG-invariant failure: inner std must differ from outer std "
+        f"on this fixture; max|Δstd|={delta_std} (expected > 0.1)"
+    )

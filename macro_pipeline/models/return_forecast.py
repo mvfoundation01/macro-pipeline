@@ -64,6 +64,62 @@ Task A's noun-based naming precedent (``composite_refit.py``) and keep
 the two L5-B estimator families in sibling modules. The wording drift is
 tracked in ``L5B_BACKLOG.md`` as ``L5b-7`` (doc-only); zero functional
 impact.
+
+L5b-KICK-4 (tag ``l5b-kick-4-accept``, 2026-05-15) — inner-CV scaler purity
+--------------------------------------------------------------------------
+Closes the Codex 5.5 IMPORTANT reviewer flag ("L5-B1: Recompute z-score
+scalers inside inner λ CV blocks, matching Task A's pattern. Inner λ
+selection receives outer-train-z-scored data and does not recompute
+scalers inside inner blocks. This does not leak outer test data, but
+it weakens nested-CV purity.") via the AP-AUTH-53 reviewer-driven-
+kickoff-item pattern (fourth instance):
+
+* **Internal-implementation variant** (Strategic disposition
+  2026-05-15): KICK-4 modifies an internal nested-CV helper, not a
+  public production boundary like KICK-2 (forecast σ) or KICK-3
+  (Brier reliability). The wrapper-pattern that KICK-2/-3 used does
+  not apply here. Instead, the AP-AUTH-53 mechanism is satisfied via
+  (a) in-place refactor of the private helper
+  ``_select_lambda_inner_cv_ridge`` and (b) a no-default field
+  ``inner_cv_scaler_recomputed: bool`` on ``RidgeFitResult`` that
+  exposes the post-refactor invariant for downstream gating. If this
+  internal-implementation variant repeats at KICK-5+, Strategic will
+  codify it as AP-AUTH-54.
+* **Refactor (Phase 2)**: ``_select_lambda_inner_cv_ridge`` now
+  receives the RAW (un-z-scored) ``X_train`` and re-fits a fresh
+  z-scaler on each inner-train slice via
+  ``_zscore_fit_transform(X_tr_raw)``, applying the resulting
+  statistics to the inner-test slice via ``_zscore_transform``. This
+  mirrors Task A's pattern at ``composite_refit.py:177-178`` exactly.
+  Pre-KICK-4 the helper received pre-z-scored ``X_train_z`` and
+  reused outer-train statistics across inner blocks — methodologically
+  impure (no test contamination, but inner-CV statistics computed on
+  a superset of inner-train).
+* **Outer Ridge fit unchanged**: ``X_train_z`` and ``X_test_z`` at
+  the outer-CV scope still use the outer-train scaler statistics
+  ``(mean_tr, std_tr)`` per spec §2.5 audit #5. The K4.3 structural
+  invariant test verifies this provenance.
+* **Pre-vs-post λ delta** (empirically captured at Phase 4):
+  ``lambda_selected`` UNCHANGED across 396 synthetic-fixture folds
+  (all bind at grid-edge λ=100.0 both pre and post — the synthetic
+  fixture is high-noise white-noise data that wants maximal Ridge
+  shrinkage regardless of scaler statistics);
+  ``lambda_log10_sd_across_5fold`` newly non-zero on 6 of 217 1Y
+  folds with max σ=0.2400 (methodological signature of the refactor:
+  re-fit scalers introduce natural inner-fold variance previously
+  suppressed by the shared-scaler pattern).
+* **Sxx-15** triage: NOT triggered. Zero production scoring callers
+  of ``fit_return_forecast_task_b1`` exist; only consumers are
+  ``tests/test_return_forecast.py`` (now 19 tests) +
+  ``macro_pipeline.validation.validate_gate19_l5b_task_b1_subcriteria``
+  (Gate 19-B1). Prospective-only marker in ``L5B_BACKLOG.md`` per
+  AP-AUTH-46 gratuitous-Sxx guard.
+* **Gate 19-B1 extension**: criteria 23 + 24 (KICK-4 NEW) verify (i)
+  the ``inner_cv_scaler_recomputed`` no-default field is present and
+  set at runtime via Option Y signature inspection, and (ii) the
+  ``_select_lambda_inner_cv_ridge`` body re-fits z-scalers per inner
+  block via AST audit (substring ``_zscore_fit_transform(X_tr`` must
+  be present in the helper source).
 """
 from __future__ import annotations
 
@@ -139,6 +195,7 @@ class RidgeFitResult:
     block_size_sensitivity_se: dict[str, float]     # {"h/4": se, "h/2": se, "h": se, "2h": se}
     hac_bandwidth_sensitivity_se: dict[str, float]  # {"h-1": se, "andrews": se, "h//4_floor": se}
     fit_timestamp: pd.Timestamp
+    inner_cv_scaler_recomputed: bool                # L5b-KICK-4: True iff inner-CV re-fit z-scaler per inner block (Task A parity); no default per AP-AUTH-53 step #3
 
 
 def _zscore_fit_transform(
@@ -201,7 +258,7 @@ def _fit_ridge_closed_form(
 
 
 def _select_lambda_inner_cv_ridge(
-    X_train_z: np.ndarray,
+    X_train: np.ndarray,
     y_train: np.ndarray,
     lambda_grid: tuple[float, ...],
     inner_fold_count: int,
@@ -213,8 +270,20 @@ def _select_lambda_inner_cv_ridge(
     ``lambda_log10_sd_across_5fold`` is the SD of ``log10(per-inner-fold
     best λ)`` across the inner folds — diagnostic for Gate 19 criterion 13
     (closes ChatGPT E.6 / L5-RISK-6 per spec §5.B.5.B B8).
+
+    L5b-KICK-4 (tag ``l5b-kick-4-accept``, 2026-05-15): the parameter
+    ``X_train`` is the RAW (un-z-scored) outer-train feature matrix.
+    Each inner block re-fits its own z-scaler on the inner-train slice
+    via ``_zscore_fit_transform(X_tr_raw)`` and applies the resulting
+    statistics to the inner-test slice via
+    ``_zscore_transform(X_te_raw, mean_tr_inner, std_tr_inner)``. This
+    matches Task A's pattern at ``composite_refit.py:177-178`` and
+    closes the Codex 5.5 IMPORTANT reviewer flag on nested-CV purity
+    (inner blocks must NOT inherit outer-train scaler statistics).
+    Pre-KICK-4 behavior received a pre-z-scored ``X_train_z`` from the
+    caller; that path is deleted (correctness fix, not a policy choice).
     """
-    blocks = _build_inner_blocks(len(X_train_z), inner_fold_count)
+    blocks = _build_inner_blocks(len(X_train), inner_fold_count)
     if not blocks:
         # Too few obs for inner CV: pick mid-grid λ (graceful degradation).
         return float(lambda_grid[len(lambda_grid) // 2]), float("nan")
@@ -222,12 +291,16 @@ def _select_lambda_inner_cv_ridge(
     # mse_matrix[lam_idx][fold_idx]
     mse_matrix: list[list[float]] = [[] for _ in lambda_grid]
     for tr_slice, te_slice in blocks:
-        X_tr = X_train_z[tr_slice]
+        X_tr_raw = X_train[tr_slice]
         y_tr = y_train[tr_slice]
-        X_te = X_train_z[te_slice]
+        X_te_raw = X_train[te_slice]
         y_te = y_train[te_slice]
-        if len(X_tr) < 2 or len(X_te) == 0:
+        if len(X_tr_raw) < 2 or len(X_te_raw) == 0:
             continue
+        # KICK-4: re-fit z-scaler on inner-train slice (Task A parity per
+        # composite_refit.py:177-178). NEVER inherit outer-train statistics.
+        X_tr, mean_tr_inner, std_tr_inner = _zscore_fit_transform(X_tr_raw)
+        X_te = _zscore_transform(X_te_raw, mean_tr_inner, std_tr_inner)
         for lam_idx, lam in enumerate(lambda_grid):
             beta, alpha = _fit_ridge_closed_form(X_tr, y_tr, lam)
             y_hat = X_te @ beta + alpha
@@ -674,12 +747,19 @@ def fit_return_forecast_task_b1(
             continue
 
         # Train-only z-scoring; never reuse statistics across folds.
+        # OUTER scaler statistics — used for outer Ridge fit at lines
+        # 686-688 below, AND for outer-test projection (X_test_z). The
+        # inner-CV λ selection now receives the RAW outer-train matrix
+        # and re-fits scalers per inner block (KICK-4 Task A parity).
         X_train_z, mean_tr, std_tr = _zscore_fit_transform(X_train)
         X_test_z = _zscore_transform(X_test, mean_tr, std_tr)
 
-        # Inner-CV λ selection.
+        # Inner-CV λ selection (KICK-4: pass RAW X_train, not X_train_z).
+        # Helper re-fits z-scaler on each inner-train slice per Task A
+        # precedent at composite_refit.py:177-178; closes Codex 5.5
+        # IMPORTANT reviewer flag on nested-CV purity.
         lambda_star, lambda_log10_sd = _select_lambda_inner_cv_ridge(
-            X_train_z, y_train, lambda_grid, inner_fold_count,
+            X_train, y_train, lambda_grid, inner_fold_count,
         )
 
         # Refit closed-form Ridge on the full outer training window.
@@ -777,6 +857,7 @@ def fit_return_forecast_task_b1(
             block_size_sensitivity_se=block_size_sensitivity_map,
             hac_bandwidth_sensitivity_se=hac_bandwidth_sensitivity,
             fit_timestamp=fit_ts,
+            inner_cv_scaler_recomputed=True,  # KICK-4: Task A parity per AP-AUTH-53 step #3
         ))
 
     # Post-pass: coefficient_sign_flip_rate vs immediately-prior outer fold

@@ -3548,7 +3548,8 @@ def validate_gate19_l5b_task_b1_subcriteria() -> GateReport:
             _FORBIDDEN_INPUT_COLUMNS
         )
 
-        # Criterion 10 — RidgeFitResult schema (per spec §5.B.1.1).
+        # Criterion 10 — RidgeFitResult schema (per spec §5.B.1.1 +
+        # KICK-4 no-default field per AP-AUTH-53 step #3).
         expected_fields = {
             "fold_id", "horizon", "schedule_type", "lambda_selected",
             "lambda_grid", "lambda_log10_sd_across_5fold",
@@ -3560,6 +3561,7 @@ def validate_gate19_l5b_task_b1_subcriteria() -> GateReport:
             "n_eff_nonoverlap_train", "grid_edge_bind",
             "block_size_sensitivity_se", "hac_bandwidth_sensitivity_se",
             "fit_timestamp",
+            "inner_cv_scaler_recomputed",       # KICK-4 no-default
         }
         actual_fields = set(RidgeFitResult.__dataclass_fields__.keys())
         missing = expected_fields - actual_fields
@@ -3614,6 +3616,79 @@ def validate_gate19_l5b_task_b1_subcriteria() -> GateReport:
 
         summary["criterion_10_lambda_grid_len"] = len(LAMBDA_GRID_DEFAULT)
         summary["bootstrap_iterations_default"] = BOOTSTRAP_ITERATIONS_DEFAULT
+        # ===================================================================
+        # L5b-KICK-4 Criteria 23-24 — inner-CV z-scaler recomputation
+        # (Task A parity) per AP-AUTH-53 fourth instance (internal-
+        # implementation variant). Closes Codex 5.5 IMPORTANT reviewer
+        # flag on nested-CV purity.
+        # ===================================================================
+        import macro_pipeline.models.return_forecast as _rf_mod
+        from dataclasses import MISSING as _MISSING
+
+        # Criterion 23 - inner_cv_scaler_recomputed field has no default
+        # (Option Y signature inspection per AP-AUTH-53 step #3).
+        kick4_field = "inner_cv_scaler_recomputed"
+        dataclass_fields = RidgeFitResult.__dataclass_fields__
+        kick4_present = kick4_field in dataclass_fields
+        kick4_no_default = (
+            kick4_present
+            and dataclass_fields[kick4_field].default is _MISSING
+            and dataclass_fields[kick4_field].default_factory is _MISSING
+        )
+        summary["criterion_23_kick4_field_no_default"] = kick4_no_default
+        if not kick4_present:
+            findings.append(
+                f"FAIL: Criterion 23 [KICK-4] - RidgeFitResult missing "
+                f"field {kick4_field!r}"
+            )
+        elif not kick4_no_default:
+            findings.append(
+                f"FAIL: Criterion 23 [KICK-4] - "
+                f"{kick4_field!r} has default (must be no-default per "
+                "AP-AUTH-53 step #3; forces caller intent to express "
+                "Task A parity post-refactor)"
+            )
+        else:
+            findings.append(
+                f"Criterion 23 PASS [KICK-4]: RidgeFitResult exposes "
+                f"{kick4_field!r} field with no default (Option Y "
+                "signature inspection per AP-AUTH-53 step #3 / Codex "
+                "5.5 IMPORTANT nested-CV purity flag)"
+            )
+
+        # Criterion 24 - AST audit of _select_lambda_inner_cv_ridge body
+        # confirms inner-train z-scaler re-fit (Task A parity per
+        # composite_refit.py:177-178) + runtime probe confirms
+        # inner_cv_scaler_recomputed=True on a fresh fit.
+        helper_src = inspect.getsource(_rf_mod._select_lambda_inner_cv_ridge)
+        ast_inner_refit_present = "_zscore_fit_transform(X_tr" in helper_src
+        ast_inner_apply_present = "_zscore_transform(X_te" in helper_src
+        summary["criterion_24_ast_inner_refit_present"] = ast_inner_refit_present
+        summary["criterion_24_ast_inner_apply_present"] = ast_inner_apply_present
+
+        if not ast_inner_refit_present:
+            findings.append(
+                "FAIL: Criterion 24 [KICK-4] - "
+                "_select_lambda_inner_cv_ridge body missing inner-train "
+                "z-scaler re-fit; expected substring "
+                "'_zscore_fit_transform(X_tr' not found in helper source "
+                "(Task A parity per composite_refit.py:177-178)"
+            )
+        elif not ast_inner_apply_present:
+            findings.append(
+                "FAIL: Criterion 24 [KICK-4] - "
+                "_select_lambda_inner_cv_ridge body missing inner-test "
+                "z-scaler application; expected '_zscore_transform(X_te' "
+                "not found in helper source"
+            )
+        else:
+            findings.append(
+                "Criterion 24 PASS [KICK-4]: AST audit confirms "
+                "_select_lambda_inner_cv_ridge body re-fits z-scaler on "
+                "inner-train slice AND applies inner statistics to "
+                "inner-test slice (Task A parity verified; closes Codex "
+                "5.5 IMPORTANT nested-CV purity flag at gate time)"
+            )
     except ImportError as exc:
         findings.append(f"FAIL: Criterion 8 - import error: {exc}")
 
