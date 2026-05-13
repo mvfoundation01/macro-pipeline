@@ -4185,6 +4185,202 @@ def _cli_gate22() -> int:
     return 0 if report.passed else 1
 
 
+def validate_gate23_drawdown_conditionals() -> GateReport:
+    """Gate 23 - L5-D drawdown probability conditional distributions.
+
+    Per ``LAYER_5_BUILD_SPEC.md`` v6 @ ``9f848bb`` §5.D.6 (PASS criteria)
+    + §5.D.7 (ten-item proof contract).
+
+    Compile-time checks (criteria 1-4 partial + Standing Order #2 AST
+    audit for R3 leakage mitigation); pytest-asserted out-of-band
+    (criteria 5-9 via tests/test_drawdown_conditionals.py).
+    """
+    import inspect
+
+    findings: list[str] = []
+    warnings_list: list[str] = []
+    summary: dict = {}
+
+    try:
+        from macro_pipeline.analysis.drawdown_conditionals import (
+            DRAWDOWN_THRESHOLDS,
+            DrawdownConditionalResult,
+            fit_drawdown_conditionals,
+        )
+        import macro_pipeline.analysis.drawdown_conditionals as _dd_mod
+
+        summary["criterion_1_api_present"] = {
+            "DRAWDOWN_THRESHOLDS": "OK",
+            "DrawdownConditionalResult": "OK",
+            "fit_drawdown_conditionals": "OK",
+        }
+        findings.append(
+            "Criterion 1 PASS: DRAWDOWN_THRESHOLDS + DrawdownConditionalResult "
+            "+ fit_drawdown_conditionals importable (spec §5.D.1 + §5.D.7 "
+            "proof item 1)"
+        )
+
+        # Criterion 2 - canonical 5-element threshold constant per spec
+        # §5.D.5 test #1.
+        expected_thresholds = (0.10, 0.20, 0.35, 0.50, 0.65)
+        if DRAWDOWN_THRESHOLDS == expected_thresholds:
+            findings.append(
+                "Criterion 2 PASS: DRAWDOWN_THRESHOLDS == "
+                "(0.10, 0.20, 0.35, 0.50, 0.65) per spec §5.D.1 + §5.D.5 "
+                "test #1"
+            )
+        else:
+            findings.append(
+                f"FAIL: Criterion 2 - DRAWDOWN_THRESHOLDS = "
+                f"{DRAWDOWN_THRESHOLDS}, expected {expected_thresholds}"
+            )
+        summary["criterion_2_thresholds"] = DRAWDOWN_THRESHOLDS
+
+        # Criterion 3 - signature matches spec §5.D.1 (4 parameters:
+        # forward_drawdowns_by_horizon, regime_states, bootstrap_iterations,
+        # random_seed).
+        expected_params = {
+            "forward_drawdowns_by_horizon", "regime_states",
+            "bootstrap_iterations", "random_seed",
+        }
+        sig = inspect.signature(fit_drawdown_conditionals)
+        actual_params = set(sig.parameters.keys())
+        missing = expected_params - actual_params
+        extra = actual_params - expected_params
+        summary["criterion_3_signature_params"] = sorted(actual_params)
+        if missing:
+            findings.append(
+                f"FAIL: Criterion 3 - fit_drawdown_conditionals missing "
+                f"params {sorted(missing)}"
+            )
+        elif extra:
+            findings.append(
+                f"FAIL: Criterion 3 - fit_drawdown_conditionals has "
+                f"unexpected extra params {sorted(extra)}"
+            )
+        else:
+            findings.append(
+                "Criterion 3 PASS: fit_drawdown_conditionals signature "
+                "matches spec four-parameter contract (forward_drawdowns_by_horizon "
+                "+ regime_states positional; bootstrap_iterations + "
+                "random_seed keyword-only)"
+            )
+
+        # Criterion 4 - DrawdownConditionalResult v3-canonical field set
+        # (13 fields; hierarchical_pooling_applied REMOVED in v3 cleanup
+        # per spec §5.D.1).
+        expected_fields = {
+            "horizon", "regime_state", "n_obs", "drawdown_thresholds",
+            "exceedance_probability", "bootstrap_se",
+            "historical_anchor_dates", "n_eff_nonoverlap", "event_count",
+            "wilson_interval_95", "interval_width", "cell_label",
+            "pooling_neighbors",
+        }
+        actual_fields = set(DrawdownConditionalResult.__dataclass_fields__.keys())
+        missing_f = expected_fields - actual_fields
+        extra_f = actual_fields - expected_fields
+        summary["criterion_4_field_count"] = len(actual_fields)
+        if missing_f:
+            findings.append(
+                f"FAIL: Criterion 4 - DrawdownConditionalResult missing "
+                f"fields {sorted(missing_f)}"
+            )
+        elif extra_f:
+            findings.append(
+                f"FAIL: Criterion 4 - DrawdownConditionalResult has "
+                f"unexpected fields {sorted(extra_f)}"
+            )
+        elif "hierarchical_pooling_applied" in actual_fields:
+            findings.append(
+                "FAIL: Criterion 4 - hierarchical_pooling_applied should "
+                "have been removed in v3 cleanup per spec §5.D.1"
+            )
+        else:
+            findings.append(
+                f"Criterion 4 PASS: DrawdownConditionalResult populates "
+                f"all {len(actual_fields)} v3-canonical fields; "
+                "hierarchical_pooling_applied REMOVED per v3 cleanup "
+                "(spec §5.D.1 line ~1539); §5.D.5 test #11 v4 NEG "
+                "verifies removal at runtime"
+            )
+
+        # Standing Order #2 AST audit (R3 leakage mitigation) - source
+        # contains no fitting / estimator instantiation patterns. The
+        # function name "fit_drawdown_conditionals" carries the spec
+        # literal but the body is empirical exceedance frequency, not
+        # estimator training.
+        source = inspect.getsource(_dd_mod)
+        forbidden_substrings = (
+            ".fit(",
+            "train_test_split",
+            "LogisticRegression",
+            "IsotonicRegression(",
+        )
+        # The function NAME ``fit_drawdown_conditionals`` is unavoidable
+        # (spec literal); strip method-call patterns only by checking
+        # for ``.fit(`` (with the dot) which catches genuine estimator
+        # fits without flagging the function name itself.
+        found_substrings = [s for s in forbidden_substrings if s in source]
+        summary["standing_order_2_ast_audit_forbidden_found"] = found_substrings
+        if found_substrings:
+            findings.append(
+                f"FAIL: Standing Order #2 AST audit - drawdown_conditionals "
+                f"contains forbidden fitting/estimator substring(s) "
+                f"{found_substrings}; this module must be POST-HOC "
+                "empirical scoring only (R3 mitigation)"
+            )
+        else:
+            findings.append(
+                "Standing Order #2 AST audit PASS: drawdown_conditionals "
+                "source contains no fitting / estimator instantiation - "
+                "module is pure post-hoc empirical exceedance scoring "
+                "(R3 mitigation; spec §5.D.3 methodology rigor)"
+            )
+    except ImportError as exc:
+        findings.append(f"FAIL: Criterion 1 - import error: {exc}")
+
+    # Out-of-band assertions (pytest).
+    warnings_list.append(
+        "Criterion 5 (16 cells per spec §5.D.5 test #3) asserted via "
+        "test_per_horizon_regime_returns_16_cells"
+    )
+    warnings_list.append(
+        "Criterion 6 (monotonicity invariant per spec §5.D.5 test #2) "
+        "asserted via test_exceedance_probability_monotone_with_threshold"
+    )
+    warnings_list.append(
+        "Criterion 7 (bootstrap seeded reproducibly per spec §5.D.5 "
+        "test #8) asserted via test_bootstrap_seeded_for_reproducibility"
+    )
+    warnings_list.append(
+        "Criterion 8 (3-state taxonomy production / diagnostic_only / "
+        "pooled + NO raw nan per spec §5.D.6 + spec §5.D.5 tests #11 "
+        "and #12) asserted via test_hierarchical_pooling_when_sparse_uses_cell_label_taxonomy "
+        "and test_no_raw_nan_in_drawdown_output_v3_taxonomy"
+    )
+    warnings_list.append(
+        "Criterion 9 (all twelve spec tests in §5.D.5 PASS per spec "
+        "§5.D.7 proof item 2 + symbolic +12 derivation per AP-AUTH-52: "
+        "eight v2 baseline + four v2/v3 cell_label taxonomy expansion) "
+        "asserted via full pytest"
+    )
+
+    passed = not any(f.startswith("FAIL") for f in findings)
+    return GateReport(
+        name="Gate 23 - L5-D drawdown probability conditional distributions",
+        passed=passed, findings=findings, warnings=warnings_list,
+        summary=summary,
+    )
+
+
+def _cli_gate23() -> int:
+    import logging
+    logging.basicConfig(level="WARNING", format="%(message)s")
+    report = validate_gate23_drawdown_conditionals()
+    print(report.render())
+    return 0 if report.passed else 1
+
+
 if __name__ == "__main__":
     import sys
     cmd = sys.argv[1] if len(sys.argv) > 1 else "gate1"
@@ -4234,11 +4430,13 @@ if __name__ == "__main__":
         sys.exit(_cli_gate21())
     if cmd == "gate22":
         sys.exit(_cli_gate22())
+    if cmd == "gate23":
+        sys.exit(_cli_gate23())
     print(
         f"Unknown command: {cmd}. Available: "
         "gate1, gate2, gate3, gate4a, gate4b, gate4c, gate4d, "
         "gate8, gate9, gate10, gate11, gate12, gate13, gate14, gate15, gate16, gate17, "
-        "gate18, gate19_b1, gate19_b2, gate20, gate21, gate22",
+        "gate18, gate19_b1, gate19_b2, gate20, gate21, gate22, gate23",
         file=sys.stderr,
     )
     sys.exit(2)

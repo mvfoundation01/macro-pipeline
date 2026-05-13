@@ -177,15 +177,17 @@ Spec step 3 reads as speculative — anticipates a future state where pre-1978 t
 
 **Surfaced**: L5-B Task B1 pre-flight read-and-plan (this sub-phase).
 
-Spec `LAYER_5_BUILD_SPEC.md` v6 @ `9f848bb` contains two doc-vs-implementation drifts that do not affect behavior but should be reconciled at a future v7 spec patch:
+Spec `LAYER_5_BUILD_SPEC.md` v6 @ `9f848bb` contains three doc-vs-implementation drifts that do not affect behavior but should be reconciled at a future v7 spec patch:
 
 1. **§5.B.0 + §5.B.1.1 + §5.B.7 proof item 1**: spec literal `macro_pipeline/models/ridge_cv.py` does not exist in the implementation. Task A shipped at `macro_pipeline/models/composite_refit.py` (l5-b-task-a-accept). Task B1 shipped at `macro_pipeline/models/return_forecast.py` (l5-b-task-b1-accept; D-B1-1 disposition). Task B2 shipped at `macro_pipeline/models/return_calibration.py` (l5-b-task-b2-accept; D-B1-1 precedent continued). Spec proof item 1 reads "from macro_pipeline.models.ridge_cv import fit_composite_weights, fit_return_forecast_task_b1, calibrate_return_forecast_task_b2, ...". Actual: three separate import paths.
 
 2. **§5.B.6 Gate 19**: spec authored as a monolithic 22-criterion gate covering Task A + B1 + B2. V's build plan unbundled into per-sub-phase ACCEPT tags, so Gate 19 is split into 19-A (criteria 1-7, Task A, ✓ at `l5-b-task-a-accept`), 19-B1 (criteria 8-14 + 19-22, Task B1, ✓ at `l5-b-task-b1-accept` via `validate_gate19_l5b_task_b1_subcriteria`), and 19-B2 (criteria 15-18, Task B2, ✓ at `l5-b-task-b2-accept` via `validate_gate19_l5b_task_b2_subcriteria`). After all three partial-PASS milestones land, the spec-monolithic Gate 19 is conceptually closed. Sub-criterion 19 "all 28 tests PASS" splits across the three milestones — Task A delta (twelve), Task B1 delta with B2-1 promoted into the Task B1 file (fourteen; was thirteen in spec, plus the promoted B2-1), Task B2 delta minus B2-1 (two; was three in spec, minus the promoted B2-1); total reconciles to twenty-eight, preserving the spec literal mirror anchor exactly per AP-AUTH-52 magic-number derivability discipline.
 
+3. **§5.D.0 metadata anchor stale vs §5.D.5/.6/.7 canonical (D-D-1 + D-D-2)**: spec §5.D.0 metadata table says "Test delta +8 (≥4 NEG = 50% floor; 5 NEG / 3 POS = 63% NEG)" but §5.D.5 header + §5.D.5 footer + §5.D.6 PASS criterion 8 + §5.D.7 proof item 2 + §5.D.7 proof item 9 all assert the canonical "+12 tests" (eight NEG / four POS = 67%). The §5.D.0 anchor is a stale v1 relic that v2/v3/v4 expansions left orphaned. Implementation followed §5.D.5/.6/.7 canonical at `l5-d-accept`. Symbolic derivation per AP-AUTH-52: "+12 = eight v2 baseline + four v2/v3 cell_label taxonomy expansion (test #9 Wilson interval + test #10 diagnostic_only label + test #11 hierarchical pooling v4 amended + test #12 no-raw-nan v3 taxonomy)". D-D-2: §5.D.7 proof item 2 references `tests/test_drawdown_conditional.py` (singular) while §5.D.0 metadata "New files" row uses `tests/test_drawdown_conditionals.py` (plural). Single-letter typo in §5.D.7; implementation followed plural per metadata canonical.
+
 **Effort estimate**: 1–2h ChatGPT review + 0.5h Track A surgical scrub + 0.5h Strategic disposition ≈ 2–3h cycle (similar to L5b-4).
 
-**Priority**: **LOW** — doc-only residue; zero functional impact. Implementation matches Strategic-approved D-B1-1/-2/-3 dispositions, validated at `l5-b-task-b1-accept` and finalised at `l5-b-task-b2-accept` (Gate 19 monolithic conceptually closed across the three partial milestones).
+**Priority**: **LOW** — doc-only residue; zero functional impact. Implementation matches Strategic-approved D-B1-1/-2/-3 + D-D-1/-2 dispositions, validated through `l5-b-task-b2-accept` (Gate 19 closure) and `l5-d-accept` (drawdown_conditionals doc-residue).
 
 **Owner**: post-L5 retrospective (NOT during active L5 build; spec FROZEN per scope guard).
 
@@ -194,13 +196,15 @@ Spec `LAYER_5_BUILD_SPEC.md` v6 @ `9f848bb` contains two doc-vs-implementation d
 2. v7 spec rewrites §5.B.6 Gate 19 as three sub-gates 19-A / 19-B1 / 19-B2, each with its own criterion numbering. Spec sub-criterion 19 anchor count updates from "28 tests" to "29 tests" (derivation cited symbolically: Task A twelve + Task B1 fourteen with B2-1 promoted + Task B2 two; grep evidence required per AP-AUTH-52).
 3. AP-AUTH-52 magic-number discipline applied: each new total derives from `<base_grep_count> + <delta>` with grep evidence cited.
 4. v7 ChatGPT review confirms 0 new file-naming or gate-split inconsistencies introduced.
+5. v7 spec rewrites §5.D.0 metadata "+8 / 63% NEG" stale anchor to canonical "+12 / 67% NEG" per §5.D.5/.6/.7 mirror. Fixes §5.D.7 proof item 2 typo `test_drawdown_conditional.py` (singular) to plural per metadata "New files" row.
 
 **Provenance trail**:
 - L5-B Task B1 ACCEPT report (2026-05-13) — initial entry surface
 - L5-B Task B2 ACCEPT report (2026-05-13) — extended for `return_calibration.py` + Gate 19 final-close confirmation + test-count miscount correction (prior entry asserted "twenty-nine" total; corrected to twenty-eight matching the spec literal mirror anchor since B2-1 is INSIDE the Task B1 file's fourteen, not an additional test)
+- L5-D ACCEPT report (2026-05-13) — extended for §5.D.0 stale anchor (D-D-1) + §5.D.7 proof item 2 typo (D-D-2)
 - AP-AUTH-52 codified at `docs/ap_register.md` (sibling discipline)
-- D-B1-1 / D-B1-2 / D-B1-3 Strategic dispositions (Track B chat, 2026-05-13)
+- D-B1-1 / D-B1-2 / D-B1-3 + D-D-1 / D-D-2 Strategic dispositions (Track B chat, 2026-05-13)
 
 ---
 
-**END — L5B_BACKLOG.md (L5b-2 + L5b-3 + L5b-4 + L5b-5 + L5b-6 + L5b-7 as of 2026-05-13 post-L5-B-Task-B1; reserved L5b-1 + L5b-8..N open)**
+**END — L5B_BACKLOG.md (L5b-2 + L5b-3 + L5b-4 + L5b-5 + L5b-6 + L5b-7 as of 2026-05-13 post-L5-D; reserved L5b-1 + L5b-8..N open)**
