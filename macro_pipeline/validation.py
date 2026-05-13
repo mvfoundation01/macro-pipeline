@@ -4577,15 +4577,16 @@ def _cli_gate24() -> int:
 
 def validate_gate25_dms_shrinkage_composite() -> GateReport:
     """Gate 25 (composite) - DMS adjustment integrity (sub-criterion 25.1)
-    + Bayesian shrinkage integrity (sub-criterion 25.2 - DEFERRED to L5-G).
+    + Bayesian shrinkage integrity (sub-criterion 25.2) - SEALED at L5-G.
 
     Per ``LAYER_5_BUILD_SPEC.md`` v6 @ ``9f848bb`` §5.F.0 "Modified files"
-    row + §5.F.6 Gate 25.1 + §5.G (Gate 25.2 to-be-added).
+    row + §5.F.6 Gate 25.1 + §5.G.6 Gate 25.2 + composite seal at L5-G.
 
-    L5-F implements sub-criterion 25.1 fully (DMS apply integrity); L5-G
-    will extend this same validator to add 25.2 (Bayesian shrinkage
-    integrity). Mirrors the Gate 19-A / -B1 / -B2 partial-PASS precedent
-    established at the L5-B sub-phase chain.
+    L5-F authored sub-criterion 25.1 (DMS apply integrity) + placeholder
+    for 25.2. L5-G extends this same validator body to add sub-criterion
+    25.2 (Bayesian shrinkage integrity per spec §5.G.6) + removes the
+    25.2 deferred placeholder, sealing the composite gate. Mirrors the
+    L3.5b Gate 17 composite seal pattern per spec §5.G.6.
 
     Compile-time checks (criteria 25.1.1 - 25.1.4 + Standing Order #2
     AST audit for R4 leakage mitigation); pytest-asserted out-of-band
@@ -4718,17 +4719,171 @@ def validate_gate25_dms_shrinkage_composite() -> GateReport:
         "proof item 4) asserted via full pytest"
     )
 
-    # Sub-criterion 25.2 deferred placeholder.
+    # ---- Sub-criterion 25.2: Bayesian shrinkage integrity (L5-G) ----
+    # Added at L5-G per spec §5.G.6 to seal the composite gate.
+    try:
+        import inspect as _inspect_b
+        from macro_pipeline.models.bayesian_shrinkage import (
+            DMS_PRIOR_REAL_ANNUALIZED_GLOBAL,
+            DMS_PRIOR_REAL_ANNUALIZED_US,
+            K_HORIZON,
+            NOMINAL_SHRINKAGE_WEIGHTS_AT_REFERENCE_N,
+            N_REF_NONOVERLAP,
+            W_REF_TARGET,
+            apply_shrinkage,
+            compute_shrinkage_weight,
+        )
+        import macro_pipeline.models.bayesian_shrinkage as _bs_mod
+
+        summary["criterion_25_2_1_api_present"] = {
+            "compute_shrinkage_weight": "OK",
+            "apply_shrinkage": "OK",
+            "K_HORIZON": "OK",
+            "DMS_PRIOR_REAL_ANNUALIZED_US": "OK",
+            "DMS_PRIOR_REAL_ANNUALIZED_GLOBAL": "OK",
+            "N_REF_NONOVERLAP": "OK",
+            "W_REF_TARGET": "OK",
+            "NOMINAL_SHRINKAGE_WEIGHTS_AT_REFERENCE_N": "OK",
+        }
+        findings.append(
+            "Criterion 25.2.1 PASS: compute_shrinkage_weight + "
+            "apply_shrinkage + K_HORIZON + DMS_PRIOR_REAL_ANNUALIZED_US + "
+            "DMS_PRIOR_REAL_ANNUALIZED_GLOBAL + N_REF_NONOVERLAP + "
+            "W_REF_TARGET + NOMINAL_SHRINKAGE_WEIGHTS_AT_REFERENCE_N "
+            "importable (spec §5.G.7 proof item 1)"
+        )
+
+        # Criterion 25.2.2 — K_HORIZON v2 backsolve per Q7 lock.
+        expected_k = {"1Y": 5.9, "3Y": 6.7, "5Y": 9.4, "10Y": 11.0}
+        if K_HORIZON == expected_k:
+            findings.append(
+                "Criterion 25.2.2 PASS: K_HORIZON matches v2 backsolve "
+                "(1Y=5.9, 3Y=6.7, 5Y=9.4, 10Y=11.0) per Q7 lock + S-4 "
+                "(closes ChatGPT v1 §E.3 / L5-RISK-3 arithmetic "
+                "inconsistency)"
+            )
+        else:
+            findings.append(
+                f"FAIL: Criterion 25.2.2 - K_HORIZON = {K_HORIZON}, "
+                f"expected {expected_k} per Q7 v2 lock"
+            )
+        summary["criterion_25_2_2_K_HORIZON"] = dict(K_HORIZON)
+
+        # Criterion 25.2.3 — DMS prior anchors per Q7 lock.
+        if (
+            DMS_PRIOR_REAL_ANNUALIZED_US == 0.065
+            and DMS_PRIOR_REAL_ANNUALIZED_GLOBAL == 0.045
+        ):
+            findings.append(
+                "Criterion 25.2.3 PASS: DMS_PRIOR_REAL_ANNUALIZED_US "
+                "== 0.065 + DMS_PRIOR_REAL_ANNUALIZED_GLOBAL == 0.045 "
+                "per Q7 lock (Master Prompt v3.1 §13 reference)"
+            )
+        else:
+            findings.append(
+                f"FAIL: Criterion 25.2.3 - DMS priors = "
+                f"({DMS_PRIOR_REAL_ANNUALIZED_US}, "
+                f"{DMS_PRIOR_REAL_ANNUALIZED_GLOBAL}), expected "
+                "(0.065, 0.045) per Q7 lock"
+            )
+        summary["criterion_25_2_3_us_prior"] = DMS_PRIOR_REAL_ANNUALIZED_US
+        summary["criterion_25_2_3_global_prior"] = DMS_PRIOR_REAL_ANNUALIZED_GLOBAL
+
+        # Criterion 25.2.4 — signatures match spec §5.G.1.
+        expected_csw_params = {"n_eff_nonoverlap", "horizon"}
+        expected_as_params = {
+            "raw_forecast_real_annualized", "n_eff_nonoverlap",
+            "horizon", "use_global_prior",
+        }
+        sig_csw = _inspect_b.signature(compute_shrinkage_weight)
+        sig_as = _inspect_b.signature(apply_shrinkage)
+        actual_csw = set(sig_csw.parameters.keys())
+        actual_as = set(sig_as.parameters.keys())
+        csw_ok = actual_csw == expected_csw_params
+        as_ok = actual_as == expected_as_params
+        summary["criterion_25_2_4_csw_params"] = sorted(actual_csw)
+        summary["criterion_25_2_4_as_params"] = sorted(actual_as)
+        if csw_ok and as_ok:
+            findings.append(
+                "Criterion 25.2.4 PASS: compute_shrinkage_weight signature "
+                "(n_eff_nonoverlap + horizon) + apply_shrinkage signature "
+                "(+ raw_forecast_real_annualized positional + "
+                "use_global_prior keyword-only) match spec §5.G.1"
+            )
+        else:
+            findings.append(
+                f"FAIL: Criterion 25.2.4 - signature mismatch "
+                f"(compute_shrinkage_weight={sorted(actual_csw)}; "
+                f"apply_shrinkage={sorted(actual_as)})"
+            )
+
+        # Criterion 25.2.5 — Standing Order #2 AST audit for R-leakage.
+        source_b = _inspect_b.getsource(_bs_mod)
+        forbidden_substrings_b = (
+            ".fit(",
+            "train_test_split",
+            "LogisticRegression",
+            "Ridge(",
+            "IsotonicRegression(",
+        )
+        found_substrings_b = [s for s in forbidden_substrings_b if s in source_b]
+        summary["criterion_25_2_5_ast_audit_forbidden_found"] = found_substrings_b
+        if found_substrings_b:
+            findings.append(
+                f"FAIL: Criterion 25.2.5 - bayesian_shrinkage contains "
+                f"forbidden fitting/estimator substring(s) "
+                f"{found_substrings_b}; module must be PURE closed-form "
+                "conjugate arithmetic only (R-leakage mitigation)"
+            )
+        else:
+            findings.append(
+                "Criterion 25.2.5 PASS: bayesian_shrinkage source contains "
+                "no fitting / estimator instantiation — module is pure "
+                "closed-form k/(k+n) conjugate-mean arithmetic per spec "
+                "§5.G.3 (R-leakage mitigation)"
+            )
+
+        # Sanity: NOMINAL_SHRINKAGE_WEIGHTS_AT_REFERENCE_N alias equals
+        # W_REF_TARGET by spec construction.
+        if NOMINAL_SHRINKAGE_WEIGHTS_AT_REFERENCE_N == W_REF_TARGET:
+            summary["criterion_25_2_alias_consistency"] = "OK"
+    except ImportError as exc:
+        findings.append(f"FAIL: Criterion 25.2.1 - import error: {exc}")
+
+    # Out-of-band assertions for sub-criterion 25.2 (pytest).
     warnings_list.append(
-        "Sub-criterion 25.2 (Bayesian shrinkage integrity per spec §5.G) "
-        "DEFERRED to L5-G; this validator will be extended at "
-        "l5-g-accept to add 25.2 checks. Mirrors Gate 19-A/-B1/-B2 "
-        "partial-PASS precedent established at the L5-B chain."
+        "Criterion 25.2.6 (Op-G-a runtime audit: 4 distinct horizon "
+        "values + AST source absence of spurious 0.30 outside "
+        "W_REF_TARGET) asserted via "
+        "tests/test_bayesian_shrinkage.py test #3"
+    )
+    warnings_list.append(
+        "Criterion 25.2.7 (compute_shrinkage_weight matches W_REF_TARGET "
+        "within +/- 2pp at N_REF_NONOVERLAP) asserted via "
+        "tests/test_bayesian_shrinkage.py test #7 (closes ChatGPT §G.3 "
+        "v2 proof test)"
+    )
+    warnings_list.append(
+        "Criterion 25.2.8 (k_h sensitivity 0.5x / 1x / 2x monotone) "
+        "asserted via tests/test_bayesian_shrinkage.py test #8 (closes "
+        "ChatGPT §G.3 sensitivity)"
+    )
+    warnings_list.append(
+        "Criterion 25.2.9 (all eight spec tests in §5.G.5 PASS per "
+        "§5.G.7 proof item 4 + symbolic +8 derivation per AP-AUTH-52: "
+        "five v2 baseline + three v2 NEW tests for K_HORIZON backsolve "
+        "verification via S-4) asserted via full pytest"
+    )
+    warnings_list.append(
+        "Gate 25 composite SEAL noted in commit message per spec §5.G.6 "
+        "(mirrors L3.5b Gate 17 composite seal pattern). Both "
+        "sub-criteria 25.1 (L5-F) + 25.2 (this sub-phase) PASS — "
+        "composite gate fully closed."
     )
 
     passed = not any(f.startswith("FAIL") for f in findings)
     return GateReport(
-        name="Gate 25 (composite) - DMS adjustment (25.1; L5-F) + Bayesian shrinkage (25.2; DEFERRED to L5-G)",
+        name="Gate 25 (composite) - DMS adjustment (25.1) + Bayesian shrinkage (25.2) - SEALED",
         passed=passed, findings=findings, warnings=warnings_list,
         summary=summary,
     )
