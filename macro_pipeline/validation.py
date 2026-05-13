@@ -3549,7 +3549,7 @@ def validate_gate19_l5b_task_b1_subcriteria() -> GateReport:
         )
 
         # Criterion 10 — RidgeFitResult schema (per spec §5.B.1.1 +
-        # KICK-4 no-default field per AP-AUTH-53 step #3).
+        # KICK-4/-5 no-default fields per AP-AUTH-53 step #3 / AP-AUTH-54).
         expected_fields = {
             "fold_id", "horizon", "schedule_type", "lambda_selected",
             "lambda_grid", "lambda_log10_sd_across_5fold",
@@ -3562,6 +3562,8 @@ def validate_gate19_l5b_task_b1_subcriteria() -> GateReport:
             "block_size_sensitivity_se", "hac_bandwidth_sensitivity_se",
             "fit_timestamp",
             "inner_cv_scaler_recomputed",       # KICK-4 no-default
+            "bootstrap_diagnostics",            # KICK-5 no-default (primary)
+            "block_size_sensitivity_diagnostics",  # KICK-5 no-default (sweep)
         }
         actual_fields = set(RidgeFitResult.__dataclass_fields__.keys())
         missing = expected_fields - actual_fields
@@ -3688,6 +3690,150 @@ def validate_gate19_l5b_task_b1_subcriteria() -> GateReport:
                 "inner-train slice AND applies inner statistics to "
                 "inner-test slice (Task A parity verified; closes Codex "
                 "5.5 IMPORTANT nested-CV purity flag at gate time)"
+            )
+
+        # ===================================================================
+        # L5b-KICK-5 Criteria 25-27 — bootstrap diagnostics surface per
+        # AP-AUTH-53 fifth instance / AP-AUTH-54 internal-implementation
+        # variant. Closes ChatGPT 5.5 IMPORTANT #6 reviewer flag on
+        # bootstrap diagnostics table per horizon/fold.
+        # ===================================================================
+        from macro_pipeline.models.return_forecast import BootstrapDiagnostics
+
+        # Criterion 25 - both KICK-5 fields have no default.
+        kick5_fields = ("bootstrap_diagnostics", "block_size_sensitivity_diagnostics")
+        kick5_no_default_status = {
+            f: (
+                f in dataclass_fields
+                and dataclass_fields[f].default is _MISSING
+                and dataclass_fields[f].default_factory is _MISSING
+            )
+            for f in kick5_fields
+        }
+        summary["criterion_25_kick5_fields_no_default"] = kick5_no_default_status
+        if all(kick5_no_default_status.values()):
+            findings.append(
+                "Criterion 25 PASS [KICK-5]: RidgeFitResult exposes "
+                "bootstrap_diagnostics + block_size_sensitivity_"
+                "diagnostics fields with no defaults (Option Y "
+                "signature inspection per AP-AUTH-53 step #3 + "
+                "AP-AUTH-54 internal-implementation variant)"
+            )
+        else:
+            missing_or_defaulted = [
+                f for f, ok in kick5_no_default_status.items() if not ok
+            ]
+            findings.append(
+                f"FAIL: Criterion 25 [KICK-5] - KICK-5 fields "
+                f"{missing_or_defaulted} missing or have defaults"
+            )
+
+        # Criterion 26 - BootstrapDiagnostics dataclass surface check.
+        bd_expected_fields = {
+            "n_train", "n_eff", "block_size", "block_count",
+            "B_effective", "fallback_flag",
+        }
+        bd_actual_fields = set(BootstrapDiagnostics.__dataclass_fields__.keys())
+        bd_missing = bd_expected_fields - bd_actual_fields
+        bd_extra = bd_actual_fields - bd_expected_fields
+        summary["criterion_26_bootstrap_diagnostics_fields"] = sorted(bd_actual_fields)
+        if bd_missing:
+            findings.append(
+                f"FAIL: Criterion 26 [KICK-5] - BootstrapDiagnostics "
+                f"missing fields {sorted(bd_missing)}"
+            )
+        elif bd_extra:
+            findings.append(
+                f"FAIL: Criterion 26 [KICK-5] - BootstrapDiagnostics "
+                f"has unexpected extra fields {sorted(bd_extra)}"
+            )
+        else:
+            findings.append(
+                f"Criterion 26 PASS [KICK-5]: BootstrapDiagnostics "
+                f"populates all {len(bd_actual_fields)} fields "
+                "(n_train, n_eff, block_size, block_count, "
+                "B_effective, fallback_flag) per ChatGPT 5.5 "
+                "IMPORTANT #6 reviewer specification"
+            )
+
+        # Criterion 27 - runtime probe: synthesize a Ridge fit;
+        # verify primary diagnostics populated + sensitivity dict keys
+        # match _BLOCK_SIZE_LABELS + fallback_flag value valid.
+        # NOTE: the outer scope has a local `warnings: list[str]` that
+        # shadows the warnings module; alias it locally inside the
+        # probe to suppress fold-skip + grid-edge UserWarnings.
+        try:
+            import warnings as _warnings_mod
+            import numpy as _np
+            import pandas as _pd
+            from macro_pipeline.analysis.walk_forward_cv import generate_schedule
+
+            _rng = _np.random.default_rng(42)
+            _n = 480
+            _idx = _pd.date_range("1985-01-01", periods=_n, freq="MS")
+            _crps = _pd.DataFrame(
+                {"crps_cal": _rng.uniform(0.05, 0.95, _n)}, index=_idx,
+            )
+            _cdrs_cols = {
+                f"cdrs_h{h}_t{t}": _rng.uniform(0.05, 0.95, _n)
+                for h in ("1Y", "3Y", "5Y", "10Y")
+                for t in (10, 20, 35, 50, 65)
+            }
+            _cdrs = _pd.DataFrame(_cdrs_cols, index=_idx)
+            _macro = _pd.DataFrame(
+                {"pe_cape": _rng.normal(20.0, 5.0, _n)}, index=_idx,
+            )
+            _fwd = _pd.Series(_rng.normal(0.07, 0.15, _n), index=_idx)
+            _sched = generate_schedule(
+                horizon="5Y", schedule_type="expanding", panel_index=_idx,
+            )
+            with _warnings_mod.catch_warnings():
+                _warnings_mod.simplefilter("ignore")
+                _probe_results = fit_return_forecast_task_b1(
+                    _sched, _crps, _cdrs, _macro, _fwd,
+                    bootstrap_iterations=5,
+                )
+            assert len(_probe_results) > 0, "probe yielded zero folds"
+            _r = _probe_results[0]
+            _expected_labels = {"h/4", "h/2", "h", "2h"}
+            _primary_diag_ok = (
+                isinstance(_r.bootstrap_diagnostics, BootstrapDiagnostics)
+                and _r.bootstrap_diagnostics.n_train > 0
+                and _r.bootstrap_diagnostics.fallback_flag
+                in ("none", "B_halved", "bs1_degenerate")
+            )
+            _sweep_keys_ok = (
+                set(_r.block_size_sensitivity_diagnostics.keys())
+                == _expected_labels
+            )
+            _sweep_values_ok = all(
+                isinstance(v, BootstrapDiagnostics)
+                for v in _r.block_size_sensitivity_diagnostics.values()
+            )
+            summary["criterion_27_primary_diag_ok"] = _primary_diag_ok
+            summary["criterion_27_sweep_keys_ok"] = _sweep_keys_ok
+            summary["criterion_27_sweep_values_ok"] = _sweep_values_ok
+            if _primary_diag_ok and _sweep_keys_ok and _sweep_values_ok:
+                findings.append(
+                    "Criterion 27 PASS [KICK-5]: runtime probe confirms "
+                    "primary bootstrap_diagnostics populated + sweep "
+                    "diagnostics keys match _BLOCK_SIZE_LABELS + each "
+                    "value is BootstrapDiagnostics instance (Option Y "
+                    "runtime probe closes Sxx-17 catastrophic-state "
+                    "surface; reviewer-flagged sensitivity path "
+                    "empirically traceable via "
+                    "block_size_sensitivity_diagnostics dict)"
+                )
+            else:
+                findings.append(
+                    f"FAIL: Criterion 27 [KICK-5] - runtime probe failed "
+                    f"(primary_ok={_primary_diag_ok}, "
+                    f"sweep_keys_ok={_sweep_keys_ok}, "
+                    f"sweep_values_ok={_sweep_values_ok})"
+                )
+        except Exception as exc:
+            findings.append(
+                f"FAIL: Criterion 27 [KICK-5] - runtime probe error: {exc}"
             )
     except ImportError as exc:
         findings.append(f"FAIL: Criterion 8 - import error: {exc}")

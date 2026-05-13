@@ -65,6 +65,61 @@ the two L5-B estimator families in sibling modules. The wording drift is
 tracked in ``L5B_BACKLOG.md`` as ``L5b-7`` (doc-only); zero functional
 impact.
 
+L5b-KICK-5 (tag ``l5b-kick-5-accept``, 2026-05-15) — bootstrap diagnostics
+--------------------------------------------------------------------------
+Closes the ChatGPT 5.5 IMPORTANT #6 reviewer flag ("Add a bootstrap
+diagnostics table. Per horizon/fold: n_train, n_eff, block_size,
+block_count, B_effective, fallback flag. Edge-case fallback matters
+most at 10Y.") via the AP-AUTH-53 fifth-instance / AP-AUTH-54 internal-
+implementation variant (AP-AUTH-54 codified at this commit; second
+internal-implementation variant after KICK-4):
+
+* ``BootstrapDiagnostics`` NEW frozen dataclass with six no-default
+  fields: ``n_train``, ``n_eff``, ``block_size``, ``block_count``,
+  ``B_effective``, ``fallback_flag``. The ``__post_init__`` validator
+  enforces the tri-state ``Literal`` taxonomy
+  ``{"none", "B_halved", "bs1_degenerate"}`` (mirrors KICK-3
+  ``BinDiagnosticStatus`` validator pattern).
+* ``_block_bootstrap_residual_se`` return type changed from
+  ``np.ndarray`` to ``tuple[np.ndarray, BootstrapDiagnostics]``. The
+  helper now tracks ``fallback_flag`` through its control flow and
+  emits a populated diagnostics instance on every call (including the
+  ``len(y_test) < 2`` edge case where ``B_effective=0``).
+  ``horizon_months`` is a new required keyword-only argument used to
+  compute ``BootstrapDiagnostics.n_eff = n_train // horizon_months``.
+* ``_compute_block_size_sensitivity`` return type changed from
+  ``dict[str, float]`` to
+  ``tuple[dict[str, float], dict[str, BootstrapDiagnostics]]``. Each
+  sensitivity-block-size key carries its own diagnostics, exposing the
+  reviewer-flagged sensitivity-sweep fallback surface ("sensitivity
+  settings can hit low block counts and fall back").
+* ``RidgeFitResult`` gains two no-default fields per AP-AUTH-54 step
+  #2: ``bootstrap_diagnostics`` (primary call) and
+  ``block_size_sensitivity_diagnostics`` (per-sensitivity-block-size
+  dict). Bare construction without these fields raises ``TypeError``.
+* L5-D scope-out (Strategic-confirmed at ITEM 0a): the reviewer
+  concern explicitly targets BLOCK bootstrap edge-case fallback
+  ("block bootstrap primary sizing", "block counts"). L5-D's
+  ``_bootstrap_threshold_se`` is a BLOCK-FREE residual bootstrap with
+  no ``block_size`` / ``block_count`` / fallback semantics; applying
+  the diagnostics dataclass there would be ceremonial. Gate 23 NOT
+  extended at KICK-5.
+* Empirical evidence (captured in pre-flight ITEM 0b + commit-time
+  K5.4 test): at 5Y/expanding with B=10, the ``"2h"`` sensitivity
+  block size (= 120 months) triggers ``"B_halved"`` fallback on all
+  10 folds (block_count = 2 at every fold). KICK-5 makes this state
+  explicit in ``block_size_sensitivity_diagnostics["2h"]
+  .fallback_flag``.
+* Gate 19-B1 extension: criteria 25-27 (KICK-5 NEW) verify (i) both
+  KICK-5 fields no-default via Option Y signature inspection, (ii)
+  ``BootstrapDiagnostics`` six-field schema, (iii) runtime probe
+  synthesizes a fit and confirms primary + sweep diagnostics
+  populated with valid tri-state ``fallback_flag``.
+
+AP-AUTH-54 codified at this commit (second internal-implementation
+variant after KICK-4; pattern repeats → codify, mirroring AP-AUTH-53
+codification at KICK-2).
+
 L5b-KICK-4 (tag ``l5b-kick-4-accept``, 2026-05-15) — inner-CV scaler purity
 --------------------------------------------------------------------------
 Closes the Codex 5.5 IMPORTANT reviewer flag ("L5-B1: Recompute z-score
@@ -125,6 +180,7 @@ from __future__ import annotations
 
 import warnings
 from dataclasses import dataclass, replace
+from typing import Literal
 
 import numpy as np
 import pandas as pd
@@ -134,6 +190,87 @@ from macro_pipeline.analysis.newey_west_hac import fit_ols_hac
 from macro_pipeline.analysis.r_squared_panel import HORIZONS
 from macro_pipeline.analysis.walk_forward_cv import WalkForwardSchedule
 from macro_pipeline.models.composite_refit import LAMBDA_GRID_DEFAULT
+
+
+# L5b-KICK-5 (tag ``l5b-kick-5-accept``, 2026-05-15): block-bootstrap
+# fallback-state taxonomy per ChatGPT 5.5 IMPORTANT #6 reviewer flag.
+# Mirrors KICK-3 ``BinDiagnosticStatus`` + KICK-4 ``CellLabel`` Literal
+# precedents. Per AP-AUTH-53 step #3, the dataclass fields carrying
+# this value have no default — caller intent forced at construction.
+BootstrapFallbackFlag = Literal[
+    "none",
+    "B_halved",
+    "bs1_degenerate",
+]
+_VALID_BOOTSTRAP_FALLBACK_FLAGS: frozenset[str] = frozenset({
+    "none",
+    "B_halved",
+    "bs1_degenerate",
+})
+
+
+@dataclass(frozen=True)
+class BootstrapDiagnostics:
+    """Per-bootstrap-call diagnostics surface for the L5-B1 block
+    bootstrap (closes ChatGPT 5.5 IMPORTANT #6 reviewer flag via the
+    AP-AUTH-53 reviewer-driven-kickoff-item pattern, fifth instance,
+    internal-implementation variant per AP-AUTH-54 codified at
+    ``l5b-kick-5-accept``).
+
+    All six fields no-default per AP-AUTH-53 step #3. The
+    ``__post_init__`` validator enforces the tri-state ``fallback_flag``
+    taxonomy (mirrors KICK-3 ``BinDiagnosticStatus`` validator pattern).
+
+    Fields
+    ------
+    n_train
+        Rows in the training block fed to this bootstrap call.
+    n_eff
+        Effective non-overlapping sample size
+        (= ``n_train // horizon_months``); semantically aligned with
+        ``RidgeFitResult.n_eff_nonoverlap_train``.
+    block_size
+        Block length actually used by this bootstrap call, AFTER any
+        fallback collapse. When ``fallback_flag == "bs1_degenerate"``
+        this is 1; otherwise it equals the requested block size.
+    block_count
+        Number of blocks available (``n_train // block_size``) AFTER
+        any fallback collapse. When ``fallback_flag == "bs1_degenerate"``
+        this is ``n_train`` (iid resampling).
+    B_effective
+        Actual bootstrap iterations executed. Equals the requested
+        ``bootstrap_iterations`` when ``fallback_flag == "none"``;
+        halved (``// 2``) when ``fallback_flag == "B_halved"``;
+        equals requested when ``fallback_flag == "bs1_degenerate"``
+        (the bs=1 collapse path runs the requested iteration count
+        on the degenerate iid resampler).
+    fallback_flag
+        Tri-state ``Literal``:
+        - ``"none"``: block_count >= 4; primary path
+        - ``"B_halved"``: 2 <= block_count < 4; B halved per R1
+          mitigation
+        - ``"bs1_degenerate"``: block_count < 2; block_size collapsed
+          to 1 (iid bootstrap)
+    """
+
+    n_train: int
+    n_eff: int
+    block_size: int
+    block_count: int
+    B_effective: int
+    fallback_flag: BootstrapFallbackFlag
+
+    def __post_init__(self) -> None:
+        # KICK-5 NEG test K5.5 contract: tri-state validation enforced
+        # at construction time. Mirrors KICK-3 ``BinDiagnosticStatus``
+        # validator precedent.
+        if self.fallback_flag not in _VALID_BOOTSTRAP_FALLBACK_FLAGS:
+            raise ValueError(
+                f"fallback_flag={self.fallback_flag!r} must be one of "
+                f"{sorted(_VALID_BOOTSTRAP_FALLBACK_FLAGS)} "
+                "(spec L5b-KICK-5 tri-state; AP-AUTH-53 step #3 + "
+                "AP-AUTH-54 internal-implementation variant)"
+            )
 
 
 # Per spec §5.B.1.4 line 745: B = 1000 block-bootstrap iterations.
@@ -196,6 +333,8 @@ class RidgeFitResult:
     hac_bandwidth_sensitivity_se: dict[str, float]  # {"h-1": se, "andrews": se, "h//4_floor": se}
     fit_timestamp: pd.Timestamp
     inner_cv_scaler_recomputed: bool                # L5b-KICK-4: True iff inner-CV re-fit z-scaler per inner block (Task A parity); no default per AP-AUTH-53 step #3
+    bootstrap_diagnostics: BootstrapDiagnostics     # L5b-KICK-5: primary block-bootstrap call diagnostics surface; no default per AP-AUTH-54 step #2
+    block_size_sensitivity_diagnostics: dict[str, BootstrapDiagnostics]  # L5b-KICK-5: per-sensitivity-block-size diagnostics; keys match _BLOCK_SIZE_LABELS; no default
 
 
 def _zscore_fit_transform(
@@ -418,7 +557,9 @@ def _block_bootstrap_residual_se(
     bootstrap_iterations: int,
     block_size: int,
     rng: np.random.Generator,
-) -> np.ndarray:
+    *,
+    horizon_months: int,
+) -> tuple[np.ndarray, BootstrapDiagnostics]:
     """Residual block-bootstrap of OOS residual SE per spec §5.B.1.4.
 
     Procedure (mirrors spec text "refit Ridge, compute raw_score_test per
@@ -438,21 +579,32 @@ def _block_bootstrap_residual_se(
     emit a stronger warning (graceful degradation; Sxx-13 candidate at
     ACCEPT report time).
 
+    L5b-KICK-5 (tag ``l5b-kick-5-accept``, 2026-05-15): return type
+    changed from ``np.ndarray`` to ``tuple[np.ndarray,
+    BootstrapDiagnostics]`` to surface the fallback-state diagnostics
+    that the existing warning-only path was hiding from downstream
+    consumers. Closes ChatGPT 5.5 IMPORTANT #6 reviewer flag via the
+    AP-AUTH-53 fifth-instance / AP-AUTH-54 internal-implementation
+    variant pattern. ``horizon_months`` keyword-only argument added to
+    populate ``BootstrapDiagnostics.n_eff``; pre-KICK-5 callers must
+    update tuple unpacking.
+
     Returns
     -------
-    np.ndarray
-        Shape ``(B_effective,)``. ``B_effective`` may be < B per the R1
-        mitigation. Returns an empty array when ``n_test < 2`` (residual
-        SE undefined; common at "1Y" horizon with step=1).
+    tuple[np.ndarray, BootstrapDiagnostics]
+        ``(se_dist, diagnostics)`` where ``se_dist`` has shape
+        ``(B_effective,)`` (``B_effective`` may be < B per R1
+        mitigation) and ``diagnostics`` records the fallback state.
+        Returns ``(empty_array, diagnostics_with_B_effective_0)`` when
+        ``n_test < 2`` (residual SE undefined; common at "1Y" horizon
+        with step=1).
     """
-    if len(y_test) < 2:
-        return np.empty(0, dtype=float)
-
     n_train = len(y_train)
     bs = max(1, int(block_size))
     block_count = n_train // bs if bs > 0 else 0
-
     b_effective = bootstrap_iterations
+    fallback_flag: BootstrapFallbackFlag = "none"
+
     if block_count < 2:
         warnings.warn(
             f"block_bootstrap: block_count={block_count} < 2 for "
@@ -462,6 +614,7 @@ def _block_bootstrap_residual_se(
         )
         bs = 1
         block_count = n_train
+        fallback_flag = "bs1_degenerate"
     elif block_count < 4:
         b_effective = max(1, bootstrap_iterations // 2)
         warnings.warn(
@@ -470,6 +623,20 @@ def _block_bootstrap_residual_se(
             f"{b_effective} per R1 mitigation",
             stacklevel=3,
         )
+        fallback_flag = "B_halved"
+
+    # KICK-5 edge case: y_test too short for residual SE; return empty
+    # array but still populate diagnostics with B_effective=0.
+    if len(y_test) < 2:
+        diagnostics_empty = BootstrapDiagnostics(
+            n_train=n_train,
+            n_eff=n_train // max(horizon_months, 1),
+            block_size=bs,
+            block_count=block_count,
+            B_effective=0,
+            fallback_flag=fallback_flag,
+        )
+        return np.empty(0, dtype=float), diagnostics_empty
 
     residuals_train = y_train - forecast_train
     se_dist = np.empty(b_effective, dtype=float)
@@ -484,7 +651,16 @@ def _block_bootstrap_residual_se(
         beta_b, alpha_b = _fit_ridge_closed_form(X_train_z, y_star, lambda_star)
         forecast_test_b = X_test_z @ beta_b + alpha_b
         se_dist[b] = float(np.std(y_test - forecast_test_b, ddof=1))
-    return se_dist
+
+    diagnostics = BootstrapDiagnostics(
+        n_train=n_train,
+        n_eff=n_train // max(horizon_months, 1),
+        block_size=bs,
+        block_count=block_count,
+        B_effective=b_effective,
+        fallback_flag=fallback_flag,
+    )
+    return se_dist, diagnostics
 
 
 def _compute_block_size_sensitivity(
@@ -498,27 +674,61 @@ def _compute_block_size_sensitivity(
     horizon_months: int,
     sensitivity_block_sizes: tuple[int, ...],
     rng: np.random.Generator,
-) -> dict[str, float]:
+) -> tuple[dict[str, float], dict[str, BootstrapDiagnostics]]:
     """Four-block-size mean residual-SE sensitivity per spec §5.B.1.4 item 1.
 
     Labels: ``"h/4"``, ``"h/2"`` (primary mirror), ``"h"``, ``"2h"``.
 
-    Each label runs a separate block-bootstrap; the dict stores the MEAN
-    of that distribution (a single number per label) so the result is
-    compact (full distributions per label would 4× the memory cost).
+    Each label runs a separate block-bootstrap; the first dict stores
+    the MEAN of that distribution (a single number per label) so the
+    result is compact (full distributions per label would 4× the memory
+    cost).
+
+    L5b-KICK-5 (tag ``l5b-kick-5-accept``, 2026-05-15): return type
+    extended from ``dict[str, float]`` to
+    ``tuple[dict[str, float], dict[str, BootstrapDiagnostics]]`` to
+    surface per-sensitivity-block-size fallback diagnostics. The
+    reviewer concern from ChatGPT 5.5 IMPORTANT #6 explicitly targets
+    this path ("sensitivity settings can hit low block counts and fall
+    back, as warnings surfaced in the targeted run"). Empirical probe
+    at 5Y/expanding with B=10 confirms ``"2h"`` triggers
+    ``"B_halved"`` on all 10 folds. KICK-5 makes this state explicit
+    in the dataclass surface rather than implicit in warning text.
     """
+    se_out: dict[str, float] = {}
+    diag_out: dict[str, BootstrapDiagnostics] = {}
+
     if len(y_test) < 2:
-        return {label: float("nan") for label in _BLOCK_SIZE_LABELS}
+        # Edge case: residual SE undefined; populate NaN SE per label,
+        # but still emit valid diagnostics with B_effective=0.
+        n_train_local = len(y_train)
+        n_eff_local = n_train_local // max(horizon_months, 1)
+        sizes = dict(zip(_BLOCK_SIZE_LABELS, sensitivity_block_sizes))
+        for label in _BLOCK_SIZE_LABELS:
+            bs_local = max(1, sizes[label])
+            bc_local = n_train_local // bs_local if bs_local > 0 else 0
+            se_out[label] = float("nan")
+            diag_out[label] = BootstrapDiagnostics(
+                n_train=n_train_local,
+                n_eff=n_eff_local,
+                block_size=bs_local,
+                block_count=bc_local,
+                B_effective=0,
+                fallback_flag="none",
+            )
+        return se_out, diag_out
+
     sizes = dict(zip(_BLOCK_SIZE_LABELS, sensitivity_block_sizes))
-    out: dict[str, float] = {}
     for label in _BLOCK_SIZE_LABELS:
         bs = max(1, sizes[label])
-        dist = _block_bootstrap_residual_se(
+        dist, diag = _block_bootstrap_residual_se(
             X_train_z, y_train, X_test_z, y_test, forecast_train,
             lambda_star, bootstrap_iterations, bs, rng,
+            horizon_months=horizon_months,
         )
-        out[label] = float(np.mean(dist)) if dist.size > 0 else float("nan")
-    return out
+        se_out[label] = float(np.mean(dist)) if dist.size > 0 else float("nan")
+        diag_out[label] = diag
+    return se_out, diag_out
 
 
 def _default_block_size_sensitivity_grid(horizon_months: int) -> tuple[int, int, int, int]:
@@ -806,15 +1016,25 @@ def fit_return_forecast_task_b1(
 
         # Block bootstrap of residual SE per spec §5.B.1.4. Primary block
         # size = horizon_months // 2; sensitivity sweep at {h/4, h/2, h, 2h}.
+        # KICK-5: both helpers now return tuples carrying
+        # BootstrapDiagnostics. Primary call returns
+        # (se_dist, diagnostics); sensitivity sweep returns
+        # (se_dict, diagnostics_dict). Per AP-AUTH-54 internal-
+        # implementation variant: refactor exposes fallback state to
+        # the public RidgeFitResult dataclass without changing the
+        # public fit_return_forecast_task_b1 signature.
         primary_block_size = max(1, horizon_months // 2)
-        bootstrap_dist = _block_bootstrap_residual_se(
+        bootstrap_dist, bootstrap_diag = _block_bootstrap_residual_se(
             X_train_z, y_train, X_test_z, y_test, forecast_train,
             lambda_star, bootstrap_iterations, primary_block_size, rng,
+            horizon_months=horizon_months,
         )
-        block_size_sensitivity_map = _compute_block_size_sensitivity(
-            X_train_z, y_train, X_test_z, y_test, forecast_train,
-            lambda_star, bootstrap_iterations, horizon_months,
-            sensitivity_block_sizes, rng,
+        block_size_sensitivity_map, block_size_sensitivity_diag_map = (
+            _compute_block_size_sensitivity(
+                X_train_z, y_train, X_test_z, y_test, forecast_train,
+                lambda_star, bootstrap_iterations, horizon_months,
+                sensitivity_block_sizes, rng,
+            )
         )
 
         # Grid edge bind (spec §5.B.2 item 1).
@@ -858,6 +1078,8 @@ def fit_return_forecast_task_b1(
             hac_bandwidth_sensitivity_se=hac_bandwidth_sensitivity,
             fit_timestamp=fit_ts,
             inner_cv_scaler_recomputed=True,  # KICK-4: Task A parity per AP-AUTH-53 step #3
+            bootstrap_diagnostics=bootstrap_diag,  # KICK-5: primary call diagnostics per AP-AUTH-54
+            block_size_sensitivity_diagnostics=block_size_sensitivity_diag_map,  # KICK-5: per-sensitivity-size diagnostics
         ))
 
     # Post-pass: coefficient_sign_flip_rate vs immediately-prior outer fold

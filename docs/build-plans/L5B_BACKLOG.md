@@ -51,7 +51,7 @@ When external reviewers (Codex / ChatGPT) flag a CRITICAL or IMPORTANT issue in 
 6. **Pre-flight Sxx-N (catastrophic state) triage** via grep evidence; defer entry to L5B_BACKLOG.md if production callers do not yet exist.
 7. **Module docstring + L5B_BACKLOG.md SPRINT EXECUTION LOG** documents v1 → v2 architectural drift.
 
-Confirmed via L5b-KICK-1 (isotonic `fit_window` invariant) + L5b-KICK-2 (forecast σ v2 production wrapper). Anticipated to apply at KICK-3 through KICK-7. **KICK-3 confirmed (third instance) at `l5b-kick-3-accept`** — see entry below. **KICK-4 confirmed (fourth instance, internal-implementation variant) at `l5b-kick-4-accept`** — see entry below.
+Confirmed via L5b-KICK-1 (isotonic `fit_window` invariant) + L5b-KICK-2 (forecast σ v2 production wrapper). Anticipated to apply at KICK-3 through KICK-7. **KICK-3 confirmed (third instance) at `l5b-kick-3-accept`** — see entry below. **KICK-4 confirmed (fourth instance, internal-implementation variant) at `l5b-kick-4-accept`** — see entry below. **KICK-5 confirmed (fifth instance, second internal-implementation variant) at `l5b-kick-5-accept`** — AP-AUTH-54 codified at this commit (see entry below).
 
 ---
 
@@ -95,8 +95,47 @@ Confirmed via L5b-KICK-1 (isotonic `fit_window` invariant) + L5b-KICK-2 (forecas
 - Caller at `return_forecast.py:684` passes RAW `X_train` to helper (not `X_train_z`); K4.3 structural invariant test verifies this
 - Outer Ridge fit at `return_forecast.py:686-688` continues to use outer-train scaler `(mean_tr, std_tr)` for outer-test projection (K4.3 verifies provenance)
 **R1 (λ-drift methodologically expected) closure**: empirical pre-flight snapshot at Phase 0 bounded R1 from HIGH to MED before code-exec began; Phase 4 mid-stream pytest checkpoint confirmed fourteen of fourteen L5-B1 tests pass post-refactor with zero recalibration needed (no test asserts specific λ values; B11 grid-edge warning preserved; B8 lambda_log10_sd field populated regardless of refactor).
-**AP-AUTH delta**: zero (AP-AUTH-53 cited as governing pattern; fourth instance; internal-implementation variant documented inline; AP-AUTH-54 deferred per Strategic until variant repeats at KICK-5+).
+**AP-AUTH delta**: zero (AP-AUTH-53 cited as governing pattern; fourth instance; internal-implementation variant documented inline; AP-AUTH-54 deferred per Strategic until variant repeats at KICK-5+). **CODIFIED at KICK-5 ACCEPT** — see entry below.
 **Sxx delta**: zero.
+
+---
+
+### KICK-5 — Bootstrap diagnostics table per horizon/fold (2026-05-15)
+
+**ACCEPT tag**: `l5b-kick-5-accept`
+**Reviewer authority**: ChatGPT 5.5 IMPORTANT #6 — "Add a bootstrap diagnostics table. Per horizon/fold: `n_train`, `n_eff`, `block_size`, `block_count`, `B_effective`, `fallback flag`. Edge-case fallback matters most at 10Y. Block bootstrap primary sizing is viable under the coded underpowered guard. However, sensitivity settings can hit low block counts and fall back, as warnings surfaced in the targeted run. That is acceptable if reported, but L5b should quantify actual folds."
+**Approach**: A (Strategic-approved 2026-05-15; second internal-implementation variant after KICK-4) — in-place refactor of two private helpers (`_block_bootstrap_residual_se`, `_compute_block_size_sensitivity`) to return tuples carrying `BootstrapDiagnostics`, plus two no-default fields on `RidgeFitResult`. NOT a wrapper-pattern because the modified helpers are private; AP-AUTH-54 internal-implementation variant pattern applies.
+**Option**: Y (Strategic-approved 2026-05-15) — Gate 19-B1 extension via signature inspection plus runtime probe synthesizing a Ridge fit and verifying tri-state `fallback_flag` reachability. Three new criteria (twenty-five / twenty-six / twenty-seven): (i) both KICK-5 fields no-default; (ii) `BootstrapDiagnostics` six-field schema check; (iii) runtime probe confirms primary diagnostics + sensitivity sweep dict populated with valid tri-state.
+**Strategic prompt anomalies resolved at read-and-plan (mirror KICK-4 precedent)**:
+- ITEM 0a — L5-D scope-out: ChatGPT mandate explicitly targets BLOCK bootstrap edge-case fallback; L5-D's `_bootstrap_threshold_se` is BLOCK-FREE (line four-one-two docstring "Block-free residual bootstrap"). Applying KICK-5 diagnostics to L5-D would produce degenerate values (block_size equal to one, B_effective always full, fallback_flag always "none") — ceremonial, not substantive. Gate 23 NOT touched at KICK-5.
+- ITEM 0b — Dual-field surface (primary plus sensitivity sweep): Strategic §3.3 wrote "one fit equals one bootstrap call" but empirical probe at 5Y/expanding with B=10 shows each fit has FIVE bootstrap calls (one primary plus four sensitivity sizes). Reviewer concern explicitly targets sensitivity sweep ("sensitivity settings can hit low block counts and fall back"). Surfaced dual-field design: `bootstrap_diagnostics: BootstrapDiagnostics` (primary) plus `block_size_sensitivity_diagnostics: dict[str, BootstrapDiagnostics]` (sweep).
+**Sxx-17 triage**: NOT triggered (Strategic's predicted state confirmed empirically — zero production scoring callers of `fit_return_forecast_task_b1` exist; only consumers are twenty-five-test L5-B1 suite plus Gate 19-B1 validator). Prospective-only marker per AP-AUTH-46 gratuitous-Sxx guard: if a production caller subsequently consumes a `RidgeFitResult` with `bootstrap_diagnostics.fallback_flag` not equal to "none" as production-grade SE, downstream gate should detect.
+**Reviewer-flagged path empirically traceable**: pre-flight ITEM 0b probe at 5Y/expanding with B=10 demonstrated ALL ten folds at sensitivity-sweep `"2h"` block size (= 120 months) trigger `"B_halved"` fallback (block_count = two; B halves from ten to five). K5.4 test pins this empirically at commit time. Post-KICK-5 downstream consumers can detect this via `r.block_size_sensitivity_diagnostics["2h"].fallback_flag == "B_halved"` without parsing warning text.
+**Algorithm correctness**: NO algorithm change. The fallback logic at `_block_bootstrap_residual_se` lines four-five-zero through four-seven-two is preserved verbatim; KICK-5 only surfaces the state that was previously buried in warning messages.
+**Test delta**: plus six new tests (K5.1 through K5.6; four POS plus one POS-inv plus two NEG; NEG-flavor three of six equals fifty percent at the sub-phase level — floor met). No fixups to existing nineteen L5-B1 tests (none construct `RidgeFitResult` directly; tuple-return refactor is transparent at the public boundary). Baseline seven-hundred-thirty-nine to seven-hundred-forty-five.
+**Caller updates**: zero in production tree (no production caller of `fit_return_forecast_task_b1` exists; Sxx-17 prospective-only).
+**Edge cases verified**:
+- `len(y_test) < 2` returns `(np.empty(0), diagnostics_with_B_effective_zero)` rather than raising — preserves existing graceful-degradation contract while emitting valid diagnostics
+- `len(y_test) < 2` in sensitivity sweep populates NaN SE per label but valid diagnostics per label (B_effective = zero)
+- Tri-state `fallback_flag` validation rejects invalid strings at `__post_init__` (K5.5 verified)
+- All six fields no-default per AP-AUTH-54 step #2 (K5.6 verified across three field positions)
+**AP-AUTH delta**: plus one (**AP-AUTH-54 codified at this commit** — see codification block below).
+**Sxx delta**: zero.
+
+---
+
+### AP-AUTH-54 codification (2026-05-15, anchored at `l5b-kick-5-accept`)
+
+**AP-AUTH-54 — Internal-implementation variant of AP-AUTH-53.**
+
+When the reviewer-flagged surface is an internal helper (`_` prefix) or private estimator mechanic rather than a public production boundary, the AP-AUTH-53 closure mechanism applies via the following variant:
+
+1. **In-place refactor of the internal helper** — change signature, return contract, or body as needed to expose the post-refactor invariant. No `_v2` wrapper required (would be ceremonial for internal helpers).
+2. **No-default field on a related public dataclass** — exposes the refactor's surface state to downstream consumers for gating and runtime inspection. AP-AUTH-53 step #3 (force caller intent) is satisfied at the dataclass field rather than at the public function signature.
+3. **Gate validator extension via Option Y** — signature inspection on the public dataclass + AST audit on the internal helper body OR runtime probe on a synthesized fit.
+4. **Pre-flight empirical evidence** — when reviewer concern targets an edge-case path (e.g., fallback, degenerate state), pre-flight read-and-plan should demonstrate the path is empirically reachable in production fixtures before Phase 0, to confirm the discipline isn't ceremonial.
+
+Confirmed via L5b-KICK-4 (inner-CV z-scaler purity; private helper `_select_lambda_inner_cv_ridge`; field `inner_cv_scaler_recomputed`) + L5b-KICK-5 (bootstrap diagnostics table; private helper `_block_bootstrap_residual_se`; fields `bootstrap_diagnostics` + `block_size_sensitivity_diagnostics`). Anticipated to apply at KICK-6+ when reviewer flags target internal estimator mechanics rather than public output contracts.
 
 ---
 

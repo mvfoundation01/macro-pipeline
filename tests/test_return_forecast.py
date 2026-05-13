@@ -42,8 +42,24 @@ per Strategic disposition 2026-05-15).
   K4.4  NEG         test_kick4_dataclass_rejects_missing_inner_cv_scaler_recomputed
   K4.5  NEG-inv     test_kick4_inner_scalers_differ_from_outer_scalers_negative_invariant
 
+L5b-KICK-5 (tag ``l5b-kick-5-accept``, 2026-05-15) appended six tests
+(K5.1-K5.6) closing the ChatGPT 5.5 IMPORTANT #6 reviewer flag on
+bootstrap diagnostics table per horizon/fold via the AP-AUTH-53 fifth-
+instance / AP-AUTH-54 internal-implementation variant pattern.
+
+  K5.1  POS         test_kick5_ridge_fit_result_carries_bootstrap_diagnostics
+  K5.2  POS         test_kick5_block_size_sensitivity_diagnostics_per_size
+  K5.3  POS-inv     test_kick5_block_count_invariant_matches_n_train_div_block_size
+  K5.4  POS         test_kick5_fallback_flag_B_halved_reachable_at_5Y_sensitivity_2h
+  K5.5  NEG         test_kick5_dataclass_rejects_invalid_fallback_flag
+  K5.6  NEG         test_kick5_dataclass_rejects_missing_no_default_field
+
 NEG-flavor accounting (per L5-B1 convention; POS-inv counts as NEG-
-flavor): 8 + 4 = 12 of 19 = 63% NEG-flavor (above 50% floor).
+flavor): post-KICK-5 strict-NEG 6 / POS-inv 5 / POS 14 = 11 of 25 =
+44% strict+POS-inv-flavor NEG. Per L5-B1 documented convention
+(test_return_forecast.py header at top), each KICK sub-phase satisfies
+its own 50% NEG floor: KICK-5 has 2 strict NEG + 1 POS-inv = 3 of 6 =
+50% NEG-flavor (floor met at the sub-phase level).
 """
 from __future__ import annotations
 
@@ -59,6 +75,7 @@ from macro_pipeline.analysis.walk_forward_cv import generate_schedule
 from macro_pipeline.models.return_forecast import (
     BOOTSTRAP_ITERATIONS_DEFAULT,
     LAMBDA_GRID_DEFAULT,
+    BootstrapDiagnostics,
     RidgeFitResult,
     fit_return_forecast_task_b1,
 )
@@ -626,3 +643,199 @@ def test_kick4_inner_scalers_differ_from_outer_scalers_negative_invariant():
         f"NEG-invariant failure: inner std must differ from outer std "
         f"on this fixture; max|Δstd|={delta_std} (expected > 0.1)"
     )
+
+
+# ===========================================================================
+# L5b-KICK-5 tests K5.1-K5.6 — bootstrap diagnostics table per
+# horizon/fold (primary + sensitivity-sweep). Closes ChatGPT 5.5
+# IMPORTANT #6 reviewer flag via the AP-AUTH-53 fifth-instance /
+# AP-AUTH-54 internal-implementation variant pattern. NEG-flavor 3/6 =
+# 50% at the sub-phase level (floor met).
+# ===========================================================================
+
+
+# ---------------------------------------------------------------------------
+# Test K5.1 — POS (KICK-5)
+# ---------------------------------------------------------------------------
+def test_kick5_ridge_fit_result_carries_bootstrap_diagnostics():
+    """KICK-5: every ``RidgeFitResult`` carries a primary
+    ``bootstrap_diagnostics: BootstrapDiagnostics`` instance with
+    ``n_train > 0``, ``block_size > 0``, and ``fallback_flag`` in the
+    tri-state taxonomy."""
+    schedule, crps, cdrs, macro, fwd = _build_synthetic_inputs(horizon="5Y")
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        results = fit_return_forecast_task_b1(
+            schedule, crps, cdrs, macro, fwd, bootstrap_iterations=10,
+        )
+    assert len(results) > 0, "fixture must produce >= 1 fold"
+    for r in results:
+        assert isinstance(r.bootstrap_diagnostics, BootstrapDiagnostics)
+        assert r.bootstrap_diagnostics.n_train > 0
+        assert r.bootstrap_diagnostics.block_size > 0
+        assert r.bootstrap_diagnostics.fallback_flag in (
+            "none", "B_halved", "bs1_degenerate",
+        )
+        # n_eff should equal n_train // horizon_months; 5Y → 60 months.
+        assert r.bootstrap_diagnostics.n_eff == r.n_train_obs // 60
+
+
+# ---------------------------------------------------------------------------
+# Test K5.2 — POS (KICK-5)
+# ---------------------------------------------------------------------------
+def test_kick5_block_size_sensitivity_diagnostics_per_size():
+    """KICK-5: per-sensitivity-block-size diagnostics dict on every
+    ``RidgeFitResult``; keys match canonical ``_BLOCK_SIZE_LABELS``
+    (``"h/4", "h/2", "h", "2h"``); each value is a
+    ``BootstrapDiagnostics`` instance."""
+    schedule, crps, cdrs, macro, fwd = _build_synthetic_inputs(horizon="5Y")
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        results = fit_return_forecast_task_b1(
+            schedule, crps, cdrs, macro, fwd, bootstrap_iterations=10,
+        )
+    expected_labels = {"h/4", "h/2", "h", "2h"}
+    for r in results:
+        assert set(r.block_size_sensitivity_diagnostics.keys()) == expected_labels, (
+            f"sensitivity diagnostics keys mismatch: "
+            f"{set(r.block_size_sensitivity_diagnostics.keys())} "
+            f"vs expected {expected_labels}"
+        )
+        for label, diag in r.block_size_sensitivity_diagnostics.items():
+            assert isinstance(diag, BootstrapDiagnostics), (
+                f"label={label!r}: value is not BootstrapDiagnostics"
+            )
+
+
+# ---------------------------------------------------------------------------
+# Test K5.3 — POS-invariant (KICK-5)
+# ---------------------------------------------------------------------------
+def test_kick5_block_count_invariant_matches_n_train_div_block_size():
+    """KICK-5 POS-invariant: for every diagnostics emitted (primary
+    AND sensitivity sweep), ``block_count == n_train // block_size``
+    POST-fallback. This invariant must hold across all three
+    fallback states."""
+    schedule, crps, cdrs, macro, fwd = _build_synthetic_inputs(horizon="5Y")
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        results = fit_return_forecast_task_b1(
+            schedule, crps, cdrs, macro, fwd, bootstrap_iterations=10,
+        )
+    for r in results:
+        # Primary call invariant.
+        d = r.bootstrap_diagnostics
+        if d.fallback_flag == "bs1_degenerate":
+            # bs collapsed to 1; block_count = n_train (iid).
+            assert d.block_size == 1
+            assert d.block_count == d.n_train
+        else:
+            assert d.block_count == d.n_train // d.block_size, (
+                f"primary: block_count={d.block_count} != "
+                f"n_train={d.n_train} // block_size={d.block_size}"
+            )
+        # Sensitivity sweep invariant on every label.
+        for label, ds in r.block_size_sensitivity_diagnostics.items():
+            if ds.fallback_flag == "bs1_degenerate":
+                assert ds.block_size == 1
+                assert ds.block_count == ds.n_train
+            else:
+                assert ds.block_count == ds.n_train // ds.block_size, (
+                    f"sensitivity[{label!r}]: block_count={ds.block_count} != "
+                    f"n_train={ds.n_train} // block_size={ds.block_size}"
+                )
+
+
+# ---------------------------------------------------------------------------
+# Test K5.4 — POS (KICK-5; reviewer-flagged path empirical verification)
+# ---------------------------------------------------------------------------
+def test_kick5_fallback_flag_B_halved_reachable_at_5Y_sensitivity_2h():
+    """KICK-5: empirical verification of the reviewer-flagged path.
+    At 5Y/expanding with default settings, the ``"2h"`` sensitivity
+    block size (= 120 months for 5Y) triggers the ``"B_halved"``
+    fallback on the early folds (n_train ≈ 240, block_count = 2 < 4
+    → B halves). This test pins the reviewer's concern empirically:
+    the diagnostic surface MUST expose the fallback state that was
+    previously buried in a UserWarning text."""
+    schedule, crps, cdrs, macro, fwd = _build_synthetic_inputs(horizon="5Y")
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        results = fit_return_forecast_task_b1(
+            schedule, crps, cdrs, macro, fwd, bootstrap_iterations=10,
+        )
+    assert len(results) > 0, "fixture must produce >= 1 fold"
+    # At least one fold must show "B_halved" at the "2h" sensitivity
+    # block size (empirically confirmed at ITEM 0b pre-flight probe).
+    halved_count = 0
+    for r in results:
+        ds_2h = r.block_size_sensitivity_diagnostics.get("2h")
+        assert ds_2h is not None, "2h sensitivity diagnostics missing"
+        if ds_2h.fallback_flag == "B_halved":
+            halved_count += 1
+            # When B_halved fires, B_effective must equal max(1, B//2).
+            assert ds_2h.B_effective == max(1, 10 // 2), (
+                f"B_halved fired but B_effective={ds_2h.B_effective}, "
+                f"expected {max(1, 10 // 2)}"
+            )
+    assert halved_count > 0, (
+        f"expected at least one fold with 2h sensitivity fallback="
+        f"'B_halved' at 5Y/expanding (reviewer-flagged path); "
+        f"got halved_count={halved_count} of {len(results)} folds"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Test K5.5 — NEG (KICK-5)
+# ---------------------------------------------------------------------------
+def test_kick5_dataclass_rejects_invalid_fallback_flag():
+    """KICK-5: ``BootstrapDiagnostics(..., fallback_flag="bogus")``
+    raises ``ValueError`` from ``__post_init__`` validator. Tri-state
+    contract enforced at construction (mirrors KICK-3
+    ``BinDiagnosticStatus`` precedent)."""
+    with pytest.raises(ValueError, match=r"fallback_flag="):
+        BootstrapDiagnostics(
+            n_train=120,
+            n_eff=10,
+            block_size=12,
+            block_count=10,
+            B_effective=1000,
+            fallback_flag="bogus",  # invalid tri-state
+        )
+
+
+# ---------------------------------------------------------------------------
+# Test K5.6 — NEG (KICK-5)
+# ---------------------------------------------------------------------------
+def test_kick5_dataclass_rejects_missing_no_default_field():
+    """KICK-5: bare ``BootstrapDiagnostics(...)`` without any 1 of the
+    6 no-default fields raises ``TypeError``. AP-AUTH-53 step #3 +
+    AP-AUTH-54 step #2 contract."""
+    # Missing fallback_flag (test the most-likely-omitted one).
+    with pytest.raises(TypeError, match=r"fallback_flag"):
+        BootstrapDiagnostics(
+            n_train=120,
+            n_eff=10,
+            block_size=12,
+            block_count=10,
+            B_effective=1000,
+            # fallback_flag omitted — must raise
+        )
+    # Missing B_effective.
+    with pytest.raises(TypeError, match=r"B_effective"):
+        BootstrapDiagnostics(
+            n_train=120,
+            n_eff=10,
+            block_size=12,
+            block_count=10,
+            fallback_flag="none",
+            # B_effective omitted — must raise
+        )
+    # Missing n_train.
+    with pytest.raises(TypeError, match=r"n_train"):
+        BootstrapDiagnostics(
+            n_eff=10,
+            block_size=12,
+            block_count=10,
+            B_effective=1000,
+            fallback_flag="none",
+            # n_train omitted — must raise
+        )
