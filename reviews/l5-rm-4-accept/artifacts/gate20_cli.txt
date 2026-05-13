@@ -1,0 +1,11 @@
+=== Gate 20 - L5-RM-4 ScoredObservation 6-slot batched migration: PASS ===
+  [x] Criterion 1 PASS: 29 __dataclass_fields__ (empirical; spec §5.RM-4.6 claimed 31 per S-12 documented gap)
+  [x] Criterion 2 PASS: all 6 new slot names per spec §5.RM-4.1.1 present in __dataclass_fields__
+  [!] Criterion 3 (parquet roundtrip) asserted via pytest tests/test_scored_observation.py::test_parquet_roundtrip_preserves_6_new_slots
+  [!] Criterion 4 (L5-13 absorption: 0 V_*/T_* keys) asserted via pytest tests/test_cdrs.py::test_notes_field_carries_L5_provenance_post_L5_13_absorption
+  [!] Criterion 5 (all 8 §5.RM-4.5 tests PASS) asserted via full pytest
+  [!] Criterion 6 (baseline preserved) asserted via `pytest -x --no-header -q`; cite pass count in verification report
+  Summary:
+    criterion_1_field_count: 29
+    criterion_2_new_slots_present: ['bayesian_shrinkage_weight', 'calibrated_probability_band_lower', 'calibrated_probability_band_upper', 'dms_adjustment_bps', 'drawdown_conditional_distribution', 'positive_return_probability']
+    criterion_2_new_slots_missing: []
