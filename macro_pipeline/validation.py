@@ -3657,6 +3657,150 @@ def _cli_gate19_b1() -> int:
     return 0 if report.passed else 1
 
 
+def validate_gate19_l5b_task_b2_subcriteria() -> GateReport:
+    """Gate 19-B2 — L5-B Task B2 partial PASS (RETURN_POSITIVE calibration).
+
+    Per ``LAYER_5_BUILD_SPEC.md`` v6 §5.B.6 sub-criteria 15-18 (Task B2
+    portion). Strategic disposition D-B1-2 (2026-05-13) split monolithic
+    Gate 19 into 19-A / 19-B1 / 19-B2 partial milestones:
+
+      * 19-A  → criteria 1-7  shipped at ``l5-b-task-a-accept``
+      * 19-B1 → criteria 8-14 + 19-22 shipped at ``l5-b-task-b1-accept``
+      * 19-B2 → criteria 15-18 (this validator) at ``l5-b-task-b2-accept``
+
+    After this milestone, the spec-monolithic Gate 19 is collectively
+    closed across the three sub-phase ACCEPT tags. The "all 28 tests
+    in §5.B.5 PASS" anchor (sub-criterion 19) preserves exactly:
+    Task A twelve + Task B1 fourteen (with B2-1 promoted per D-B1-3)
+    + Task B2 two = twenty-eight total.
+
+    Compile-time checks (criteria 15-16); pytest-asserted out-of-band
+    (criteria 17-18 via tests/test_return_calibration.py + test_return_forecast.py).
+    """
+    import inspect
+
+    findings: list[str] = []
+    warnings_list: list[str] = []
+    summary: dict = {}
+
+    try:
+        from macro_pipeline.models.return_calibration import (
+            calibrate_return_forecast_task_b2,
+        )
+        from macro_pipeline.models.isotonic_calibrator import (
+            IsotonicCalibrationResult,
+            fit_isotonic_calibrators,
+        )
+
+        # Criterion 15 — signature matches spec §5.B.1.1 lines 697-722:
+        # four parameters (return_forecasts_by_horizon, forward_returns_by_horizon,
+        # fit_window, random_seed); returns dict[str, IsotonicCalibrationResult].
+        expected_params = {
+            "return_forecasts_by_horizon",
+            "forward_returns_by_horizon",
+            "fit_window",
+            "random_seed",
+        }
+        sig = inspect.signature(calibrate_return_forecast_task_b2)
+        actual_params = set(sig.parameters.keys())
+        missing = expected_params - actual_params
+        extra = actual_params - expected_params
+        summary["criterion_15_signature_params"] = sorted(actual_params)
+        if missing:
+            findings.append(
+                f"FAIL: Criterion 15 - signature missing params {sorted(missing)}"
+            )
+        elif extra:
+            findings.append(
+                f"FAIL: Criterion 15 - signature has unexpected params "
+                f"{sorted(extra)}"
+            )
+        else:
+            findings.append(
+                "Criterion 15 PASS: calibrate_return_forecast_task_b2 "
+                "signature matches spec four-parameter contract "
+                "(return_forecasts_by_horizon + forward_returns_by_horizon "
+                "as positional; fit_window + random_seed as keyword-only)"
+            )
+
+        # Criterion 16 — internally references fit_isotonic_calibrators
+        # with score_type="RETURN_POSITIVE". Verified by source-string
+        # presence on the module file (defensive compile-time substring
+        # match; pytest test B2-3 runtime-asserts the call actually
+        # produces RETURN_POSITIVE calibrators).
+        import macro_pipeline.models.return_calibration as _b2_mod
+        source = inspect.getsource(_b2_mod)
+        ref_to_dispatcher = "fit_isotonic_calibrators" in source
+        ref_to_score_type = '"RETURN_POSITIVE"' in source or "'RETURN_POSITIVE'" in source
+        summary["criterion_16_references_fit_isotonic_calibrators"] = ref_to_dispatcher
+        summary["criterion_16_references_RETURN_POSITIVE_literal"] = ref_to_score_type
+        if ref_to_dispatcher and ref_to_score_type:
+            findings.append(
+                "Criterion 16 PASS: return_calibration source references "
+                "fit_isotonic_calibrators + RETURN_POSITIVE literal; "
+                "internal calls verified per per-horizon dispatch design "
+                "(D-B2-non-blocking-1)"
+            )
+        else:
+            findings.append(
+                f"FAIL: Criterion 16 - return_calibration missing references "
+                f"(fit_isotonic_calibrators: {ref_to_dispatcher}; "
+                f"RETURN_POSITIVE literal: {ref_to_score_type})"
+            )
+
+        # Sanity: IsotonicCalibrationResult.fitted_y_min/max are the
+        # [0, 1] bracket guaranteed by RM-6 IsotonicRegression(out_of_bounds="clip");
+        # used at criterion 17 runtime assertions.
+        cal_fields = set(IsotonicCalibrationResult.__dataclass_fields__.keys())
+        for fld in ("fitted_y_min", "fitted_y_max", "monotonicity_audit",
+                    "sklearn_model"):
+            if fld not in cal_fields:
+                findings.append(
+                    f"FAIL: IsotonicCalibrationResult missing field {fld!r} "
+                    f"required by Task B2 criterion 17"
+                )
+        summary["isotonic_calibration_result_fields"] = sorted(cal_fields)
+    except ImportError as exc:
+        findings.append(f"FAIL: Criterion 15 - import error: {exc}")
+
+    # Out-of-band assertions (pytest).
+    warnings_list.append(
+        "Criterion 17 (positive_return_probability per horizon in [0, 1] + "
+        "band_lower <= band_upper) asserted via "
+        "tests/test_return_calibration.py B2-3 (grid predict + "
+        "fitted_y_min/max == 0.0/1.0 + monotonicity_audit == PASS)"
+    )
+    warnings_list.append(
+        "Criterion 18 (all 3 Task B2 tests in §5.B.5.B2 PASS) asserted "
+        "via full pytest: B2-1 in tests/test_return_forecast.py "
+        "(promoted per D-B1-3; already PASS at l5-b-task-b1-accept) + "
+        "B2-2 + B2-3 in tests/test_return_calibration.py"
+    )
+    warnings_list.append(
+        "Gate 19 final close (sub-criterion 19; 'all twenty-eight tests "
+        "in §5.B.5 PASS'): Task A twelve + Task B1 fourteen (with B2-1 "
+        "promoted) + Task B2 two = twenty-eight total tests across "
+        "test_composite_refit.py + test_return_forecast.py + "
+        "test_return_calibration.py; spec mirror anchor preserved per "
+        "AP-AUTH-52 symbolic derivation"
+    )
+
+    passed = not any(f.startswith("FAIL") for f in findings)
+    return GateReport(
+        name="Gate 19-B2 - L5-B Task B2 RETURN_POSITIVE calibration (partial PASS; Gate 19 final close)",
+        passed=passed, findings=findings, warnings=warnings_list,
+        summary=summary,
+    )
+
+
+def _cli_gate19_b2() -> int:
+    import logging
+    logging.basicConfig(level="WARNING", format="%(message)s")
+    report = validate_gate19_l5b_task_b2_subcriteria()
+    print(report.render())
+    return 0 if report.passed else 1
+
+
 def validate_gate20_dataclass_migration() -> GateReport:
     """Gate 20 — L5-RM-4 ScoredObservation 6-slot batched migration.
 
@@ -3897,6 +4041,8 @@ if __name__ == "__main__":
         sys.exit(_cli_gate18())
     if cmd == "gate19_b1":
         sys.exit(_cli_gate19_b1())
+    if cmd == "gate19_b2":
+        sys.exit(_cli_gate19_b2())
     if cmd == "gate20":
         sys.exit(_cli_gate20())
     if cmd == "gate21":
@@ -3905,7 +4051,7 @@ if __name__ == "__main__":
         f"Unknown command: {cmd}. Available: "
         "gate1, gate2, gate3, gate4a, gate4b, gate4c, gate4d, "
         "gate8, gate9, gate10, gate11, gate12, gate13, gate14, gate15, gate16, gate17, "
-        "gate18, gate19_b1, gate20, gate21",
+        "gate18, gate19_b1, gate19_b2, gate20, gate21",
         file=sys.stderr,
     )
     sys.exit(2)

@@ -179,13 +179,13 @@ Spec step 3 reads as speculative — anticipates a future state where pre-1978 t
 
 Spec `LAYER_5_BUILD_SPEC.md` v6 @ `9f848bb` contains two doc-vs-implementation drifts that do not affect behavior but should be reconciled at a future v7 spec patch:
 
-1. **§5.B.0 + §5.B.1.1 + §5.B.7 proof item 1**: spec literal `macro_pipeline/models/ridge_cv.py` does not exist in the implementation. Task A shipped at `macro_pipeline/models/composite_refit.py` (l5-b-task-a-accept). Task B1 shipped at `macro_pipeline/models/return_forecast.py` (l5-b-task-b1-accept; D-B1-1 disposition). Spec proof item 1 reads "from macro_pipeline.models.ridge_cv import fit_composite_weights, fit_return_forecast_task_b1, ...". Actual: two separate import paths.
+1. **§5.B.0 + §5.B.1.1 + §5.B.7 proof item 1**: spec literal `macro_pipeline/models/ridge_cv.py` does not exist in the implementation. Task A shipped at `macro_pipeline/models/composite_refit.py` (l5-b-task-a-accept). Task B1 shipped at `macro_pipeline/models/return_forecast.py` (l5-b-task-b1-accept; D-B1-1 disposition). Task B2 shipped at `macro_pipeline/models/return_calibration.py` (l5-b-task-b2-accept; D-B1-1 precedent continued). Spec proof item 1 reads "from macro_pipeline.models.ridge_cv import fit_composite_weights, fit_return_forecast_task_b1, calibrate_return_forecast_task_b2, ...". Actual: three separate import paths.
 
-2. **§5.B.6 Gate 19**: spec authored as a monolithic 22-criterion gate covering Task A + B1 + B2. V's build plan unbundled into per-sub-phase ACCEPT tags, so Gate 19 is split into 19-A (criteria 1-7, Task A, ✓ at `l5-b-task-a-accept`), 19-B1 (criteria 8-14 + 19-22, Task B1, ✓ at `l5-b-task-b1-accept` via `validate_gate19_l5b_task_b1_subcriteria`), and 19-B2 (criteria 15-18, Task B2, deferred). Sub-criterion 19 "All 28 tests PASS" splits across the three milestones — Task A delta (twelve), Task B1 delta with B2-1 promoted (fourteen), Task B2 delta minus B2-1 (two); total reconciles to twenty-nine, one above the spec literal "28" due to the B2-1 promotion approved by D-B1-3.
+2. **§5.B.6 Gate 19**: spec authored as a monolithic 22-criterion gate covering Task A + B1 + B2. V's build plan unbundled into per-sub-phase ACCEPT tags, so Gate 19 is split into 19-A (criteria 1-7, Task A, ✓ at `l5-b-task-a-accept`), 19-B1 (criteria 8-14 + 19-22, Task B1, ✓ at `l5-b-task-b1-accept` via `validate_gate19_l5b_task_b1_subcriteria`), and 19-B2 (criteria 15-18, Task B2, ✓ at `l5-b-task-b2-accept` via `validate_gate19_l5b_task_b2_subcriteria`). After all three partial-PASS milestones land, the spec-monolithic Gate 19 is conceptually closed. Sub-criterion 19 "all 28 tests PASS" splits across the three milestones — Task A delta (twelve), Task B1 delta with B2-1 promoted into the Task B1 file (fourteen; was thirteen in spec, plus the promoted B2-1), Task B2 delta minus B2-1 (two; was three in spec, minus the promoted B2-1); total reconciles to twenty-eight, preserving the spec literal mirror anchor exactly per AP-AUTH-52 magic-number derivability discipline.
 
 **Effort estimate**: 1–2h ChatGPT review + 0.5h Track A surgical scrub + 0.5h Strategic disposition ≈ 2–3h cycle (similar to L5b-4).
 
-**Priority**: **LOW** — doc-only residue; zero functional impact. Implementation matches Strategic-approved D-B1-1/-2/-3 dispositions, validated at `l5-b-task-b1-accept`.
+**Priority**: **LOW** — doc-only residue; zero functional impact. Implementation matches Strategic-approved D-B1-1/-2/-3 dispositions, validated at `l5-b-task-b1-accept` and finalised at `l5-b-task-b2-accept` (Gate 19 monolithic conceptually closed across the three partial milestones).
 
 **Owner**: post-L5 retrospective (NOT during active L5 build; spec FROZEN per scope guard).
 
@@ -196,7 +196,8 @@ Spec `LAYER_5_BUILD_SPEC.md` v6 @ `9f848bb` contains two doc-vs-implementation d
 4. v7 ChatGPT review confirms 0 new file-naming or gate-split inconsistencies introduced.
 
 **Provenance trail**:
-- L5-B Task B1 ACCEPT report (this sub-phase) §"Spec divergences" table
+- L5-B Task B1 ACCEPT report (2026-05-13) — initial entry surface
+- L5-B Task B2 ACCEPT report (2026-05-13) — extended for `return_calibration.py` + Gate 19 final-close confirmation + test-count miscount correction (prior entry asserted "twenty-nine" total; corrected to twenty-eight matching the spec literal mirror anchor since B2-1 is INSIDE the Task B1 file's fourteen, not an additional test)
 - AP-AUTH-52 codified at `docs/ap_register.md` (sibling discipline)
 - D-B1-1 / D-B1-2 / D-B1-3 Strategic dispositions (Track B chat, 2026-05-13)
 
