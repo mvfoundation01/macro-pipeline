@@ -16,7 +16,63 @@ This file collects NEW APs added during L5 build execution.
 - **AP-16..AP-21**: L5 project methodology APs (spec §12 lines 2417-2422).
 - **AP-AUTH-39..42**: L5 v4/v5/v6 audit-instrument APs (spec §12 lines 2423-2426).
 - **AP-AUTH-43..46**: L5 v6 process scope guards (`LAYER_5_V6_CHUNK_14_VERIFICATION.md` §7).
-- **AP-AUTH-47..49**: codification PENDING at L5-B Task A retry per Strategic prompt (env-setup beyond collect-only; manifest hash placeholders; planning-branch precommit scope hygiene). Validated empirically during patch work but commit deferred to L5-B Task A first-commit per Strategic scoping.
+- **AP-AUTH-47..49**: **codified 2026-05-13** at L5-B Task A retry first commit (this file §AP-AUTH-47, §AP-AUTH-48 v2, §AP-AUTH-49 below).
+
+---
+
+## AP-AUTH-47 (NEW; codified 2026-05-13) — Build worktree env-setup beyond test collection
+
+**Symptom**: `pytest --collect-only` succeeds on a fresh build worktree (no cache files needed for collection) but `pytest -x` fails on 190+ cache-dependent tests because `data/cache/` and `data/raw/` are gitignored per-worktree (not present in fresh worktree checkout).
+
+**Surfaced**: L5-A Phase 3.5 (full pytest revealed 190 failures + 12 errors after Phase 1 collect-only "baseline" had reported "602 tests collected"; root cause = build worktree missing data dirs that exist in main worktree).
+
+**Mitigation discipline**: Phase 1 of any L5 sub-phase code-exec MUST include AS DISCRETE STEPS:
+1. `cp -r D:/macro_pipeline/data/cache D:/macro_pipeline/data/raw <build-worktree>/data/` (one-time per worktree; gitignored dirs).
+2. `pytest -x --no-header -q` (full execution; NOT `--collect-only`).
+3. Verification report Phase 1 section MUST cite full pytest pass count, NOT collection count.
+
+**Enforcement**: pre-flight prompts MUST mandate full pytest; reviewer rejects sub-phase ACCEPT if verification report cites only `--collect-only` baseline. Future sub-phase Phase 0 audits include data-dir-existence check.
+
+**Cross-reference**: L5-A Phase 1 (validated 617 collect-only; surfaced 190 failures full); L3 component_panel patch Phase 0 (correctly ran full pytest 623); this L5-B Task A retry Phase 0 (correctly ran full 623 — discipline now established).
+
+---
+
+## AP-AUTH-48 v2 (NEW; codified 2026-05-13) — Manifest hash computed from served-URL content post-push (Windows CRLF/LF normalization)
+
+**Symptom**: MANIFEST.md ships with sha256 hashes computed from local on-disk content pre-commit. On Windows with git autocrlf=true, text files with CRLF line endings (e.g., pytest output captured via `pytest > file 2>&1` shell redirection) are normalized to LF in the git blob on `git add`. Result: local on-disk hash ≠ served blob hash. Reviewer fetches served content (LF) → sha256 mismatch with MANIFEST claim (CRLF) → integrity verification fails.
+
+**v1 surfaced at ChatGPT 5.5 L5-A foundation review §D.1** (placeholder `<fill>` issue; mitigation: populate hashes pre-push).
+
+**v2 surfaced at L3 component_panel patch Phase 5** (`test_transcript.txt` exhibited drift: local `c03210a5f6ca` vs served `5aa50cde909f`; required correction commit `52a0bd3`).
+
+**Mitigation discipline**:
+1. Compute manifest hashes pre-push (as v1).
+2. **POST-PUSH** (new v2 step): verify each artifact URL via `curl -sL <url> | sha256sum`.
+3. If any served-hash ≠ MANIFEST claim: amend MANIFEST with served-content hash; commit + push correction.
+4. Final state: every MANIFEST entry sha256 must equal `curl -sL <its-URL> | sha256sum` output (first 12 chars).
+
+**Enforcement**: Phase 4/5 (review branch publication) procedure MUST include post-push curl verification step. Pre-push check is INSUFFICIENT (catches placeholder bug but not normalization drift). Track A's L3 patch Phase 5 introduced the discipline; this AP codifies for all subsequent sub-phases.
+
+**Why v2 (not new AP number)**: AP-AUTH-48 v1 already addressed "manifest hash placeholders shipped unfilled". v2 strengthens the discipline to cover line-ending normalization drift — same AP class (manifest hash integrity), one cycle deeper. Mirrors AP-AUTH-41 v6 STRENGTHENED pattern from spec authoring.
+
+**Cross-reference**: L3 component_panel patch commit `52a0bd3` (the correction commit demonstrating v2 mitigation); ChatGPT 5.5 L5-A review §D.1 (v1 origin).
+
+---
+
+## AP-AUTH-49 (NEW; codified 2026-05-13) — Planning-only branch precommit infra hygiene
+
+**Symptom**: Planning/docs-only branch (e.g., `claude/layer-5-build-plan`) has docs/**/*.md commits that trigger the shared `.git/hooks/pre-commit` hook, but the hook tries to invoke `<cwd>/scripts/precommit/validate_*.py` which only exist on the build branch (`claude/layer-5-build`). Hook fails (script not found) and blocks the commit. Without explicit handling, the only escape paths are `--no-verify` (forbidden) or cherry-picking the precommit infra onto the planning branch (scope bloat).
+
+**Surfaced**: L5-B Task A pre-flight commit on `claude/layer-5-build-plan` (commit chain: `9a25619` — required cherry-pick `f223eb3` of `0dc3e8d` from build branch before commit could land).
+
+**Mitigation discipline**:
+1. **Preferred**: planning-only branches must inherit precommit infra (cherry-pick from build branch) at branch creation. Scope penalty acceptable since validators are lightweight (~10 files).
+2. **Alternative**: tag the branch with `hook-scope-override` (would require .git/hooks/pre-commit to read a branch-level config; not yet implemented).
+3. **Pre-commit script auto-detection enhancement** (proposed; not yet implemented): if validators absent from `$REPO_ROOT/scripts/precommit/`, hook emits actionable error (`"Validators missing on branch X; run scripts/precommit/install_hook.py from a branch that has them, OR cherry-pick infra commit from claude/layer-5-build"`) instead of generic script-not-found failure.
+
+**Enforcement**: at planning-branch creation, Track A applies cherry-pick by default (validated by L5-B Task A pre-flight). Future enhancement: auto-detection per (3) above.
+
+**Cross-reference**: commit `f223eb3` (cherry-pick of precommit infra onto build-plan branch).
 
 ---
 
