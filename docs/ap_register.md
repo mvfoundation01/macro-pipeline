@@ -96,4 +96,22 @@ This file collects NEW APs added during L5 build execution.
 
 ---
 
-**END — ap_register.md (AP-AUTH-50 entry; cumulative provenance §0)**
+## AP-AUTH-51 (NEW; codified 2026-05-14) — Risk register entries with quantifiable scope must cite grep evidence
+
+**Symptom**: Build plan v1 ITEM 4 risk #2 stated "L5-RM-4 dataclass migration touches 50+ existing ScoredObservation construction sites" → HIGH severity classification. Empirical grep at L5-RM-4 pre-flight returned **16 real construction sites** (2 production + 14 test; 1 grep noise comment line). Scope gap: -68% vs narrative estimate. Risk class reclassified HIGH → MEDIUM in pre-flight; "extra-thorough" pre-flight protocol invoked unnecessarily (1.0h spent vs ~0.5h needed if scope correctly estimated upfront).
+
+**Surfaced**: L5-RM-4 pre-flight (commit `675db8a` on `claude/layer-5-build-plan`; risk reclassification documented in ITEM 7 §7.1).
+
+**Mitigation discipline**:
+1. Future risk register entries that reference **quantifiable scope** (touch-point counts, file counts, line counts, test counts) MUST cite the grep command + count in an evidence column or footnote.
+2. Narrative estimates without grep evidence default to **LOW severity** unless explicit empirical evidence is supplied. (Burden of proof shifts to the estimator for HIGH/MEDIUM classifications.)
+3. AP-AUTH-50 already mandated upstream-export grep at pre-flight; AP-AUTH-51 extends the discipline to **all quantifiable risk dimensions** (not just upstream-export presence/absence).
+4. Reviewer audit at pre-flight ACCEPT: any HIGH/MEDIUM risk without grep evidence column → REVISE-REQUIRED.
+
+**Enforcement**: build-plan template update proposal for **L5_BUILD_PLAN_v2** — add "Grep evidence" column to all risk register entries; absence triggers downgrade-to-LOW default. Deferred to post-L5 retrospective implementation; codification at AP register is sufficient discipline-signal for current sub-phase work.
+
+**Cross-reference**: L5-RM-4 pre-flight ITEM 1 (empirical grep that exposed the 50+ → 16 gap); AP-AUTH-50 (parent discipline; upstream-export pre-flight grep); build plan v1 ITEM 4 risk #2 (the over-cited risk).
+
+---
+
+**END — ap_register.md (AP-AUTH-50 + AP-AUTH-51 entries; cumulative provenance §0)**
