@@ -1,0 +1,13 @@
+=== Gate 18 - L5-A Walk-forward CV scaffold: PASS ===
+  [x] Criterion 1 PASS: 8 schedules generated
+  [x] Criterion 2 PASS: all 8 schedules meet §5.A.2 targets
+  [x] Criteria 3 + 6 PASS: AST-walk over 4474 folds reports 0 contamination violations (Standing Order #4 universal claim audit)
+  [x] Criterion 4 PASS: PIT-safety panel_sha256 propagated to all 8 schedules
+  [!] Criterion 5 (all 12 §5.A.5 tests PASS) is asserted out-of-band via `pytest tests/test_walk_forward_cv.py`; cite in verification report.
+  Summary:
+    criterion_1_schedule_count: 8
+    criterion_2_fold_counts: {'1Y/expanding': 1094, '1Y/rolling_20y': 1094, '3Y/expanding': 1046, '3Y/rolling_20y': 1046, '5Y/expanding': 83, '5Y/rolling_20y': 83, '10Y/expanding': 14, '10Y/rolling_20y': 14}
+    criterion_2_targets: {'1Y/expanding': 30, '1Y/rolling_20y': 30, '3Y/expanding': 25, '3Y/rolling_20y': 20, '5Y/expanding': 12, '5Y/rolling_20y': 10, '10Y/expanding': 4, '10Y/rolling_20y': 3}
+    criterion_3_6_audit_total_folds: 4474
+    criterion_3_6_audit_violations: 0
+    criterion_4_panel_sha256_per_schedule: {'1Y/expanding': '819b14f23005...', '1Y/rolling_20y': '819b14f23005...', '3Y/expanding': '819b14f23005...', '3Y/rolling_20y': '819b14f23005...', '5Y/expanding': '819b14f23005...', '5Y/rolling_20y': '819b14f23005...', '10Y/expanding': '819b14f23005...', '10Y/rolling_20y': '819b14f23005...'}

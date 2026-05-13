@@ -1,0 +1,17 @@
+============================= test session starts =============================
+collecting ... collected 12 items
+
+tests/test_composite_refit.py::test_task_a_composite_uses_component_level_matrix_not_scalar PASSED [  8%]
+tests/test_composite_refit.py::test_task_a_crps_against_nber_12m_labels PASSED [ 16%]
+tests/test_composite_refit.py::test_task_a_cdrs_against_drawdown_threshold_labels PASSED [ 25%]
+tests/test_composite_refit.py::test_task_a_outputs_per_component_coefficient_not_single_beta PASSED [ 33%]
+tests/test_composite_refit.py::test_task_a_rejects_scalar_raw_score_input PASSED [ 41%]
+tests/test_composite_refit.py::test_task_a_lambda_selection_minimizes_brier PASSED [ 50%]
+tests/test_composite_refit.py::test_task_a_auc_brier_calibration_slope_emitted_per_fold PASSED [ 58%]
+tests/test_composite_refit.py::test_task_a_rejects_cdrs_without_drawdown_threshold PASSED [ 66%]
+tests/test_composite_refit.py::test_task_a_per_component_coefficient_stability_across_folds PASSED [ 75%]
+tests/test_composite_refit.py::test_task_a_sign_flip_rate_below_20_percent PASSED [ 83%]
+tests/test_composite_refit.py::test_task_a_l2_coefficient_drift_reported PASSED [ 91%]
+tests/test_composite_refit.py::test_task_a_pit_safety_inherited_from_L5_A_folds PASSED [100%]
+
+============================= 12 passed in 3.15s ==============================
