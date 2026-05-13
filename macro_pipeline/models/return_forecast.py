@@ -65,6 +65,77 @@ the two L5-B estimator families in sibling modules. The wording drift is
 tracked in ``L5B_BACKLOG.md`` as ``L5b-7`` (doc-only); zero functional
 impact.
 
+L5b-A (tag ``l5b-a-accept``, 2026-05-15) — stationary block bootstrap
+---------------------------------------------------------------------
+**FIRST original OOS hardening sub-phase post-kickoff sprint.** Closes
+ChatGPT 5.5 Dim-3 OOS rigor mandate + build plan §3.1 L5b-A scope
+("Replace fixed block bootstrap in L5-B1 with stationary block
+bootstrap. Add geometric-block-length sampler.") via the AP-AUTH-54
+fourth-instance internal-implementation variant pattern (heavy
+envelope after KICK-4 reference):
+
+* ``_sample_stationary_block_lengths`` NEW helper (Politis-Romano
+  1994). Draws block lengths from ``Geometric(1/mean_block_length)``
+  with the memoryless property; sums until cumulative >=  ``n_obs``;
+  caller truncates. Reference: Politis & Romano (1994) "The
+  Stationary Bootstrap" JASA 89:1303-1313.
+* ``_block_bootstrap_residual_se`` body refactored from fixed-block
+  to stationary sampling. Each bootstrap iteration: (1) draws
+  geometric block lengths via ``_sample_stationary_block_lengths``;
+  (2) draws uniform start indices on ``{0, ..., n_train-1}``; (3)
+  assembles blocks with cyclic wrapping (``residuals[(s + j) %
+  n_train]``); (4) truncates concatenated series to ``n_train``;
+  (5) refits Ridge with same ``lambda_star``; (6) computes
+  bootstrap-sample SE. The pre-L5b-A fixed-block sampling is
+  replaced entirely (correctness fix per Politis-Romano institutional
+  default, not a policy choice).
+* ``BootstrapDiagnostics`` extended with seventh no-default field
+  ``block_length_distribution: Literal["fixed", "geometric"]`` per
+  AP-AUTH-54 step #2. Field count expansion via the 1-field-vs-2-field
+  envelope discussion (Strategic disposition 3 APPROVED the 1-field
+  variant superseding §3.4 2-field proposal): ``block_size`` field
+  retains polymorphic semantic per the discriminator — for
+  ``"fixed"`` it is the exact block length; for ``"geometric"`` it is
+  the geometric distribution mean parameter. Documented in
+  ``BootstrapDiagnostics`` field comment + class docstring.
+* Fallback-flag taxonomy preserved by construction (integer
+  floor-division ``n_train // block_size`` invariant across fixed ↔
+  geometric variants per ITEM 6 of L5b-A read-and-plan). K5.4 test
+  (KICK-5 sensitivity-sweep "2h" fallback "B_halved" verification)
+  survives verbatim post-L5b-A; no test recalibration needed.
+* R1 SE-drift empirical evidence (pre-flight ITEM 2 snapshot + Phase
+  6 post-refactor re-snapshot at 5Y/expanding, B=50, fold 0..4 SE
+  means):
+
+    PRE-refactor (fixed-block):   [0.129,   0.099,   0.193,   0.154,   0.237]
+    POST-refactor (stationary):   [0.12876, 0.09842, 0.19391, 0.15431, 0.23558]
+    Ratio (post / pre):           [0.998,   0.994,   1.005,   1.002,   0.994]
+
+  Post-refactor SE values within 1% of pre-refactor baseline (well
+  inside Strategic §6 ±20% tolerance band). On this AR-noise-
+  dominated synthetic fixture the methodological change is small;
+  on real time-series data with stronger serial dependence the
+  stationary variant's correctness advantage will be more
+  pronounced.
+* Gate 19-B1 extension: criteria 30-32 (L5b-A NEW) verify (i)
+  ``block_length_distribution`` no-default field via Option Y
+  signature inspection; (ii) AST audit on
+  ``_block_bootstrap_residual_se`` body confirms
+  ``_sample_stationary_block_lengths`` invocation; (iii) runtime
+  probe confirms every fold has ``block_length_distribution ==
+  "geometric"``.
+
+**AP-AUTH-54 envelope characterization (4 instances)**: KICK-4
+heaviest (helper refactor + field + AST audit) / KICK-5 medium
+(tuple-return helper + dual fields + probe) / KICK-6 lightest
+(dataclass discipline only) / **L5b-A heavy** (helper refactor +
+field + AST audit + runtime probe — comparable to KICK-4 reference
+weight; closes the envelope range with this 4th instance).
+
+AP-AUTH-54 cited as governing pattern (fourth instance; first
+original OOS hardening sub-phase post-kickoff). No new AP-AUTH
+codification at L5b-A.
+
 L5b-KICK-6 (tag ``l5b-kick-6-accept``, 2026-05-15) — inference labeling
 -----------------------------------------------------------------------
 Closes the ChatGPT 5.5 IMPORTANT #5 reviewer flag ("Separate Ridge
@@ -266,6 +337,24 @@ _VALID_BOOTSTRAP_FALLBACK_FLAGS: frozenset[str] = frozenset({
 })
 
 
+# L5b-A (tag ``l5b-a-accept``, 2026-05-15): block-length distribution
+# discriminator per ChatGPT 5.5 Dim-3 stationary block bootstrap
+# (Politis-Romano 1994) institutional default. Tri-state Literal
+# (binary plus reserved future variant) — ``"fixed"`` is the pre-L5b-A
+# legacy variant; ``"geometric"`` is the post-L5b-A institutional
+# default. Mirrors KICK-5 ``BootstrapFallbackFlag`` Literal precedent.
+# Per AP-AUTH-54 step #2, the dataclass field carrying this value has
+# no default — caller intent forced at construction time.
+BlockLengthDistribution = Literal[
+    "fixed",
+    "geometric",
+]
+_VALID_BLOCK_LENGTH_DISTRIBUTIONS: frozenset[str] = frozenset({
+    "fixed",
+    "geometric",
+})
+
+
 # L5b-KICK-6 (tag ``l5b-kick-6-accept``, 2026-05-15): Ridge inference
 # labeling taxonomy per ChatGPT 5.5 IMPORTANT #5 reviewer flag.
 # Mirrors KICK-5 ``BootstrapFallbackFlag`` Literal precedent. Per
@@ -303,9 +392,12 @@ class BootstrapDiagnostics:
     internal-implementation variant per AP-AUTH-54 codified at
     ``l5b-kick-5-accept``).
 
-    All six fields no-default per AP-AUTH-53 step #3. The
-    ``__post_init__`` validator enforces the tri-state ``fallback_flag``
-    taxonomy (mirrors KICK-3 ``BinDiagnosticStatus`` validator pattern).
+    All seven fields no-default per AP-AUTH-53 step #3 (six baseline
+    KICK-5 fields plus one L5b-A discriminator). The ``__post_init__``
+    validator enforces (a) the tri-state ``fallback_flag`` taxonomy
+    (KICK-5) and (b) the binary ``block_length_distribution`` taxonomy
+    (L5b-A). Both validators mirror the KICK-3 ``BinDiagnosticStatus``
+    validator pattern.
 
     Fields
     ------
@@ -316,13 +408,24 @@ class BootstrapDiagnostics:
         (= ``n_train // horizon_months``); semantically aligned with
         ``RidgeFitResult.n_eff_nonoverlap_train``.
     block_size
-        Block length actually used by this bootstrap call, AFTER any
-        fallback collapse. When ``fallback_flag == "bs1_degenerate"``
-        this is 1; otherwise it equals the requested block size.
+        **Polymorphic semantic per `block_length_distribution`
+        discriminator (L5b-A)**:
+          - When ``block_length_distribution == "fixed"`` (pre-L5b-A
+            legacy variant): exact block length actually used,
+            AFTER any fallback collapse.
+          - When ``block_length_distribution == "geometric"`` (L5b-A
+            post-refactor institutional default per Politis-Romano):
+            the geometric distribution MEAN parameter (``mean_block_length``
+            = ``1 / p``). The actual block lengths drawn per bootstrap
+            iteration are random with this expected value.
+        Under either variant, when ``fallback_flag == "bs1_degenerate"``
+        this collapses to 1.
     block_count
         Number of blocks available (``n_train // block_size``) AFTER
-        any fallback collapse. When ``fallback_flag == "bs1_degenerate"``
-        this is ``n_train`` (iid resampling).
+        any fallback collapse. Under the ``"geometric"`` variant this
+        is the EXPECTED block count under integer floor-division (the
+        actual count drawn per iteration is random). Under the
+        ``"bs1_degenerate"`` fallback this is ``n_train`` (iid).
     B_effective
         Actual bootstrap iterations executed. Equals the requested
         ``bootstrap_iterations`` when ``fallback_flag == "none"``;
@@ -337,6 +440,17 @@ class BootstrapDiagnostics:
           mitigation
         - ``"bs1_degenerate"``: block_count < 2; block_size collapsed
           to 1 (iid bootstrap)
+        Per ITEM 6 of L5b-A read-and-plan: the fallback trigger
+        condition uses integer floor-division ``n_train //
+        block_size``, which is invariant across the fixed ↔ geometric
+        variants. K5.4 test survives verbatim post-L5b-A.
+    block_length_distribution
+        Binary ``Literal`` (L5b-A NEW):
+        - ``"fixed"``: pre-L5b-A legacy variant (deterministic block
+          length = ``block_size``)
+        - ``"geometric"``: L5b-A post-refactor institutional default
+          (random block lengths drawn from Geometric(1/block_size) per
+          Politis-Romano 1994 stationary block bootstrap)
     """
 
     n_train: int
@@ -345,6 +459,7 @@ class BootstrapDiagnostics:
     block_count: int
     B_effective: int
     fallback_flag: BootstrapFallbackFlag
+    block_length_distribution: BlockLengthDistribution  # L5b-A no-default per AP-AUTH-54 step #2
 
     def __post_init__(self) -> None:
         # KICK-5 NEG test K5.5 contract: tri-state validation enforced
@@ -356,6 +471,16 @@ class BootstrapDiagnostics:
                 f"{sorted(_VALID_BOOTSTRAP_FALLBACK_FLAGS)} "
                 "(spec L5b-KICK-5 tri-state; AP-AUTH-53 step #3 + "
                 "AP-AUTH-54 internal-implementation variant)"
+            )
+        # L5b-A NEG test A.4 contract: binary tri-state validation
+        # enforced at construction time. Same validator pattern as
+        # fallback_flag above.
+        if self.block_length_distribution not in _VALID_BLOCK_LENGTH_DISTRIBUTIONS:
+            raise ValueError(
+                f"block_length_distribution={self.block_length_distribution!r} "
+                f"must be one of {sorted(_VALID_BLOCK_LENGTH_DISTRIBUTIONS)} "
+                "(spec L5b-A binary discriminator per Politis-Romano "
+                "1994 stationary block bootstrap; AP-AUTH-54 step #2)"
             )
 
 
@@ -651,6 +776,67 @@ def _compute_hac_bandwidth_sensitivity(
     return sensitivity
 
 
+def _sample_stationary_block_lengths(
+    n_obs: int,
+    mean_block_length: int,
+    rng: np.random.Generator,
+) -> np.ndarray:
+    """Politis-Romano (1994) geometric block-length sampler.
+
+    Returns an array of block lengths drawn from Geometric(p) with
+    ``p = 1 / mean_block_length`` (memoryless property). Continues
+    drawing until the cumulative block length reaches or exceeds
+    ``n_obs``, so the caller is guaranteed ``sum(returned_array) >=
+    n_obs``. The caller truncates the assembled block sequence to
+    exactly ``n_obs`` length.
+
+    Reference: Politis & Romano (1994) "The Stationary Bootstrap"
+    JASA 89:1303-1313. The geometric distribution is the standard
+    institutional choice for the block-length distribution; its
+    memoryless property ensures the resulting bootstrap sample is
+    asymptotically stationary regardless of where in the original
+    series the blocks are sampled.
+
+    L5b-A (tag ``l5b-a-accept``, 2026-05-15): first original OOS
+    hardening sub-phase post-kickoff sprint. Closes ChatGPT 5.5 Dim-3
+    OOS rigor mandate (stationary block bootstrap as institutional
+    default for serial-dependent residuals; eliminates manual block-
+    size tuning via random block lengths).
+
+    Parameters
+    ----------
+    n_obs
+        Total number of observations to cover (typically ``n_train``).
+        Block lengths are drawn until cumulative sum reaches or
+        exceeds this; caller truncates.
+    mean_block_length
+        Geometric distribution mean parameter; must be >= 1. Lower
+        bound 1 is the degenerate iid-resampling case (``p = 1.0``;
+        all blocks length 1).
+    rng
+        Pre-constructed ``np.random.Generator`` for determinism.
+
+    Returns
+    -------
+    np.ndarray
+        Length-variable array of block lengths (dtype int). The
+        invariant ``sum(returned) >= n_obs`` holds; the array length
+        equals the number of blocks drawn (typically close to
+        ``n_obs / mean_block_length`` in expectation).
+    """
+    p = 1.0 / max(int(mean_block_length), 1)
+    lengths: list[int] = []
+    cumulative = 0
+    # numpy ``rng.geometric(p)`` returns the trial number of the first
+    # success on the support {1, 2, 3, ...} with mean = 1/p. This
+    # matches the Politis-Romano geometric distribution convention.
+    while cumulative < n_obs:
+        L = int(rng.geometric(p))
+        lengths.append(L)
+        cumulative += L
+    return np.asarray(lengths, dtype=int)
+
+
 def _block_bootstrap_residual_se(
     X_train_z: np.ndarray,
     y_train: np.ndarray,
@@ -693,15 +879,32 @@ def _block_bootstrap_residual_se(
     populate ``BootstrapDiagnostics.n_eff``; pre-KICK-5 callers must
     update tuple unpacking.
 
+    L5b-A (tag ``l5b-a-accept``, 2026-05-15): bootstrap sampling
+    upgraded from fixed-block to **stationary block bootstrap (Politis-
+    Romano 1994)**. The ``block_size`` parameter is now interpreted as
+    the GEOMETRIC distribution MEAN parameter (was previously the exact
+    block length). Each bootstrap iteration draws random block lengths
+    from ``Geometric(1/block_size)`` via
+    ``_sample_stationary_block_lengths`` and assembles blocks with
+    cyclic wrapping. Closes ChatGPT 5.5 Dim-3 OOS rigor mandate:
+    stationary block bootstrap is the institutional default for serial-
+    dependent residuals because random block lengths converge to the
+    correct asymptotic distribution without manual block-size tuning.
+    The fallback-flag taxonomy is preserved (integer floor-division
+    arithmetic ``n_train // block_size`` invariant across fixed ↔
+    geometric variants per ITEM 6 analysis). Returned
+    ``BootstrapDiagnostics.block_length_distribution`` is
+    ``"geometric"`` post-refactor.
+
     Returns
     -------
     tuple[np.ndarray, BootstrapDiagnostics]
         ``(se_dist, diagnostics)`` where ``se_dist`` has shape
         ``(B_effective,)`` (``B_effective`` may be < B per R1
-        mitigation) and ``diagnostics`` records the fallback state.
-        Returns ``(empty_array, diagnostics_with_B_effective_0)`` when
-        ``n_test < 2`` (residual SE undefined; common at "1Y" horizon
-        with step=1).
+        mitigation) and ``diagnostics`` records the fallback state
+        plus the post-L5b-A ``block_length_distribution="geometric"``
+        discriminator. Returns ``(empty_array,
+        diagnostics_with_B_effective_0)`` when ``n_test < 2``.
     """
     n_train = len(y_train)
     bs = max(1, int(block_size))
@@ -739,18 +942,38 @@ def _block_bootstrap_residual_se(
             block_count=block_count,
             B_effective=0,
             fallback_flag=fallback_flag,
+            block_length_distribution="geometric",  # L5b-A: stationary default
         )
         return np.empty(0, dtype=float), diagnostics_empty
 
     residuals_train = y_train - forecast_train
     se_dist = np.empty(b_effective, dtype=float)
-    n_blocks_needed = (n_train + bs - 1) // bs
 
+    # L5b-A: stationary block bootstrap (Politis-Romano 1994). For each
+    # bootstrap iteration, draw random block lengths from
+    # Geometric(1/bs); for each block, draw a random start index
+    # uniformly on {0, ..., n_train-1}; assemble blocks with cyclic
+    # wrapping (residuals[(s + j) mod n_train]); truncate concatenated
+    # series to n_train. Replaces the pre-L5b-A fixed-block sampling
+    # at the same loop position.
     for b in range(b_effective):
-        block_starts = rng.integers(0, n_train - bs + 1, size=n_blocks_needed)
-        e_star = np.concatenate(
-            [residuals_train[s:s + bs] for s in block_starts]
-        )[:n_train]
+        block_lengths = _sample_stationary_block_lengths(n_train, bs, rng)
+        block_starts = rng.integers(0, n_train, size=len(block_lengths))
+        e_pieces: list[np.ndarray] = []
+        total = 0
+        for s, L in zip(block_starts, block_lengths):
+            take = min(int(L), n_train - total)
+            if take <= 0:
+                break
+            # Cyclic indexing per Politis-Romano: wrap around the
+            # original series boundary so the sample is asymptotically
+            # stationary regardless of starting index.
+            idx = (int(s) + np.arange(take)) % n_train
+            e_pieces.append(residuals_train[idx])
+            total += take
+            if total >= n_train:
+                break
+        e_star = np.concatenate(e_pieces)[:n_train]
         y_star = forecast_train + e_star
         beta_b, alpha_b = _fit_ridge_closed_form(X_train_z, y_star, lambda_star)
         forecast_test_b = X_test_z @ beta_b + alpha_b
@@ -763,6 +986,7 @@ def _block_bootstrap_residual_se(
         block_count=block_count,
         B_effective=b_effective,
         fallback_flag=fallback_flag,
+        block_length_distribution="geometric",  # L5b-A: stationary default
     )
     return se_dist, diagnostics
 
@@ -819,6 +1043,7 @@ def _compute_block_size_sensitivity(
                 block_count=bc_local,
                 B_effective=0,
                 fallback_flag="none",
+                block_length_distribution="geometric",  # L5b-A: stationary default
             )
         return se_out, diag_out
 

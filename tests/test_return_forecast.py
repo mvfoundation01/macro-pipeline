@@ -75,6 +75,23 @@ envelope; dataclass discipline only, no helper refactor).
 
 NEG-flavor accounting: KICK-6 has 2 strict NEG + 1 POS-inv + 1 NEG-inv =
 4 of 5 = 80% NEG-flavor at the sub-phase level (floor met).
+
+L5b-A (tag ``l5b-a-accept``, 2026-05-15) appended five tests
+(A.1-A.5) closing the ChatGPT 5.5 Dim-3 OOS rigor mandate plus build
+plan §3.1 L5b-A scope (stationary block bootstrap per Politis-Romano
+1994) via the AP-AUTH-54 fourth-instance internal-implementation
+variant (heavy envelope: helper refactor plus field expansion plus
+AST audit plus runtime probe). FIRST original OOS hardening sub-phase
+post-kickoff-sprint.
+
+  A.1  POS         test_l5b_a_stationary_block_length_sampler_geometric_distribution
+  A.2  POS-inv     test_l5b_a_stationary_se_within_20pct_of_fixed_block_on_5Y_AR1_fixture
+  A.3  POS         test_l5b_a_bootstrap_diagnostics_block_length_distribution_is_geometric
+  A.4  NEG         test_l5b_a_bootstrap_diagnostics_rejects_invalid_block_length_distribution
+  A.5  NEG         test_l5b_a_bootstrap_diagnostics_rejects_missing_block_length_distribution
+
+NEG-flavor accounting: L5b-A has 2 strict NEG + 1 POS-inv = 3 of 5 =
+60% NEG-flavor at the sub-phase level (floor met).
 """
 from __future__ import annotations
 
@@ -819,6 +836,7 @@ def test_kick5_dataclass_rejects_invalid_fallback_flag():
             block_count=10,
             B_effective=1000,
             fallback_flag="bogus",  # invalid tri-state
+            block_length_distribution="geometric",  # L5b-A fixup: valid value so fallback_flag is the rejected field
         )
 
 
@@ -828,7 +846,9 @@ def test_kick5_dataclass_rejects_invalid_fallback_flag():
 def test_kick5_dataclass_rejects_missing_no_default_field():
     """KICK-5: bare ``BootstrapDiagnostics(...)`` without any 1 of the
     6 no-default fields raises ``TypeError``. AP-AUTH-53 step #3 +
-    AP-AUTH-54 step #2 contract."""
+    AP-AUTH-54 step #2 contract. L5b-A fixup: add `block_length_distribution`
+    so each sub-test precisely tests only the field claimed in its
+    `# omitted` comment (post-L5b-A field count is 7)."""
     # Missing fallback_flag (test the most-likely-omitted one).
     with pytest.raises(TypeError, match=r"fallback_flag"):
         BootstrapDiagnostics(
@@ -837,6 +857,7 @@ def test_kick5_dataclass_rejects_missing_no_default_field():
             block_size=12,
             block_count=10,
             B_effective=1000,
+            block_length_distribution="geometric",  # L5b-A fixup
             # fallback_flag omitted — must raise
         )
     # Missing B_effective.
@@ -847,6 +868,7 @@ def test_kick5_dataclass_rejects_missing_no_default_field():
             block_size=12,
             block_count=10,
             fallback_flag="none",
+            block_length_distribution="geometric",  # L5b-A fixup
             # B_effective omitted — must raise
         )
     # Missing n_train.
@@ -857,6 +879,7 @@ def test_kick5_dataclass_rejects_missing_no_default_field():
             block_count=10,
             B_effective=1000,
             fallback_flag="none",
+            block_length_distribution="geometric",  # L5b-A fixup
             # n_train omitted — must raise
         )
 
@@ -940,6 +963,7 @@ def test_kick6_dataclass_rejects_invalid_inference_label():
     valid_diag = BootstrapDiagnostics(
         n_train=120, n_eff=10, block_size=12, block_count=10,
         B_effective=1000, fallback_flag="none",
+        block_length_distribution="geometric",  # L5b-A fixup: post-refactor 7-field constructor
     )
     with pytest.raises(ValueError, match=r"inference_label="):
         RidgeFitResult(
@@ -1065,3 +1089,157 @@ def test_kick6_existing_p_value_beta_hac_semantic_is_forecast_vs_realized():
         "univariate calibration regression p-value (forecast-vs-"
         "realized), NOT Ridge per-feature inference."
     )
+
+
+# ===========================================================================
+# L5b-A tests A.1-A.5 — stationary block bootstrap (Politis-Romano 1994).
+# Closes ChatGPT 5.5 Dim-3 OOS rigor mandate + build plan §3.1 L5b-A
+# scope via the AP-AUTH-54 fourth-instance internal-implementation
+# variant (heavy envelope). NEG-flavor 3 of 5 = 60% at sub-phase level.
+# ===========================================================================
+
+
+# ---------------------------------------------------------------------------
+# Test A.1 — POS (L5b-A)
+# ---------------------------------------------------------------------------
+def test_l5b_a_stationary_block_length_sampler_geometric_distribution():
+    """L5b-A: ``_sample_stationary_block_lengths`` produces block lengths
+    drawn from Geometric(1/mean_block_length) per Politis-Romano (1994).
+    Empirical mean over 10,000 draws should be within 10% of the
+    specified mean parameter; variance must be strictly positive
+    (NOT constant block lengths)."""
+    from macro_pipeline.models.return_forecast import (
+        _sample_stationary_block_lengths,
+    )
+    rng = np.random.default_rng(42)
+    mean_param = 30
+    # Draw enough block lengths to exceed n_obs many times for a stable
+    # empirical-mean estimate. Each call returns variable-length array,
+    # so accumulate across many calls.
+    all_lengths: list[int] = []
+    while len(all_lengths) < 10_000:
+        lengths = _sample_stationary_block_lengths(
+            n_obs=mean_param * 10,  # ample coverage
+            mean_block_length=mean_param,
+            rng=rng,
+        )
+        all_lengths.extend(lengths.tolist())
+    sample = np.asarray(all_lengths[:10_000], dtype=float)
+    empirical_mean = float(np.mean(sample))
+    empirical_var = float(np.var(sample))
+    # 10% tolerance on geometric mean = 1/p = mean_param.
+    assert 0.9 * mean_param <= empirical_mean <= 1.1 * mean_param, (
+        f"empirical mean {empirical_mean} not within 10% of "
+        f"target {mean_param} (Geometric(1/{mean_param}) expectation)"
+    )
+    # Variance > 0 proves the lengths are NOT constant.
+    assert empirical_var > 0, (
+        f"empirical variance {empirical_var} must be > 0 (geometric "
+        "distribution has non-zero variance; constant block lengths "
+        "would indicate the sampler is degenerate)"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Test A.2 — POS-invariant (L5b-A)
+# ---------------------------------------------------------------------------
+def test_l5b_a_stationary_se_within_20pct_of_fixed_block_on_5Y_AR1_fixture():
+    """L5b-A POS-invariant: post-refactor stationary SE values on the
+    5Y/expanding synthetic fixture should be within ±20% of the pre-
+    refactor fixed-block baseline (captured at ITEM 2 read-and-plan).
+
+    Pre-refactor baseline (fold 0..4 SE means, B=50, seed=42):
+        [0.129, 0.099, 0.193, 0.154, 0.237]
+
+    Strategic §6 tolerance: ±20%. Empirical post-refactor result on
+    this AR-noise-dominated synthetic fixture is within ~1% (well
+    inside the tolerance band)."""
+    schedule, crps, cdrs, macro, fwd = _build_synthetic_inputs(horizon="5Y")
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        results = fit_return_forecast_task_b1(
+            schedule, crps, cdrs, macro, fwd, bootstrap_iterations=50,
+        )
+    # Match the ITEM 2 baseline fixture exactly (n=480, seed=42, B=50).
+    pre_refactor_baseline = [0.129, 0.099, 0.193, 0.154, 0.237]
+    assert len(results) >= len(pre_refactor_baseline), (
+        f"fixture produced only {len(results)} folds; ITEM 2 baseline "
+        f"covers {len(pre_refactor_baseline)} folds"
+    )
+    for i, baseline in enumerate(pre_refactor_baseline):
+        se_dist = results[i].bootstrap_residual_se_distribution
+        assert se_dist.size > 0, f"fold {i}: empty SE distribution"
+        post_se = float(np.mean(se_dist))
+        ratio = post_se / baseline
+        assert 0.8 <= ratio <= 1.2, (
+            f"fold {i}: post-refactor SE mean {post_se} vs. pre-refactor "
+            f"baseline {baseline} ratio={ratio:.4f} outside [0.8, 1.2] "
+            "tolerance per Strategic §6 ±20% R1 SE-drift envelope"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Test A.3 — POS (L5b-A)
+# ---------------------------------------------------------------------------
+def test_l5b_a_bootstrap_diagnostics_block_length_distribution_is_geometric():
+    """L5b-A: every fold's ``bootstrap_diagnostics.block_length_distribution``
+    equals ``"geometric"`` (post-refactor institutional default per
+    Politis-Romano 1994). Same applies to every sensitivity-sweep
+    entry in ``block_size_sensitivity_diagnostics``."""
+    schedule, crps, cdrs, macro, fwd = _build_synthetic_inputs(horizon="5Y")
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        results = fit_return_forecast_task_b1(
+            schedule, crps, cdrs, macro, fwd, bootstrap_iterations=10,
+        )
+    assert len(results) > 0
+    for r in results:
+        assert r.bootstrap_diagnostics.block_length_distribution == "geometric", (
+            f"primary bootstrap_diagnostics.block_length_distribution = "
+            f"{r.bootstrap_diagnostics.block_length_distribution!r}; "
+            "expected 'geometric' post-L5b-A"
+        )
+        for label, diag in r.block_size_sensitivity_diagnostics.items():
+            assert diag.block_length_distribution == "geometric", (
+                f"sensitivity diagnostics[{label!r}].block_length_distribution "
+                f"= {diag.block_length_distribution!r}; expected 'geometric'"
+            )
+
+
+# ---------------------------------------------------------------------------
+# Test A.4 — NEG (L5b-A)
+# ---------------------------------------------------------------------------
+def test_l5b_a_bootstrap_diagnostics_rejects_invalid_block_length_distribution():
+    """L5b-A: ``BootstrapDiagnostics(..., block_length_distribution="bogus")``
+    raises ``ValueError`` from ``__post_init__``. Mirrors KICK-5
+    ``fallback_flag`` validator precedent; binary tri-state contract
+    enforced at construction time."""
+    with pytest.raises(ValueError, match=r"block_length_distribution="):
+        BootstrapDiagnostics(
+            n_train=120,
+            n_eff=10,
+            block_size=12,
+            block_count=10,
+            B_effective=1000,
+            fallback_flag="none",
+            block_length_distribution="bogus",  # invalid binary state
+        )
+
+
+# ---------------------------------------------------------------------------
+# Test A.5 — NEG (L5b-A)
+# ---------------------------------------------------------------------------
+def test_l5b_a_bootstrap_diagnostics_rejects_missing_block_length_distribution():
+    """L5b-A: bare ``BootstrapDiagnostics(...)`` without
+    ``block_length_distribution=`` raises ``TypeError`` — proves the
+    no-default contract per AP-AUTH-54 step #2."""
+    with pytest.raises(TypeError, match=r"block_length_distribution"):
+        BootstrapDiagnostics(
+            n_train=120,
+            n_eff=10,
+            block_size=12,
+            block_count=10,
+            B_effective=1000,
+            fallback_flag="none",
+            # block_length_distribution deliberately omitted — must raise
+        )

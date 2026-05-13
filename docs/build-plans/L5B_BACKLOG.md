@@ -245,7 +245,38 @@ Confirmed via L5b-KICK-4 (inner-CV z-scaler purity; private helper `_select_lamb
 
 ### Next phase
 
-L5b sprint advances to original OOS hardening scope: L5b-A (block bootstrap robustness) through L5b-E (retrospective). All seven reviewer-driven kickoff sub-phases COMPLETE; institutional discipline patterns AP-AUTH-53 (public wrapper) + AP-AUTH-54 (internal-implementation variant) codified and available for reuse. AP-AUTH-55 (documentation-primary variant) deferred pending pattern repetition at L6+.
+L5b sprint advances to original OOS hardening scope: L5b-A (block bootstrap robustness) through L5b-E (retrospective). All seven reviewer-driven kickoff sub-phases COMPLETE; institutional discipline patterns AP-AUTH-53 (public wrapper) + AP-AUTH-54 (internal-implementation variant) codified and available for reuse. AP-AUTH-55 (documentation-primary variant) deferred pending pattern repetition at L6+. **L5b-A confirmed (first original OOS hardening sub-phase post-kickoff; AP-AUTH-54 fourth instance; heavy envelope) at `l5b-a-accept`** — see entry below.
+
+---
+
+## L5b ORIGINAL OOS HARDENING SCOPE — entries below
+
+---
+
+### L5b-A — Stationary block bootstrap (Politis-Romano 1994) (2026-05-15)
+
+**ACCEPT tag**: `l5b-a-accept`
+**Authority**: ChatGPT 5.5 Dim-3 OOS rigor — "Block bootstrap primary sizing is viable under the coded underpowered guard. However the current fixed-block scheme is sensitive to block-size choice; stationary block bootstrap (Politis-Romano 1994) is the standard institutional default for serial-dependent residuals because the random block lengths converge to the correct asymptotic distribution without manual block-size tuning." Plus build plan §3.1 L5b-A literal scope: "Replace fixed block bootstrap in L5-B1 with stationary block bootstrap. Add geometric-block-length sampler. Preserve fallback semantics per KICK-5 BootstrapDiagnostics surface."
+**Approach**: A (Strategic-approved 2026-05-15; AP-AUTH-54 fourth-instance internal-implementation variant; heavy envelope) — in-place refactor of private `_block_bootstrap_residual_se` body from fixed-block to stationary sampling per Politis-Romano (1994); add new private helper `_sample_stationary_block_lengths` for the geometric block-length sampler; expand `BootstrapDiagnostics` with seventh no-default field `block_length_distribution`. NOT a wrapper-pattern because the helper is private (`_` prefix). FIRST original OOS hardening sub-phase post-kickoff sprint.
+**Option**: Y (Strategic-approved 2026-05-15) — Gate 19-B1 extension via signature inspection plus AST audit plus runtime probe. Three new criteria (thirty / thirty-one / thirty-two).
+**1-field envelope revision** (Strategic disposition three APPROVED supersedes §3.4 2-field proposal): expand `BootstrapDiagnostics` with ONE new no-default field `block_length_distribution: Literal["fixed", "geometric"]`. Existing `block_size` field acquires polymorphic semantic per the discriminator — for `"fixed"` it is the exact block length; for `"geometric"` it is the geometric distribution mean parameter. Mirrors KICK-6 lightest-weight envelope precedent (1-field expansion). Documented in `BootstrapDiagnostics` class docstring.
+**AP-AUTH-54 envelope characterization** (post-L5b-A; four-instance range):
+- KICK-4 heaviest: helper refactor (z-scaler purity) + field + AST audit
+- KICK-5 medium: tuple-return helper + dual fields + runtime probe
+- KICK-6 lightest-weight: dataclass discipline only (no helper change)
+- L5b-A **heavy** (comparable to KICK-4 reference): helper refactor (stationary sampling) + field + AST audit + runtime probe + pre/post empirical snapshot
+**Algorithm**: Politis-Romano (1994) stationary block bootstrap. At each bootstrap iteration: draw block lengths from `Geometric(1 / mean_block_length)` via `_sample_stationary_block_lengths`; draw uniform start indices on `{0, ..., n_train minus one}`; assemble blocks with cyclic wrapping (`residuals[(s + j) % n_train]`); truncate concatenated series to `n_train`. The geometric distribution's memoryless property ensures asymptotic stationarity regardless of starting index.
+**Sxx-20 triage**: NOT triggered. Zero production scoring callers of `fit_return_forecast_task_b1` exist; only consumers are thirty-five-test L5-B1 suite plus Gate 19-B1 validator. **Eighth consecutive prospective-only Sxx triage** (Sxx-13 through Sxx-20 spanning KICK-1 through L5b-A). Prospective-only marker per AP-AUTH-46 gratuitous-Sxx guard.
+**Fallback-flag taxonomy preservation** (ITEM 6 of read-and-plan; Strategic disposition five CONFIRMED): integer floor-division `n_train // block_size` arithmetic is INVARIANT across fixed ↔ geometric variants. The fallback DECISION (`"none"` / `"B_halved"` / `"bs1_degenerate"`) depends only on `(n_train, block_size)` numerical values, not on the sampling METHOD. K5.4 sensitivity-sweep "2h" fallback "B_halved" test survives verbatim post-L5b-A; no test recalibration needed.
+**R1 SE-drift empirical snapshot** (ITEM 2 read-and-plan + Phase 6 post-refactor re-snapshot):
+- Pre-refactor (fixed-block) 5Y/expanding fold zero through four SE means: zero-point-one-two-nine, zero-point-zero-nine-nine, zero-point-one-nine-three, zero-point-one-five-four, zero-point-two-three-seven
+- Post-refactor (stationary) same fixture: zero-point-one-two-eight, zero-point-zero-nine-eight, zero-point-one-nine-four, zero-point-one-five-four, zero-point-two-three-six
+- Pairwise ratio (post divided by pre): within one percent across all five folds (well inside Strategic §6 plus-or-minus twenty percent tolerance band)
+- Interpretation: on AR-noise-dominated synthetic fixture the methodological change is small (residuals close to iid); on real time-series data with stronger serial dependence the stationary variant's correctness advantage will be more pronounced
+**Test delta**: plus five new tests (A.1 through A.5; one POS plus one POS-inv plus two strict NEG = three of five equals sixty percent NEG-flavor; floor met). Plus cosmetic fixups to K5.5 + K5.6 + K6.3 bare `BootstrapDiagnostics` constructors (post-L5b-A field count is seven; add `block_length_distribution="geometric"`). Baseline seven-hundred-fifty-three to seven-hundred-fifty-eight.
+**Caller updates**: zero in production tree (no production caller of `fit_return_forecast_task_b1` exists; Sxx-20 prospective-only).
+**AP-AUTH delta**: zero (AP-AUTH-54 cited as governing pattern; fourth internal-implementation instance; no new codification — pattern already codified at KICK-5 ACCEPT).
+**Sxx delta**: zero.
 
 ---
 

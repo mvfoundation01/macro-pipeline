@@ -3731,9 +3731,12 @@ def validate_gate19_l5b_task_b1_subcriteria() -> GateReport:
             )
 
         # Criterion 26 - BootstrapDiagnostics dataclass surface check.
+        # KICK-5 baseline 6 fields plus L5b-A block_length_distribution
+        # = 7 fields total (AP-AUTH-54 4th instance; heavy envelope).
         bd_expected_fields = {
             "n_train", "n_eff", "block_size", "block_count",
             "B_effective", "fallback_flag",
+            "block_length_distribution",            # L5b-A no-default
         }
         bd_actual_fields = set(BootstrapDiagnostics.__dataclass_fields__.keys())
         bd_missing = bd_expected_fields - bd_actual_fields
@@ -3741,21 +3744,22 @@ def validate_gate19_l5b_task_b1_subcriteria() -> GateReport:
         summary["criterion_26_bootstrap_diagnostics_fields"] = sorted(bd_actual_fields)
         if bd_missing:
             findings.append(
-                f"FAIL: Criterion 26 [KICK-5] - BootstrapDiagnostics "
+                f"FAIL: Criterion 26 [KICK-5 + L5b-A] - BootstrapDiagnostics "
                 f"missing fields {sorted(bd_missing)}"
             )
         elif bd_extra:
             findings.append(
-                f"FAIL: Criterion 26 [KICK-5] - BootstrapDiagnostics "
+                f"FAIL: Criterion 26 [KICK-5 + L5b-A] - BootstrapDiagnostics "
                 f"has unexpected extra fields {sorted(bd_extra)}"
             )
         else:
             findings.append(
-                f"Criterion 26 PASS [KICK-5]: BootstrapDiagnostics "
+                f"Criterion 26 PASS [KICK-5 + L5b-A]: BootstrapDiagnostics "
                 f"populates all {len(bd_actual_fields)} fields "
-                "(n_train, n_eff, block_size, block_count, "
-                "B_effective, fallback_flag) per ChatGPT 5.5 "
-                "IMPORTANT #6 reviewer specification"
+                "(n_train, n_eff, block_size, block_count, B_effective, "
+                "fallback_flag, block_length_distribution) per ChatGPT "
+                "5.5 IMPORTANT #6 reviewer specification + L5b-A "
+                "stationary-block discriminator"
             )
 
         # Criterion 27 - runtime probe: synthesize a Ridge fit;
@@ -3941,6 +3945,144 @@ def validate_gate19_l5b_task_b1_subcriteria() -> GateReport:
         except Exception as exc:
             findings.append(
                 f"FAIL: Criterion 29 [KICK-6] - runtime probe error: {exc}"
+            )
+
+        # ===================================================================
+        # L5b-A Criteria 30-32 — stationary block bootstrap (Politis-
+        # Romano 1994) per AP-AUTH-54 fourth instance / heavy envelope.
+        # Closes ChatGPT 5.5 Dim-3 OOS rigor mandate + build plan §3.1
+        # L5b-A scope (stationary block bootstrap institutional default
+        # for serial-dependent residuals).
+        # ===================================================================
+        # Criterion 30 - block_length_distribution field no-default.
+        l5b_a_field = "block_length_distribution"
+        l5b_a_present = l5b_a_field in BootstrapDiagnostics.__dataclass_fields__
+        l5b_a_no_default = (
+            l5b_a_present
+            and BootstrapDiagnostics.__dataclass_fields__[l5b_a_field].default
+            is _MISSING
+            and BootstrapDiagnostics.__dataclass_fields__[l5b_a_field].default_factory
+            is _MISSING
+        )
+        summary["criterion_30_l5b_a_field_no_default"] = l5b_a_no_default
+        if not l5b_a_present:
+            findings.append(
+                f"FAIL: Criterion 30 [L5b-A] - BootstrapDiagnostics "
+                f"missing field {l5b_a_field!r}"
+            )
+        elif not l5b_a_no_default:
+            findings.append(
+                f"FAIL: Criterion 30 [L5b-A] - {l5b_a_field!r} has "
+                "default (must be no-default per AP-AUTH-54 step #2; "
+                "Politis-Romano stationary bootstrap discriminator)"
+            )
+        else:
+            findings.append(
+                f"Criterion 30 PASS [L5b-A]: BootstrapDiagnostics "
+                f"exposes {l5b_a_field!r} field with no default (Option Y "
+                "signature inspection per AP-AUTH-54 4th instance; heavy "
+                "envelope after KICK-4 reference; closes ChatGPT 5.5 "
+                "Dim-3 OOS rigor stationary block bootstrap mandate)"
+            )
+
+        # Criterion 31 - AST audit on _block_bootstrap_residual_se body
+        # confirms stationary sampler invocation (substring
+        # _sample_stationary_block_lengths present in helper source).
+        helper_src_l5b_a = inspect.getsource(
+            _rf_mod._block_bootstrap_residual_se,
+        )
+        ast_stationary_present = (
+            "_sample_stationary_block_lengths" in helper_src_l5b_a
+        )
+        summary["criterion_31_ast_stationary_sampler_present"] = (
+            ast_stationary_present
+        )
+        if ast_stationary_present:
+            findings.append(
+                "Criterion 31 PASS [L5b-A]: AST audit confirms "
+                "_block_bootstrap_residual_se body invokes "
+                "_sample_stationary_block_lengths (Politis-Romano "
+                "1994 stationary block bootstrap; fixed-block legacy "
+                "path replaced; closes ChatGPT 5.5 Dim-3 mandate at "
+                "gate time)"
+            )
+        else:
+            findings.append(
+                "FAIL: Criterion 31 [L5b-A] - "
+                "_block_bootstrap_residual_se body missing "
+                "_sample_stationary_block_lengths invocation; expected "
+                "substring not found (refactor incomplete)"
+            )
+
+        # Criterion 32 - runtime probe: synthesize a Ridge fit; verify
+        # every fold's bootstrap_diagnostics.block_length_distribution
+        # equals "geometric" (post-L5b-A institutional default).
+        try:
+            import warnings as _warnings_mod_l5b_a
+            import numpy as _np_l5b_a
+            import pandas as _pd_l5b_a
+            from macro_pipeline.analysis.walk_forward_cv import (
+                generate_schedule as _generate_schedule_l5b_a,
+            )
+
+            _rng_l5b_a = _np_l5b_a.random.default_rng(42)
+            _n_l5b_a = 480
+            _idx_l5b_a = _pd_l5b_a.date_range(
+                "1985-01-01", periods=_n_l5b_a, freq="MS",
+            )
+            _crps_l5b_a = _pd_l5b_a.DataFrame(
+                {"crps_cal": _rng_l5b_a.uniform(0.05, 0.95, _n_l5b_a)},
+                index=_idx_l5b_a,
+            )
+            _cdrs_cols_l5b_a = {
+                f"cdrs_h{h}_t{t}": _rng_l5b_a.uniform(0.05, 0.95, _n_l5b_a)
+                for h in ("1Y", "3Y", "5Y", "10Y")
+                for t in (10, 20, 35, 50, 65)
+            }
+            _cdrs_l5b_a = _pd_l5b_a.DataFrame(_cdrs_cols_l5b_a, index=_idx_l5b_a)
+            _macro_l5b_a = _pd_l5b_a.DataFrame(
+                {"pe_cape": _rng_l5b_a.normal(20.0, 5.0, _n_l5b_a)},
+                index=_idx_l5b_a,
+            )
+            _fwd_l5b_a = _pd_l5b_a.Series(
+                _rng_l5b_a.normal(0.07, 0.15, _n_l5b_a), index=_idx_l5b_a,
+            )
+            _sched_l5b_a = _generate_schedule_l5b_a(
+                horizon="5Y", schedule_type="expanding",
+                panel_index=_idx_l5b_a,
+            )
+            with _warnings_mod_l5b_a.catch_warnings():
+                _warnings_mod_l5b_a.simplefilter("ignore")
+                _probe_l5b_a = fit_return_forecast_task_b1(
+                    _sched_l5b_a, _crps_l5b_a, _cdrs_l5b_a,
+                    _macro_l5b_a, _fwd_l5b_a, bootstrap_iterations=5,
+                )
+            assert len(_probe_l5b_a) > 0, "probe yielded zero folds"
+            _bld_labels = {
+                r.bootstrap_diagnostics.block_length_distribution
+                for r in _probe_l5b_a
+            }
+            summary["criterion_32_block_length_distribution_set"] = sorted(
+                _bld_labels
+            )
+            if _bld_labels == {"geometric"}:
+                findings.append(
+                    "Criterion 32 PASS [L5b-A]: runtime probe confirms "
+                    "every fold has block_length_distribution="
+                    "'geometric' (post-L5b-A institutional default per "
+                    "Politis-Romano 1994; closes ChatGPT 5.5 Dim-3 "
+                    "stationary block bootstrap mandate at validator "
+                    "time)"
+                )
+            else:
+                findings.append(
+                    f"FAIL: Criterion 32 [L5b-A] - runtime probe "
+                    f"block_length_distribution set = "
+                    f"{sorted(_bld_labels)}, expected {{'geometric'}} only"
+                )
+        except Exception as exc:
+            findings.append(
+                f"FAIL: Criterion 32 [L5b-A] - runtime probe error: {exc}"
             )
     except ImportError as exc:
         findings.append(f"FAIL: Criterion 8 - import error: {exc}")
