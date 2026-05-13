@@ -3637,7 +3637,7 @@ def validate_gate21_isotonic_calibration() -> GateReport:
         "pytest tests #3, #4, #5"
     )
     warnings.append(
-        "Criterion 5 (calibrate_raw_score returns ∈ [0, 1]) asserted via pytest test #6"
+        "Criterion 5 (calibrate_raw_score returns in [0, 1]) asserted via pytest test #6"
     )
     warnings.append(
         "Criterion 6 (bootstrap seeded reproducibly) asserted via pytest test #9"
