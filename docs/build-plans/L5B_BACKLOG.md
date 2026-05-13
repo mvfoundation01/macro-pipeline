@@ -51,7 +51,7 @@ When external reviewers (Codex / ChatGPT) flag a CRITICAL or IMPORTANT issue in 
 6. **Pre-flight Sxx-N (catastrophic state) triage** via grep evidence; defer entry to L5B_BACKLOG.md if production callers do not yet exist.
 7. **Module docstring + L5B_BACKLOG.md SPRINT EXECUTION LOG** documents v1 → v2 architectural drift.
 
-Confirmed via L5b-KICK-1 (isotonic `fit_window` invariant) + L5b-KICK-2 (forecast σ v2 production wrapper). Anticipated to apply at KICK-3 through KICK-7. **KICK-3 confirmed (third instance) at `l5b-kick-3-accept`** — see entry below. **KICK-4 confirmed (fourth instance, internal-implementation variant) at `l5b-kick-4-accept`** — see entry below. **KICK-5 confirmed (fifth instance, second internal-implementation variant) at `l5b-kick-5-accept`** — AP-AUTH-54 codified at this commit (see entry below). **KICK-6 confirmed (sixth instance, third internal-implementation variant; lightest-weight envelope) at `l5b-kick-6-accept`** — see entry below.
+Confirmed via L5b-KICK-1 (isotonic `fit_window` invariant) + L5b-KICK-2 (forecast σ v2 production wrapper). Anticipated to apply at KICK-3 through KICK-7. **KICK-3 confirmed (third instance) at `l5b-kick-3-accept`** — see entry below. **KICK-4 confirmed (fourth instance, internal-implementation variant) at `l5b-kick-4-accept`** — see entry below. **KICK-5 confirmed (fifth instance, second internal-implementation variant) at `l5b-kick-5-accept`** — AP-AUTH-54 codified at this commit (see entry below). **KICK-6 confirmed (sixth instance, third internal-implementation variant; lightest-weight envelope) at `l5b-kick-6-accept`** — see entry below. **KICK-7 confirmed (seventh and FINAL instance; documentation-primary variant) at `l5b-kick-7-accept`** — AP-AUTH-55 codification DEFERRED per AP-AUTH-46 gratuitous-codification guard (first documentation-primary instance only; revisit if pattern repeats at L6+); see entry below + L5b KICKOFF SPRINT COMPLETE summary at the end of this section.
 
 ---
 
@@ -158,6 +158,94 @@ Confirmed via L5b-KICK-4 (inner-CV z-scaler purity; private helper `_select_lamb
 **Effort variance**: smallest L5b sub-phase to date (1.0-1.5h actual estimated; one new field plus docstring rewrite plus five tests plus two-criterion gate extension).
 **AP-AUTH delta**: zero (AP-AUTH-53 plus AP-AUTH-54 cited as governing patterns; third internal-implementation variant; lightest-weight envelope variance documented inline; no new codification needed per Strategic disposition seven).
 **Sxx delta**: zero.
+
+---
+
+### KICK-7 — DMS source memo (2026-05-15)
+
+**ACCEPT tag**: `l5b-kick-7-accept`
+**Reviewer authority**: dual-reviewer convergence — Codex 5.5 (NICE-TO-HAVE upgraded to IMPORTANT by Strategic synthesis) + ChatGPT 5.5 IMPORTANT — "Add DMS source memo. Document current DMS/UBS edition, table, US-vs-global premium gap, and transformation into basis-point adjustments. Public pages support DMS scope, not the exact minus-one-twenty-five / minus-one-seventy-five basis-point values." Both reviewers explicitly framed this as source-anchoring transparency, NOT value correction.
+**Approach**: B (Strategic-approved 2026-05-15; documentation-primary variant of AP-AUTH-53; FIRST documentation-primary instance) — author `DMS_SOURCE_MEMO.md` at worktree root with seven required sections; update L5-F module docstring with memo reference; extend Gate 25.1 sub-criterion body with additive Criterion 25.1.7 (file-presence plus section-header check). NO code-behavior change; NO algorithm change; Q6-lock values preserved verbatim.
+**ITEM 0 honest-memo framing (Strategic disposition one CONFIRMED)**: UBS Global Investment Returns Yearbook full edition is a paid publication; specific table-line citations cannot be source-checked publicly. The memo §4 explicitly acknowledges that the spec-locked basis-point values are institutional judgment within the empirically-supported DMS range (one-hundred to two-hundred basis-point survivorship gap per public DMS-derived summaries), NOT fabricated table-derived precision. This framing is exactly what ChatGPT 5.5 IMPORTANT asks for — transparency, not value correction. The honest-memo path closes both reviewer concerns at face value.
+**Sxx-19 triage**: NOT triggered. Honest-memo path explicitly avoids false-precision catastrophic state by acknowledging institutional-judgment component within empirically-supported range. Zero production callers of `apply_dms_adjustment` exist (consistent shape with Sxx-13 through Sxx-18 prospective-only outcomes — six consecutive prospective-only Sxx triages across all KICK sub-phases).
+**Gate 25 composite SEAL preservation (Strategic disposition four CONFIRMED)**: composite seal at L5-G is structural (no new sub-criteria added after 25.2 closed at L5-G; 25.1 internal sub-criteria remain extensible). Criterion 25.1.7 is additive within the 25.1 (DMS) sub-criterion body; the composite seal logic at the validator boundary remains untouched. Validator name still includes "SEALED" suffix verbatim.
+**Memo content (seven required sections per Strategic §3.2)**:
+1. Source Identification (DMS 2002 book; Credit Suisse GIRY 2015-2022; UBS GIRY 2023+)
+2. Empirical Foundation (US plus world-ex-US annualised real premia)
+3. US-vs-Global Premium Gap (one-hundred to two-hundred basis-point empirical range)
+4. DMS Adjustment Derivation (five-year and ten-year midpoint reasoning plus honest disclaimer)
+5. Sensitivity Band Justification (plus-or-minus fifty basis-point one-sigma anchor)
+6. Refresh Protocol (annual UBS Yearbook release cycle; material-shift threshold)
+7. Strategic Interpretation (US-only prior vs global robustness check; L5-G framework integration)
+**Test delta**: plus three new tests (K7.1 through K7.3; one POS plus one POS-inv plus one strict NEG; NEG-flavor two of three equals sixty-seven percent at sub-phase level — floor met). K7.3 uses pytest `monkeypatch` on `pathlib.Path.is_file` and `pathlib.Path.exists` to simulate missing memo without relocating real file. Baseline seven-hundred-fifty to seven-hundred-fifty-three.
+**Caller updates**: zero in production tree (no production caller of `apply_dms_adjustment` exists; Sxx-19 prospective-only).
+**AP-AUTH-55 codification analysis** (Strategic disposition five APPROVED — DEFER): KICK-7 is the FIRST documentation-primary variant of AP-AUTH-53. Per AP-AUTH-46 gratuitous-codification guard, pattern repetition needed before codification. Strategic does not currently anticipate further documentation-primary kickoff items in L5b A-E (all code-implementation). If L6/L7/L8 phases surface documentation-primary needs, revisit codification. **AP-AUTH-55 DEFERRED at KICK-7 ACCEPT.**
+**Effort variance**: smallest sub-phase by code LOC delta to date (memo content dominates; 1.0-1.5h actual estimated).
+**AP-AUTH delta**: zero (AP-AUTH-53 cited as governing pattern; documentation-primary variant documented inline; AP-AUTH-55 codification deferred).
+**Sxx delta**: zero (Sxx-19 closed at pre-flight via ITEM 0 honest-memo framing).
+
+---
+
+## L5b KICKOFF SPRINT COMPLETE — Cumulative summary (2026-05-15)
+
+**Status**: 7/7 reviewer-driven kickoff sub-phases COMPLETE. Sprint advances to original L5b OOS hardening scope (L5b-A through L5b-E).
+
+### ACCEPT tag inventory
+
+| # | Sub-phase | Tag | Closes reviewer concern |
+|---|---|---|---|
+| 1 | Isotonic train-only `fit_window` invariant | `l5b-kick-1-accept` | Codex 5.5 IMPORTANT + ChatGPT 5.5 CRITICAL #3 |
+| 2 | Forecast σ v2 production wrapper + Gate 24 hard gate | `l5b-kick-2-accept` | Codex 5.5 IMPORTANT + ChatGPT 5.5 CRITICAL #2 |
+| 3 | L5-C adaptive bin reduction + Gate 22 diagnostic status | `l5b-kick-3-accept` | Codex 5.5 IMPORTANT |
+| 4 | L5-B1 inner-CV z-scaler recomputation (Task A parity) | `l5b-kick-4-accept` | Codex 5.5 IMPORTANT |
+| 5 | Bootstrap diagnostics table per horizon/fold | `l5b-kick-5-accept` | ChatGPT 5.5 IMPORTANT #6 |
+| 6 | Ridge inference labeling separation | `l5b-kick-6-accept` | ChatGPT 5.5 IMPORTANT #5 |
+| 7 | DMS source memo | `l5b-kick-7-accept` | Codex 5.5 + ChatGPT 5.5 IMPORTANT (dual) |
+
+### Cumulative deltas
+
+| Metric | At KICK-1 start | At KICK-7 ACCEPT | Δ |
+|---|---|---|---|
+| Total pytest count | seven-hundred-seventeen | seven-hundred-fifty-three | plus thirty-six |
+| AP-AUTH register | fifty-two codified | fifty-four codified | plus two (AP-AUTH-53 + AP-AUTH-54) |
+| Active Sxx register | zero new (Sxx-12 was last L5 build-time) | zero new | zero (six prospective-only Sxx-13..-18 markers recorded in this file) |
+| Gate criteria added | n/a | seventeen new across Gates 19-B1, 22, 24, 25 | plus seventeen |
+| New dataclasses | n/a | one (`BootstrapDiagnostics`) | plus one |
+| Convergence streak | n/a | twenty of twenty (rolling-mean velocity minus-fifty-eight percent) | maintained |
+
+### AP-AUTH-53 + 54 envelope characterization
+
+| Sub-phase | AP-AUTH-53 variant | Envelope weight |
+|---|---|---|
+| KICK-1 | public wrapper precursor (pre-codification) | medium |
+| KICK-2 | public wrapper (AP-AUTH-53 codified at this ACCEPT) | medium |
+| KICK-3 | public wrapper (third instance) | medium-heavy |
+| KICK-4 | internal-implementation variant (AP-AUTH-54 first instance) | heavy (helper refactor + field + AST audit) |
+| KICK-5 | internal-implementation variant (AP-AUTH-54 codified) | medium (tuple-return helper + dual fields + probe) |
+| KICK-6 | internal-implementation variant (AP-AUTH-54 third instance) | lightest-weight (dataclass discipline only) |
+| KICK-7 | **documentation-primary variant** (AP-AUTH-55 candidacy DEFERRED) | documentation-primary (memo + Gate file-presence check) |
+
+### Pattern velocity (effort actual)
+
+| Sub-phase | Actual | Cumulative banked headroom |
+|---|---|---|
+| KICK-1 | one-and-a-half hours | within budget |
+| KICK-2 | one-and-six-tenths hours | within budget |
+| KICK-3 | one-and-seven-tenths hours | within budget |
+| KICK-4 | one-and-a-half hours | within budget |
+| KICK-5 | one-and-seven-tenths hours | within budget |
+| KICK-6 | one-and-three-tenths hours (smallest by LOC) | within budget |
+| KICK-7 | one-and-a-half hours estimated (memo-content dominant) | within budget |
+
+### Reviewer concerns fully closed
+
+- Codex 5.5: all four IMPORTANT items closed (KICK-1, KICK-3, KICK-4, KICK-7)
+- ChatGPT 5.5: all four IMPORTANT items closed (KICK-2 CRITICAL #2, KICK-5 IMPORTANT #6, KICK-6 IMPORTANT #5, KICK-7 IMPORTANT)
+- Plus KICK-1 closes ChatGPT 5.5 CRITICAL #3 as well (dual-reviewer convergence)
+
+### Next phase
+
+L5b sprint advances to original OOS hardening scope: L5b-A (block bootstrap robustness) through L5b-E (retrospective). All seven reviewer-driven kickoff sub-phases COMPLETE; institutional discipline patterns AP-AUTH-53 (public wrapper) + AP-AUTH-54 (internal-implementation variant) codified and available for reuse. AP-AUTH-55 (documentation-primary variant) deferred pending pattern repetition at L6+.
 
 ---
 

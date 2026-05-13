@@ -17,11 +17,25 @@ DMS literature anchor
 **Dimson, Marsh, Staunton** (2002) *Triumph of the Optimists: 101 Years
 of Global Investment Returns*. Princeton University Press. Table 1.2 /
 1.3 cross-country survivorship correction. 2020 update: *Credit Suisse
-Global Investment Returns Yearbook 2020*. The US-only sample over
+Global Investment Returns Yearbook 2020*. Post-2023 rebranded as *UBS
+Global Investment Returns Yearbook*. The US-only sample over
 1900-present overstates the global true equity return by 100-200 bps
 annualized due to survivorship bias (the US economy survived two
 world wars + 2008 + 2020 without permanent destruction of the equity
 market; many counterpart economies did not).
+
+**Source memo** (L5b-KICK-7, tag ``l5b-kick-7-accept``, 2026-05-15):
+``DMS_SOURCE_MEMO.md`` at the worktree root provides the full
+derivation chain for the Q6-locked basis-point values below — edition
+citation, empirical US-vs-global premium gap, horizon-specific
+midpoint reasoning, sensitivity band justification, annual refresh
+protocol, and the §4 honest disclaimer explicitly acknowledging that
+the specific -125/-175 bps values are institutional judgment within
+the empirically-supported DMS range rather than direct-table-derived
+precision. Closes Codex 5.5 + ChatGPT 5.5 IMPORTANT reviewer flags on
+DMS source-anchoring transparency via the AP-AUTH-53 seventh-instance
+documentation-primary variant pattern. Gate 25.1.7 enforces memo
+presence + section-header structure at validator time.
 
 Method (spec §5.F.3)
 --------------------

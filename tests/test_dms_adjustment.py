@@ -16,8 +16,21 @@ Test inventory (mirrors §5.F.5 row order):
                   (Op-F-a runtime audit; Standing Order #4)
   4   NEG         test_rejects_horizon_outside_1Y_3Y_5Y_10Y
   5   NEG         test_band_lower_equals_central_for_1Y_3Y_no_adjustment
+
+L5b-KICK-7 (tag ``l5b-kick-7-accept``, 2026-05-15) appended three tests
+(K7.1-K7.3) closing the dual-reviewer (Codex 5.5 + ChatGPT 5.5 IMPORTANT)
+DMS source-anchoring transparency flag via the AP-AUTH-53 seventh-
+instance documentation-primary variant pattern. NEG-flavor accounting:
+strict NEG 1 plus POS-inv 1 of 3 equals 67% NEG-flavor at sub-phase
+level (floor met).
+
+  K7.1  POS         test_kick7_dms_source_memo_file_exists
+  K7.2  POS-inv     test_kick7_dms_source_memo_contains_required_section_headers
+  K7.3  NEG         test_kick7_gate25_1_7_validator_fails_when_memo_missing_via_monkeypatch
 """
 from __future__ import annotations
+
+import pathlib
 
 import pytest
 
@@ -124,3 +137,130 @@ def test_band_lower_equals_central_for_1Y_3Y_no_adjustment():
             assert c == raw_bps, (
                 f"horizon={h}, raw={raw_bps}: central={c} != raw={raw_bps}"
             )
+
+
+# ===========================================================================
+# L5b-KICK-7 tests K7.1-K7.3 — DMS source memo presence + content
+# structure + Gate 25.1.7 monkeypatch failure path. Closes dual-reviewer
+# (Codex 5.5 + ChatGPT 5.5 IMPORTANT) DMS source-anchoring transparency
+# flag via the AP-AUTH-53 seventh-instance documentation-primary variant
+# pattern. NEG-flavor 2 of 3 = 67% at sub-phase level.
+# ===========================================================================
+
+
+def _resolve_memo_path() -> pathlib.Path:
+    """Resolve `DMS_SOURCE_MEMO.md` path at the worktree root using the
+    same resolution pattern as Gate 25.1.7 validator (from
+    `macro_pipeline/validation.py` → `macro_pipeline/` parent → worktree
+    root). This test helper deliberately mirrors the validator's
+    resolution so the test fails for the same reason the validator
+    would fail if the memo moved."""
+    # tests/ lives at worktree-root/tests/; parents[1] from this file
+    # is the worktree root.
+    return pathlib.Path(__file__).resolve().parents[1] / "DMS_SOURCE_MEMO.md"
+
+
+# ---------------------------------------------------------------------------
+# Test K7.1 — POS (KICK-7)
+# ---------------------------------------------------------------------------
+def test_kick7_dms_source_memo_file_exists():
+    """KICK-7: ``DMS_SOURCE_MEMO.md`` exists at the worktree root.
+    Closes Codex 5.5 + ChatGPT 5.5 IMPORTANT DMS source-anchoring
+    transparency flag at unit-test level (parallel to Gate 25.1.7
+    enforcement at validator level)."""
+    memo_path = _resolve_memo_path()
+    assert memo_path.is_file(), (
+        f"DMS_SOURCE_MEMO.md missing at expected worktree-root path "
+        f"{memo_path}; this file is mandated by L5b-KICK-7 to close "
+        "Codex 5.5 + ChatGPT 5.5 IMPORTANT reviewer flags on DMS "
+        "source-anchoring transparency"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Test K7.2 — POS-invariant (KICK-7)
+# ---------------------------------------------------------------------------
+def test_kick7_dms_source_memo_contains_required_section_headers():
+    """KICK-7 POS-invariant: ``DMS_SOURCE_MEMO.md`` contains all five
+    required section header substrings. Mirrors Gate 25.1.7 validator
+    content check; ensures memo structure is preserved across edits."""
+    memo_path = _resolve_memo_path()
+    assert memo_path.is_file(), "memo file precondition failed"
+    memo_text = memo_path.read_text(encoding="utf-8")
+    required_sections = (
+        "Source Identification",
+        "Empirical Foundation",
+        "DMS Adjustment Derivation",
+        "Sensitivity Band",
+        "Refresh Protocol",
+    )
+    missing = [s for s in required_sections if s not in memo_text]
+    assert not missing, (
+        f"DMS_SOURCE_MEMO.md missing required section header "
+        f"substring(s): {missing}; required: {list(required_sections)}"
+    )
+    # Additional invariant: §4 explicit honest-disclaimer wording must
+    # be present (Strategic-mandated KICK-7 ITEM 0 transparency clause).
+    assert "institutional judgment" in memo_text, (
+        "DMS_SOURCE_MEMO.md missing §4 honest-disclaimer 'institutional "
+        "judgment' phrasing required per Strategic disposition on ITEM 0"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Test K7.3 — NEG (KICK-7)
+# ---------------------------------------------------------------------------
+def test_kick7_gate25_1_7_validator_fails_when_memo_missing_via_monkeypatch(
+    monkeypatch,
+):
+    """KICK-7 NEG: when the memo file is simulated as missing (via
+    monkeypatch on ``pathlib.Path.is_file``), the Gate 25.1.7 sub-
+    criterion in the Gate 25 composite validator emits a FAIL finding
+    citing the missing memo path. Closes the file-presence enforcement
+    surface at validator-level NEG semantics."""
+    from macro_pipeline.validation import (
+        validate_gate25_dms_shrinkage_composite,
+    )
+
+    # Monkeypatch pathlib.Path.is_file globally to always return False.
+    # This simulates the memo being missing without actually moving
+    # the real file (test isolation; cleanup automatic via monkeypatch).
+    real_is_file = pathlib.Path.is_file
+
+    def fake_is_file(self):
+        # Return False ONLY for DMS_SOURCE_MEMO.md; preserve real
+        # behavior for all other paths so unrelated validator checks
+        # still work.
+        if self.name == "DMS_SOURCE_MEMO.md":
+            return False
+        return real_is_file(self)
+
+    monkeypatch.setattr(pathlib.Path, "is_file", fake_is_file)
+
+    # Also block .exists() for the same path (the validator uses
+    # exists() AND is_file() per Phase 3 implementation).
+    real_exists = pathlib.Path.exists
+
+    def fake_exists(self):
+        if self.name == "DMS_SOURCE_MEMO.md":
+            return False
+        return real_exists(self)
+
+    monkeypatch.setattr(pathlib.Path, "exists", fake_exists)
+
+    report = validate_gate25_dms_shrinkage_composite()
+    # The Gate 25.1.7 finding should be FAIL when memo is missing.
+    fail_findings = [
+        f for f in report.findings
+        if "Criterion 25.1.7" in f and f.startswith("FAIL")
+    ]
+    assert fail_findings, (
+        "Gate 25.1.7 should FAIL when DMS_SOURCE_MEMO.md is missing "
+        "(monkeypatched), but no FAIL finding found in report. "
+        f"Findings: {report.findings}"
+    )
+    # And the FAIL message should cite the missing path.
+    assert "DMS_SOURCE_MEMO.md missing" in fail_findings[0], (
+        f"FAIL finding should cite 'DMS_SOURCE_MEMO.md missing'; "
+        f"got: {fail_findings[0]}"
+    )

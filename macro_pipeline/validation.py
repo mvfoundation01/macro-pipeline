@@ -5293,6 +5293,65 @@ def validate_gate25_dms_shrinkage_composite() -> GateReport:
                 "is pure constant-arithmetic horizon dispatcher per "
                 "spec §5.F.1 (R4 mitigation)"
             )
+
+        # ===================================================================
+        # L5b-KICK-7 Criterion 25.1.7 — DMS source memo file presence
+        # at worktree root. Closes Codex 5.5 + ChatGPT 5.5 IMPORTANT
+        # reviewer flags on DMS source-anchoring transparency via the
+        # AP-AUTH-53 seventh-instance documentation-primary variant
+        # pattern. Gate 25 composite SEAL preserved: this is an additive
+        # sub-criterion within the 25.1 (DMS) body; the composite seal
+        # logic at the validator boundary (25.1 + 25.2 closure) remains
+        # untouched.
+        # ===================================================================
+        import pathlib
+        memo_path = (
+            pathlib.Path(__file__).resolve().parents[1] / "DMS_SOURCE_MEMO.md"
+        )
+        summary["criterion_25_1_7_memo_path"] = str(memo_path)
+        if memo_path.exists() and memo_path.is_file():
+            memo_text = memo_path.read_text(encoding="utf-8")
+            # Section-header presence check (basic content validation).
+            # Substrings chosen to match KICK-7 memo section headers; case-
+            # sensitive substring search against the full markdown text.
+            required_section_substrings = (
+                "Source Identification",
+                "Empirical Foundation",
+                "DMS Adjustment Derivation",
+                "Sensitivity Band",
+                "Refresh Protocol",
+            )
+            missing_sections = [
+                s for s in required_section_substrings if s not in memo_text
+            ]
+            summary["criterion_25_1_7_required_sections"] = list(
+                required_section_substrings
+            )
+            summary["criterion_25_1_7_missing_sections"] = missing_sections
+            if missing_sections:
+                findings.append(
+                    f"FAIL: Criterion 25.1.7 [KICK-7] - DMS_SOURCE_MEMO.md "
+                    f"exists at {memo_path} but missing required section "
+                    f"substring(s): {missing_sections}"
+                )
+            else:
+                findings.append(
+                    "Criterion 25.1.7 PASS [KICK-7]: DMS_SOURCE_MEMO.md "
+                    "exists at worktree root with all required section "
+                    "substrings (Source Identification, Empirical "
+                    "Foundation, DMS Adjustment Derivation, Sensitivity "
+                    "Band, Refresh Protocol); closes Codex 5.5 + "
+                    "ChatGPT 5.5 IMPORTANT reviewer flags on DMS "
+                    "source-anchoring transparency via AP-AUTH-53 "
+                    "seventh-instance documentation-primary variant; "
+                    "Gate 25 composite seal preserved (additive "
+                    "sub-criterion within 25.1 body)"
+                )
+        else:
+            findings.append(
+                f"FAIL: Criterion 25.1.7 [KICK-7] - DMS_SOURCE_MEMO.md "
+                f"missing at expected worktree-root path {memo_path}"
+            )
     except ImportError as exc:
         findings.append(f"FAIL: Criterion 25.1.1 - import error: {exc}")
 
