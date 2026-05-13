@@ -47,4 +47,36 @@ Three options per prompt PHASE 0 decision tree CASE C (verbatim):
 
 ---
 
-**END — L5_BUILD_SXX_LOG.md (S-10 RESOLVED; cumulative count 10; reserved range 11-25 open)**
+---
+
+## S-11 — 2026-05-13 — sub-phase L5-B Task A — Gate 18 sidecar naming mismatch (L3D `<stem>.meta.json` vs L5-A test fixture `<stem>.<suffix>.meta.json`)
+
+**Trigger**: T1 (spec ambiguity / implementation gap discovered at code-exec time)
+
+**Disposition**: **RESOLVED** (minimal bug fix in `_validate_panel_cache`; both naming conventions now supported)
+
+**Rationale**: L5-B Task A code-exec Phase 3 (Gate 18 CLI runtime per V's prompt PHASE 3 ADDITIONAL closing ChatGPT §D.2) invoked Gate 18 with `panel_path=str(PANEL_CACHE_PATH)`. Failure: `_validate_panel_cache` in `walk_forward_cv.py` line 269 looked for sidecar at `path.with_suffix(path.suffix + ".meta.json")` → `r_squared_panel.parquet.meta.json`. Actual L3D sidecar is at `path.with_suffix(".meta.json")` → `r_squared_panel.meta.json` (per `cache.py::_sha256_file` write helper convention).
+
+Bug origin: L5-A's `_validate_panel_cache` was tested ONLY against an L5-A test fixture that wrote sidecar via the multi-suffix convention (matching the buggy lookup); the test passed but the function was never exercised against real L3D cache until L5-B Task A retry. Discovery: V's ChatGPT §D.2 closure request forced runtime Gate 18 CLI invocation, which surfaced the gap.
+
+This is a build-time spec-vs-implementation gap (T1) — spec §5.A.2 item 2 line 446 says "read `data/cache/analysis/r_squared_panel.parquet`; confirm sidecar `data_sha256` matches recomputation" but doesn't specify the sidecar naming convention. L5-A's `_validate_panel_cache` assumed the wrong convention; L5-A's tests didn't catch it.
+
+**Resolution path**: PATCH-IMPL (preferred per build plan §5.3)
+
+**Resolution**: Minimal fix in `_validate_panel_cache` to try BOTH conventions:
+1. `path.with_suffix(".meta.json")` (L3D production; tried first)
+2. `path.with_suffix(path.suffix + ".meta.json")` (L5-A test fixture; fallback)
+
+Either present → validate sha256. Neither → raise `CacheValidationError` with both candidate paths cited.
+
+Impact: BOTH existing L5-A tests (`test_pit_safety_propagates_panel_sha256_to_schedule` + `test_rejects_corrupt_panel_propagates_CacheValidationError` which use multi-suffix fixture) AND L3D production cache (which uses L3D convention) now work. Full pytest 635/635 PASS after fix.
+
+**Strategic decision**: bug-fix only (not methodology change); within build-phase scope per AP-AUTH-44 ("modify beyond scope" applies to feature additions, not bug fixes). L5-A surface API unchanged.
+
+**Backlog ref**: none (resolved in-cycle)
+
+**Build artifact**: L5-B Task A Phase 3 fix commit (this branch `claude/layer-5-build` post-S-11 commit); Gate 18 CLI now PASS with Criterion 4 fully validated (panel_sha256 propagated to all 8 schedules; transcript in `reviews/l5-b-task-a-accept/artifacts/gate18_cli_runtime.txt`).
+
+---
+
+**END — L5_BUILD_SXX_LOG.md (S-10 RESOLVED + S-11 RESOLVED; cumulative count 11; reserved range 12-25 open)**

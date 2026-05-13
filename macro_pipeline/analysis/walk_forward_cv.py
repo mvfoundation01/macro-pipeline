@@ -254,23 +254,32 @@ def _validate_panel_cache(panel_path: str | Path) -> str:
             sha.update(chunk)
     actual_sha = sha.hexdigest()
 
-    # Locate the sidecar (cache.py write helpers use ``<parquet>.meta.json``).
-    sidecar = path_obj.with_suffix(path_obj.suffix + ".meta.json")
-    if not sidecar.exists():
-        # Try the L3.5b-T subdir-validated form (uses ``read_cache_validated_subdir``
-        # which raises on any failure mode); if that helper is unavailable in
-        # the current cache.py vintage, fall back to explicit sidecar check.
-        try:
-            # read_cache_validated_subdir returns (df, meta) or raises.
-            _df, meta = read_cache_validated_subdir(path_obj)
-            sidecar_sha = meta.get("data_sha256")
-        except CacheValidationError:
-            raise
-        except Exception as exc:  # pragma: no cover - defensive
-            raise CacheValidationError(
-                path=str(path_obj),
-                reason=f"sidecar missing and read_cache_validated_subdir failed: {exc}",
-            ) from exc
+    # Locate the sidecar. Two naming conventions in use across the project:
+    #   (a) L3D convention (cache.py write helpers; production):
+    #       `r_squared_panel.parquet` → `r_squared_panel.meta.json`
+    #       (i.e., `.with_suffix('.meta.json')`)
+    #   (b) Multi-suffix convention (L5-A test fixture):
+    #       `panel.parquet` → `panel.parquet.meta.json`
+    #       (i.e., `.with_suffix('.parquet.meta.json')`)
+    # Try (a) first (matches production L3D); fall back to (b) for fixture
+    # compatibility per S-11 build-time discovery (commit <S-11-commit-sha>).
+    sidecar_l3d = path_obj.with_suffix(".meta.json")
+    sidecar_multi = path_obj.with_suffix(path_obj.suffix + ".meta.json")
+    if sidecar_l3d.exists():
+        sidecar = sidecar_l3d
+    elif sidecar_multi.exists():
+        sidecar = sidecar_multi
+    else:
+        sidecar = None  # type: ignore[assignment]
+
+    if sidecar is None:
+        raise CacheValidationError(
+            path=str(path_obj),
+            reason=(
+                f"sidecar not found at {sidecar_l3d.name} (L3D convention) "
+                f"or {sidecar_multi.name} (L5-A test-fixture convention)"
+            ),
+        )
     else:
         import json
         try:
