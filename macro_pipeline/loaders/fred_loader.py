@@ -29,6 +29,7 @@ from macro_pipeline.config import (
     DATA_CACHE,
     FRED_API_KEY,
     FRED_SERIES_API,
+    require_fred_api_key,  # L5b-F F-O1 lazy credential validation
 )
 from macro_pipeline.loaders.base import IndicatorMetadata, Loader
 from macro_pipeline.preprocessing import cache_series_to_parquet, run_universal_pipeline
@@ -163,7 +164,7 @@ def load_fred_series(
     # across renames) but the IndicatorMetadata.indicator_id and the
     # parquet column name use the alias.
     indicator_id = spec.get("indicator_id", series_id)
-    fred = Fred(api_key=FRED_API_KEY)
+    fred = Fred(api_key=require_fred_api_key())  # L5b-F F-O1 lazy validation
 
     parquet, _sidecar = _cache_paths(series_id)
     use_cache = (

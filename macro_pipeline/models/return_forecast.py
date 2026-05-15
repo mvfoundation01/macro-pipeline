@@ -537,6 +537,16 @@ class StructuralBreakDiagnostics:
     n_breaks_detected: int
     trimming_fraction: float
     max_breaks_tested: int
+    # L5b-F Phase 5 (F-M1) — formal-inference flag per Strategic
+    # disposition. Closes R6 finding F-M1 by labeling the current
+    # implementation as informal/simplified. ``False`` indicates the
+    # diagnostic uses the simplified sequential supF / chi-square
+    # approximation (NOT the full sandwich Wald + Bai-Perron 1998/2003
+    # dynamic-programming algorithm). Set ``True`` only when a future
+    # implementation provides formal Andrews 1993 asymptotic critical
+    # values + Bai-Perron DP. Default ``False`` reflects the current
+    # L5b-B implementation status; no cascade to existing constructors.
+    formal_inference: bool = False
 
     def __post_init__(self) -> None:
         # L5b-B NEG test B.4 contract: binary tri-state validation

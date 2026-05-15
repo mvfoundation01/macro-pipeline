@@ -115,7 +115,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import Iterable
+from typing import Iterable, Literal, Optional
 
 import numpy as np
 
@@ -270,9 +270,54 @@ def _benjamini_hochberg_qvalues(p_values: np.ndarray) -> np.ndarray:
     return q_values
 
 
+def _benjamini_yekutieli_qvalues(p_values: np.ndarray) -> np.ndarray:
+    """Compute Benjamini-Yekutieli (2001) step-up monotone q-values
+    for arbitrary dependence structure.
+
+    Algorithm: ``q_BY = q_BH * c(m)`` where ``c(m) = sum(1/i for i in
+    1..m)`` is the Benjamini-Yekutieli adjustment factor (typically
+    ``c(m) ≈ ln(m) + γ`` for large m). Result is more conservative
+    than BH (fewer rejections); appropriate when test dependence
+    structure is unknown or known to be non-PRDS.
+
+    Reference: Benjamini, Y., & Yekutieli, D. (2001) Annals of
+    Statistics 29:1165-1188.
+
+    L5b-F Phase 5 (F-M4a): closes Codex 5.5 + ChatGPT 5.5 R6 finding
+    on BY method availability for general-dependence FDR control.
+
+    Parameters
+    ----------
+    p_values
+        1-D ``np.ndarray`` of finite p-values; callers must filter
+        NaN before invocation (mirrors BH helper contract).
+
+    Returns
+    -------
+    np.ndarray
+        1-D q-values, same length and order as ``p_values``; each
+        ``q_values[i]`` is the BY-adjusted q-value for hypothesis ``i``.
+        Clipped to ``[0, 1]``.
+    """
+    p_arr = np.asarray(p_values, dtype=float)
+    m = len(p_arr)
+    if m == 0:
+        return np.empty(0, dtype=float)
+    # Compute BH q-values first.
+    q_bh = _benjamini_hochberg_qvalues(p_arr)
+    # BY adjustment factor c(m).
+    c_m = float(np.sum(1.0 / np.arange(1, m + 1, dtype=float)))
+    # Scale up; clip to [0, 1] since scaling can push BH q-values past 1.
+    q_by = np.clip(q_bh * c_m, 0.0, 1.0)
+    return q_by
+
+
 def compute_fdr_gating_for_l5_chain(
     ridge_fits: Iterable["object"],
     q_threshold: float = 0.10,
+    *,
+    method: Literal["BH", "BY"] = "BH",
+    family_id: Optional[str] = None,
 ) -> FDRGatingDiagnostics:
     """Aggregate p-values from the L5 chain and apply BH(1995) FDR
     control at ``q_threshold``.
@@ -325,6 +370,23 @@ def compute_fdr_gating_for_l5_chain(
         ``n_tests=0`` (degenerate-but-valid; ``q_threshold`` invariant
         still enforced).
     """
+    # L5b-F Phase 5 (F-M4a) — validate method + family_id pairing.
+    # BY method requires explicit family_id (non-None) per Strategic
+    # disposition on R6 finding (multiple-comparison families must be
+    # explicit at call site when applying general-dependence control).
+    if method == "BY" and family_id is None:
+        raise ValueError(
+            "family_id is required when method='BY' "
+            "(L5b-F Phase 5 F-M4a; general-dependence FDR control "
+            "requires explicit family demarcation per Benjamini-"
+            "Yekutieli 2001 Section 4)"
+        )
+    if method not in ("BH", "BY"):
+        raise ValueError(
+            f"method={method!r} must be 'BH' or 'BY' "
+            "(L5b-F Phase 5 F-M4a tri-state taxonomy)"
+        )
+
     raw_p_values: list[float] = []
     test_labels: list[str] = []
 
@@ -363,7 +425,11 @@ def compute_fdr_gating_for_l5_chain(
         )
 
     p_arr = np.asarray(raw_p_values, dtype=float)
-    q_arr = _benjamini_hochberg_qvalues(p_arr)
+    # L5b-F Phase 5 (F-M4a) — dispatch to BH or BY adjustment.
+    if method == "BY":
+        q_arr = _benjamini_yekutieli_qvalues(p_arr)
+    else:
+        q_arr = _benjamini_hochberg_qvalues(p_arr)
     rejected = tuple(int(i) for i in np.where(q_arr <= q_threshold)[0])
 
     return FDRGatingDiagnostics(

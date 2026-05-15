@@ -290,3 +290,63 @@ def test_l5b_c_fdr_gating_diagnostics_handles_empty_p_value_set():
     # returns empty array (length-zero edge case).
     empty_q = _benjamini_hochberg_qvalues(np.array([]))
     assert empty_q.shape == (0,)
+
+
+# ===========================================================================
+# L5b-F Phase 5 — F-M4a Benjamini-Yekutieli method (2 new tests)
+# ===========================================================================
+
+def test_lf5_by_method_produces_fewer_or_equal_rejections_than_bh():
+    """L5b-F F.5.1 POS: BY(2001) on the same p-value set produces a
+    rejection count <= BH(1995). BY is strictly more conservative due
+    to the c(m) = sum(1/i for i in 1..m) adjustment factor. Closes R6
+    finding F-M4a."""
+    from types import SimpleNamespace
+
+    # 10 p-values spanning rejection territory at q=0.10.
+    p_vals = [0.001, 0.005, 0.01, 0.02, 0.03, 0.05, 0.08, 0.12, 0.20, 0.40]
+    fake_fits = [
+        SimpleNamespace(
+            p_value_beta_hac=p,
+            structural_break_diagnostics=None,
+            horizon="5Y",
+            schedule_type="expanding",
+            fold_id=i,
+        )
+        for i, p in enumerate(p_vals)
+    ]
+
+    bh_diag = compute_fdr_gating_for_l5_chain(
+        fake_fits, q_threshold=0.10, method="BH",
+    )
+    by_diag = compute_fdr_gating_for_l5_chain(
+        fake_fits, q_threshold=0.10, method="BY", family_id="test_family",
+    )
+    assert by_diag.n_rejected <= bh_diag.n_rejected, (
+        f"L5b-F F-M4a: BY n_rejected={by_diag.n_rejected} should be "
+        f"<= BH n_rejected={bh_diag.n_rejected} (BY more conservative)"
+    )
+    assert bh_diag.n_tests == 10
+    assert by_diag.n_tests == 10
+
+
+def test_lf5_by_method_requires_family_id():
+    """L5b-F F.5.2 NEG: BY method called without ``family_id`` raises
+    ValueError (general-dependence FDR control requires explicit
+    family demarcation per Benjamini-Yekutieli 2001 §4). Closes R6
+    finding F-M4a explicit-family-id requirement."""
+    from types import SimpleNamespace
+
+    fake_fits = [
+        SimpleNamespace(
+            p_value_beta_hac=0.01,
+            structural_break_diagnostics=None,
+            horizon="5Y",
+            schedule_type="expanding",
+            fold_id=0,
+        ),
+    ]
+    with pytest.raises(ValueError, match=r"family_id is required when method='BY'"):
+        compute_fdr_gating_for_l5_chain(
+            fake_fits, q_threshold=0.10, method="BY",
+        )

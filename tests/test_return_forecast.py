@@ -1457,3 +1457,45 @@ def test_l5b_b_non_final_folds_have_structural_break_diagnostics_None():
         )
     # Final fold: populated.
     assert results[-1].structural_break_diagnostics is not None
+
+
+# ===========================================================================
+# L5b-F Phase 5 — F-M1 structural-break formal_inference label (1 new test)
+# ===========================================================================
+
+def test_lf5_structural_break_diagnostics_formal_inference_defaults_false():
+    """L5b-F F.5.4 POS: ``StructuralBreakDiagnostics.formal_inference``
+    defaults to ``False``, reflecting the current L5b-B implementation
+    status (simplified sequential supF + chi-square approximation;
+    NOT full Andrews 1993 asymptotic critical values + Bai-Perron
+    1998/2003 DP). Closes R6 finding F-M1 labeling concern per
+    Strategic preference (relabel rather than implement full DP)."""
+    from macro_pipeline.models.return_forecast import (
+        StructuralBreakDiagnostics,
+    )
+    # Default constructor (formal_inference omitted) yields False.
+    diag = StructuralBreakDiagnostics(
+        test_method="quandt_andrews",
+        break_test_statistic=0.5,
+        break_test_p_value=0.3,
+        break_dates_detected=(),
+        n_breaks_detected=0,
+        trimming_fraction=0.15,
+        max_breaks_tested=3,
+    )
+    assert diag.formal_inference is False, (
+        f"L5b-F F-M1: formal_inference must default to False "
+        f"(simplified-Wald implementation); got {diag.formal_inference}"
+    )
+    # Explicit True overrides preserved for future formal implementations.
+    diag_formal = StructuralBreakDiagnostics(
+        test_method="quandt_andrews",
+        break_test_statistic=0.5,
+        break_test_p_value=0.3,
+        break_dates_detected=(),
+        n_breaks_detected=0,
+        trimming_fraction=0.15,
+        max_breaks_tested=3,
+        formal_inference=True,
+    )
+    assert diag_formal.formal_inference is True

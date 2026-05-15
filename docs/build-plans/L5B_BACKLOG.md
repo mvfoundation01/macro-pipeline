@@ -471,6 +471,70 @@ V selects path post-L5b-E ACCEPT. Documentation suite v2.0 commit (per `06_CLAUD
 
 **L5b-A through L5b-E sequence (this file) plus KICK-1 through KICK-7 sequence (this file) jointly complete the L5b OOS hardening sprint.** Master Prompt v3.1 §15 L5b scope CLOSED at this DUAL TAG.
 
+**Post-L5b-E re-opening notice (2026-05-15)**: R6 external reviewer cycle (Codex 5.5 + ChatGPT 5.5) returned RATIFY-WITH-FINDINGS with four HIGH plus five MEDIUM findings requiring remediation before L1.7. Sprint advances to L5b-F (remediation), L5b-G (AP-AUTH-49 cherry-pick), L5b-H (AP-AUTH-41 v7 scope refinement); `l5b-complete` tag will be MOVED from this commit to L5b-H ACCEPT per Strategic disposition. The L5b SPRINT COMPLETE summary above remains historically accurate at the L5b-E ACCEPT moment.
+
+---
+
+### L5b-F — R6 reviewer-driven remediation sub-phase (four HIGH plus five MEDIUM findings) (2026-05-15)
+
+**ACCEPT tag**: `l5b-f-accept`
+**Authority**: Codex 5.5 + ChatGPT 5.5 R6 external review (RATIFY-WITH-FINDINGS) per Strategic disposition cycle 2026-05-15 (§E greenlight block; AP-AUTH-53 reviewer-driven kickoff pattern; AP-AUTH-54 eighth-instance internal-implementation variant).
+**Approach**: MONOLITHIC scope per Strategic disposition; nine findings closed in single sub-phase (four HIGH plus five MEDIUM) plus one OPERATIONAL (F-O1 lazy credential gating). AP-AUTH-49 + AP-AUTH-41 v7 deferred to L5b-G + L5b-H per Strategic post-L5b-F workflow.
+**Option**: Y across six implementation phases (Y signature inspection plus runtime probe at gate validators) — Gate 24 extension (Criteria fifteen plus sixteen for F-H1) plus Gate 27 extension (Criteria 27.5 plus 27.6 for F-H2).
+
+**R6 reviewer findings closed (nine findings plus one OPERATIONAL)**:
+
+| Finding | Severity | Phase | Resolution |
+|---|---|---|---|
+| F-H1 | HIGH | Phase 1 | Forecast σ v2 wrapper at `analysis/forecast_sigma.py` recomputes band using `z × forecast_sigma_with_covariance × coverage_inflation_factor` instead of copying v1 quadrature band |
+| F-H2 | HIGH | Phase 2 | `RegimeConditionalDiagnostics` extended with five no-default fields (horizon plus n_eff_recession plus n_eff_expansion plus max_confidence_cap plus diagnostic_only); 10Y regime-stratified hard cap zero-point-five-five per Standing Order ten |
+| F-H3 | HIGH | Phase 3 | `regime_conditional_validation.py` exp_mask conditional fix at line four-six-four (Strategic option (a)): `pre_1978_handling="include"` aggregates pre-1978 obs into expansion subset per docstring |
+| F-H4 | HIGH | Phase 3 | Fail-closed classifier validation at line four-four-one: invalid regime labels raise ValueError citing offending label sorted |
+| F-M1 | MEDIUM | Phase 5c | `StructuralBreakDiagnostics.formal_inference: bool = False` field at `models/return_forecast.py:473` — simplified supF / chi-square approximation labeled informal per Strategic preference (relabel rather than implement full DP) |
+| F-M2 | MEDIUM | Phase 4 | `ood_reserve_fraction` REQUIRED kwarg at aggregator (fail-closed); Vision v2.0 §7 five-to-fifteen-percent range enforced; raises ValueError when omitted or out of range |
+| F-M3 | MEDIUM | Phase 4 | Lucas critique surface via `lucas_flag` plus `regime_shift_test` plus `pre_post_metric_delta` plus `lucas_warning_text` four no-default fields; reuses L5b-B `StructuralBreakDiagnostics` for break detection within twenty-four-month lookback |
+| F-M4(a) | MEDIUM | Phase 5a | `fdr_gating.py` extended with `method: Literal["BH", "BY"]` plus `family_id: Optional[str]` parameters; BY method via `_benjamini_yekutieli_qvalues` helper using `c(m) = sum(1/i for i in 1..m)` adjustment factor for general-dependence FDR per Benjamini-Yekutieli (2001) |
+| F-M4(b) | MEDIUM | Phase 5b | `DMS_SOURCE_MEMO.md` §3 prose clarification per Strategic Note C: distinguishes Quantity A (underlying US-vs-global gap two-hundred-to-three-hundred bps) from Quantity B (conservative forecast adjustment one-hundred-to-two-hundred bps) — two distinct quantities, not a single inconsistent range |
+| F-M5 | MEDIUM | Phase 4 | Murphy (1973) decomposition by stratum via opt-in `compute_murphy_decomposition` kwarg; CIs via stationary block bootstrap reusing L5b-A `_sample_stationary_block_lengths` helper; invariant ten enforces `reliability - resolution + uncertainty ≈ brier` within `1e-6` |
+| F-O1 | OPERATIONAL | Phase 6 | `config.py` import-time credential check converted to lazy `require_fred_api_key()` helper at fred_loader call sites; analysis modules (`regime_conditional_validation`, `fdr_gating`) now import without `FRED_API_KEY` env var |
+
+**Sxx-NN triage**: zero new Sxx markers filed at L5b-F. Twelfth consecutive prospective-only-or-zero Sxx outcome at the sprint level. Phase 6 callsite classification (Note A): three (c)-class implicit-non-None FRED_API_KEY assumption sites located, all in fred loaders as expected; converted to `require_fred_api_key()` lazy validation. No external (a)/(b)/(c) anomalies; no STOP-and-surface triggered.
+
+**AP-AUTH-54 envelope** (Strategic Note D): L5b-F is the eighth instance; envelope **RE-OPENED** from seven (CLOSED at L5b-E) to eight at L5b-F entry, expected to **STAY CLOSED** at eight instances post-L5b-F. Multi-axis within-envelope variant: Phase 1 helper refactor plus Phase 2 / 3 / 4 dataclass extension (plus thirteen fields combined) plus Phase 5a new algorithm (BY method) plus Phase 5b / 5c documentation. No novel sub-characteristic surfaced — institutional AP-AUTH-54 mechanism preserved.
+
+**Dataclass extensions**:
+- `RegimeConditionalDiagnostics`: fourteen baseline fields → thirty-two fields (plus five Phase 2 plus eight Phase 4 Murphy plus one Phase 4 OOD plus four Phase 4 Lucas); plus eight new invariants (invariants five through thirteen)
+- `StructuralBreakDiagnostics`: seven baseline fields → eight fields (plus one Phase 5c `formal_inference: bool = False`); default value preserves backward compat (no constructor cascade)
+- `FDRGatingDiagnostics`: unchanged at seven fields (Phase 5a BY method via function kwargs, not dataclass extension)
+- `ForecastSigmaResult`: unchanged (Phase 1 fix to v2 wrapper body only; field set preserved)
+
+**Test delta**: plus twenty-two new tests across six implementation phases:
+
+| Phase | New tests | Files |
+|---|---|---|
+| Phase 1 | plus three | `tests/test_forecast_sigma.py` |
+| Phase 2 | plus four | `tests/test_regime_conditional_validation.py` |
+| Phase 3 | plus four | `tests/test_regime_conditional_validation.py` |
+| Phase 4 | plus four | `tests/test_regime_conditional_validation.py` |
+| Phase 5 | plus four | `tests/test_fdr_gating.py` (two) plus `tests/test_dms_adjustment.py` (one) plus `tests/test_return_forecast.py` (one) |
+| Phase 6 | plus three | `tests/test_dms_adjustment.py` |
+
+Baseline seven-hundred-eighty to eight-hundred-two. NEG-flavor distribution: nine of twenty-two equals forty-one percent at sub-phase level — floor met per L5-B1 accounting convention.
+
+**Caller updates** (fixture cascade in `tests/test_regime_conditional_validation.py`):
+- Twelve aggregator call sites updated with `horizon` plus `ood_reserve_fraction` required kwargs
+- Four direct `RegimeConditionalDiagnostics(...)` constructors updated with eighteen new field values per Phase 2 plus Phase 4 dataclass extensions
+
+**Gate criteria added** (Strategic deliverable five):
+- Gate 24: plus two criteria (fifteen plus sixteen) for F-H1 v2 band recomputation
+- Gate 27: plus two criteria (27.5 plus 27.6) for F-H2 regime-stratified cap enforcement
+
+**AP-AUTH delta**: zero new codifications. AP-AUTH-53 plus AP-AUTH-54 cited as governing patterns. AP-AUTH-49 (precommit infra cherry-pick to main) deferred to L5b-G per Strategic post-L5b-F workflow. AP-AUTH-41 v7 scope refinement deferred to L5b-H. Informal AP-AUTH-55 enforcement at Phase 7 (explicit branch plus tag push per Strategic Note E) — formal codification queued post-L5b-H.
+
+**Sxx delta**: zero.
+
+**Effort variance**: Strategic nominal twelve-to-sixteen hours; risk-adjusted fifteen-to-twenty hours; convergence-prior projection nine-to-thirteen hours. Actual end-to-end estimated within band per agent-time pacing; mapped to human-equivalent within the risk-adjusted range.
+
 ---
 
 ## L5b-2 — Implement L3 loaders for ISM New Orders (NAPMNOI) + CB LEI

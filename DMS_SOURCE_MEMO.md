@@ -44,17 +44,21 @@ All values cited above and in `dms_adjustment.py` are geometric (compound annual
 
 ## 3. US-vs-Global Premium Gap
 
-### Empirical range from publicly-derivable DMS sources
+### Empirical range from publicly-derivable DMS sources — two distinct quantities
 
-The headline US-vs-global premium gap implied by sections two above is approximately **one-hundred-to-two-hundred basis points annualised**, geometric. This is the foundational empirical figure underpinning the DMS survivorship-correction framework.
+L5b-F Phase 5 (F-M4b) — Strategic Note C clarification: §3 references **two distinct quantities**, not a single inconsistent range. Both stay; prose disambiguates them explicitly.
+
+**Quantity A — Underlying US-vs-global return gap (one-nine-hundred to twenty-twenty-four sample)**: the realised US-vs-global premium gap implied by DMS-derived public summaries is approximately **two-hundred-to-three-hundred basis points annualised** (geometric, depending on terminal year). This is the raw historical record — what the US has actually earned over what the global ex-US benchmark earned.
+
+**Quantity B — Conservative adjustment applied to L5 forecasts**: the survivorship adjustment applied to L5 forecasts is conservatively set at **one-hundred-to-two-hundred basis points annualised**. This is the underlying gap A discounted to account for partial mean-reversion + forward-looking uncertainty; the conservative cut preserves predictive value while avoiding the implicit assumption that future US outperformance equals the full historical gap. This is the figure that flows into `DMS_BPS_CENTRAL` per §4 below.
 
 ### One-sigma confidence band
 
-DMS standard-error reporting for the long-horizon premium estimate is wide due to the small number of independent long-run observations (effectively one twenty-first-century period, two twentieth-century half-periods). The one-sigma band on the gap estimate is approximately ±fifty basis points per the DMS standard-error methodology, which informs the spec-locked sensitivity band.
+DMS standard-error reporting for the long-horizon premium estimate is wide due to the small number of independent long-run observations (effectively one twenty-first-century period, two twentieth-century half-periods). The one-sigma band on the underlying gap estimate (Quantity A) is approximately ±fifty basis points per the DMS standard-error methodology, which informs the spec-locked sensitivity band applied to the conservative adjustment (Quantity B).
 
 ### Symbolic derivation chain
 
-The US-vs-global gap of approximately two-hundred-to-three-hundred basis points (depending on terminal year) is the symbolic anchor for the survivorship correction. The five-year and ten-year horizon-specific adjustments below derive from this range plus horizon-specific weighting (long-horizon survivorship dominance is more pronounced).
+The underlying US-vs-global gap (Quantity A, two-hundred-to-three-hundred basis points depending on terminal year) is the symbolic anchor for the survivorship correction. The conservative adjustment (Quantity B, one-hundred-to-two-hundred basis points) is derived from A via partial-mean-reversion discounting per §4 below. The five-year and ten-year horizon-specific adjustments derive from Quantity B plus horizon-specific weighting (long-horizon survivorship dominance is more pronounced).
 
 ---
 

@@ -487,3 +487,157 @@ def test_kick2_v2_rejects_invalid_covariance_or_coverage_bounds():
             joint_bootstrap_covariance=0.004,
             empirical_coverage_95=1.5,
         )
+
+
+# ---------------------------------------------------------------------------
+# L5b-F F-H1 tests (forecast σ v2 band recomputation)
+# ---------------------------------------------------------------------------
+# Closes Codex 5.5 + ChatGPT 5.5 R6 finding F-H1 (v2 wrapper copied v1's
+# quadrature band rather than applying the covariance + coverage inflation).
+# Per Strategic L5b-F Phase 1 (corrected target path):
+# analysis/forecast_sigma.py:379-417 recomputes the band using
+# z * forecast_sigma_with_covariance * coverage_inflation_factor.
+
+def test_lf1_v2_band_widens_when_empirical_coverage_below_target():
+    """L5b-F F.1.1 POS: v2 wrapper recomputes band using coverage
+    inflation factor when empirical_coverage_95 < 0.90 (target).
+
+    Closes F-H1 by verifying the FIX scales the band width by the
+    coverage inflation ``sqrt(0.95 / empirical_coverage_95)``."""
+    # Baseline: coverage=1.0 → no inflation (matches v1 quadrature band)
+    baseline = derive_forecast_sigma_v2(
+        ridge_residual_se_hac=0.05,
+        isotonic_bootstrap_se=0.07,
+        historical_return_sigma=0.15,
+        analog_period_dispersion_sigma=0.12,
+        calibrated_probability=0.50,
+        horizon="1Y",
+        joint_bootstrap_covariance=0.0,
+        empirical_coverage_95=1.0,
+    )
+    baseline_width = (
+        baseline.calibrated_probability_band_upper
+        - baseline.calibrated_probability_band_lower
+    )
+
+    # Coverage shortfall at 0.75: inflation = sqrt(0.95/0.75) ≈ 1.1255
+    widened = derive_forecast_sigma_v2(
+        ridge_residual_se_hac=0.05,
+        isotonic_bootstrap_se=0.07,
+        historical_return_sigma=0.15,
+        analog_period_dispersion_sigma=0.12,
+        calibrated_probability=0.50,
+        horizon="1Y",
+        joint_bootstrap_covariance=0.0,
+        empirical_coverage_95=0.75,
+    )
+    widened_width = (
+        widened.calibrated_probability_band_upper
+        - widened.calibrated_probability_band_lower
+    )
+
+    # Band width must scale by inflation factor (machine-exact since
+    # band is clipped only if it would exceed [0, 1]; here calibrated
+    # probability is 0.5 with narrow half-width so no clipping occurs).
+    expected_ratio = math.sqrt(0.95 / 0.75)
+    actual_ratio = widened_width / baseline_width
+    assert math.isclose(actual_ratio, expected_ratio, rel_tol=1e-10), (
+        f"L5b-F F-H1: expected band-width ratio {expected_ratio} when "
+        f"empirical_coverage_95=0.75 vs baseline coverage=1.0; got "
+        f"{actual_ratio}"
+    )
+    # Sanity: band is at least 10% wider than baseline.
+    assert widened_width > 1.10 * baseline_width
+
+
+def test_lf1_v2_band_widens_when_covariance_positive():
+    """L5b-F F.1.2 POS: v2 wrapper recomputes band using
+    forecast_sigma_with_covariance when joint_bootstrap_covariance > 0,
+    widening beyond the v1 quadrature band.
+
+    Closes F-H1 by verifying the FIX scales band by the joint sigma
+    (with covariance term) rather than the independence-assumption
+    quadrature sigma."""
+    sigma_ridge = 0.05
+    sigma_iso = 0.07
+    # Choose covariance such that v2 sigma = 2 × v1 quadrature sigma:
+    #   v1² = σ_r² + σ_i²; v2² = σ_r² + σ_i² + 2*cov = 4 * v1²
+    #   2*cov = 3 * v1² → cov = 1.5 * v1²
+    sigma_v1_sq = sigma_ridge ** 2 + sigma_iso ** 2
+    cov_for_doubled_sigma = 1.5 * sigma_v1_sq
+
+    baseline = derive_forecast_sigma_v2(
+        ridge_residual_se_hac=sigma_ridge,
+        isotonic_bootstrap_se=sigma_iso,
+        historical_return_sigma=0.15,
+        analog_period_dispersion_sigma=0.12,
+        calibrated_probability=0.50,
+        horizon="1Y",
+        joint_bootstrap_covariance=0.0,  # zero covariance → v1 quadrature
+        empirical_coverage_95=1.0,
+    )
+    baseline_width = (
+        baseline.calibrated_probability_band_upper
+        - baseline.calibrated_probability_band_lower
+    )
+
+    widened = derive_forecast_sigma_v2(
+        ridge_residual_se_hac=sigma_ridge,
+        isotonic_bootstrap_se=sigma_iso,
+        historical_return_sigma=0.15,
+        analog_period_dispersion_sigma=0.12,
+        calibrated_probability=0.50,
+        horizon="1Y",
+        joint_bootstrap_covariance=cov_for_doubled_sigma,
+        empirical_coverage_95=1.0,
+    )
+    widened_width = (
+        widened.calibrated_probability_band_upper
+        - widened.calibrated_probability_band_lower
+    )
+
+    # Band width ratio ≈ 2.0 since both half-widths scale with sigma.
+    actual_ratio = widened_width / baseline_width
+    assert math.isclose(actual_ratio, 2.0, rel_tol=1e-10), (
+        f"L5b-F F-H1: expected band-width ratio 2.0 when sigma_v2 = "
+        f"2*sigma_v1 (via positive covariance); got {actual_ratio}"
+    )
+
+
+def test_lf1_v2_band_matches_v1_when_no_covariance_no_inflation():
+    """L5b-F F.1.3 POS-inv: when joint_bootstrap_covariance=0 AND
+    empirical_coverage_95=1.0, v2's recomputed band equals v1's
+    quadrature band to floating-point tolerance.
+
+    Defensive invariant ensuring the F-H1 fix preserves backward
+    compatibility when v2 is called with v1-equivalent (degenerate)
+    parameters. Counts as NEG-flavor per L5-B1 accounting convention
+    (POS-inv invariant test under degenerate inputs)."""
+    v1_result = derive_forecast_sigma(
+        ridge_residual_se_hac=0.05,
+        isotonic_bootstrap_se=0.07,
+        historical_return_sigma=0.15,
+        analog_period_dispersion_sigma=0.12,
+        calibrated_probability=0.50,
+        horizon="1Y",
+    )
+    v2_result = derive_forecast_sigma_v2(
+        ridge_residual_se_hac=0.05,
+        isotonic_bootstrap_se=0.07,
+        historical_return_sigma=0.15,
+        analog_period_dispersion_sigma=0.12,
+        calibrated_probability=0.50,
+        horizon="1Y",
+        joint_bootstrap_covariance=0.0,  # v1-equivalent
+        empirical_coverage_95=1.0,        # no inflation
+    )
+    assert math.isclose(
+        v2_result.calibrated_probability_band_lower,
+        v1_result.calibrated_probability_band_lower,
+        abs_tol=1e-12,
+    )
+    assert math.isclose(
+        v2_result.calibrated_probability_band_upper,
+        v1_result.calibrated_probability_band_upper,
+        abs_tol=1e-12,
+    )

@@ -376,13 +376,30 @@ def derive_forecast_sigma_v2(
         target_coverage=_COVERAGE_TARGET_DEFAULT,
     )
 
+    # ---- L5b-F F-H1: v2 band recomputation (R6 reviewer finding).
+    # v1's band uses the quadrature sigma (independence assumption);
+    # v2 must apply the covariance widening AND coverage inflation
+    # factor so the reported confidence interval correctly reflects
+    # the joint bootstrap uncertainty + observed coverage shortfall.
+    # Prior to L5b-F (l5b-e-accept and earlier), v2 copied v1's band
+    # verbatim from v1_result.calibrated_probability_band_{lower,upper},
+    # which silently dropped the covariance + coverage scaling. Closes
+    # Codex 5.5 + ChatGPT 5.5 R6 finding F-H1.
+    # Formula: half-width = z * forecast_sigma_with_covariance *
+    # coverage_inflation_factor; band clipped to [0, 1] per spec §5.E.1.
+    v2_half_width = (
+        v1_result.z_value * forecast_sigma_with_cov * coverage_inflation
+    )
+    band_lower_v2 = max(0.0, calibrated_probability - v2_half_width)
+    band_upper_v2 = min(1.0, calibrated_probability + v2_half_width)
+
     return ForecastSigmaResult(
         horizon=v1_result.horizon,
         forecast_sigma=v1_result.forecast_sigma,
         return_sigma=v1_result.return_sigma,
         analog_dispersion_sigma=v1_result.analog_dispersion_sigma,
-        calibrated_probability_band_lower=v1_result.calibrated_probability_band_lower,
-        calibrated_probability_band_upper=v1_result.calibrated_probability_band_upper,
+        calibrated_probability_band_lower=band_lower_v2,    # L5b-F F-H1: v2 recomputation (was v1_result copy pre-L5b-F)
+        calibrated_probability_band_upper=band_upper_v2,    # L5b-F F-H1: v2 recomputation (was v1_result copy pre-L5b-F)
         diagnostic_only=False,                  # KICK-2: production-grade
         z_value=v1_result.z_value,
         joint_bootstrap_sigma=forecast_sigma_with_cov,  # joint estimate via cov path

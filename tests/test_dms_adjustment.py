@@ -264,3 +264,85 @@ def test_kick7_gate25_1_7_validator_fails_when_memo_missing_via_monkeypatch(
         f"FAIL finding should cite 'DMS_SOURCE_MEMO.md missing'; "
         f"got: {fail_findings[0]}"
     )
+
+
+# ===========================================================================
+# L5b-F Phase 5 — F-M4b DMS memo prose clarification (1 new test)
+# ===========================================================================
+# Closes Codex 5.5 + ChatGPT 5.5 R6 finding F-M4b on DMS memo §3 prose
+# (Strategic Note C clarification: two distinct quantities, not a single
+# inconsistent range).
+
+def test_lf5_dms_memo_distinguishes_quantity_a_from_quantity_b():
+    """L5b-F F.5.3 POS: DMS_SOURCE_MEMO.md §3 prose clearly
+    distinguishes Quantity A (underlying US-vs-global gap; 200-300 bps)
+    from Quantity B (conservative forecast adjustment; 100-200 bps).
+    Closes R6 finding F-M4b per Strategic Note C clarification."""
+    memo_path = pathlib.Path(__file__).resolve().parents[1] / "DMS_SOURCE_MEMO.md"
+    assert memo_path.exists(), f"DMS_SOURCE_MEMO.md missing at {memo_path}"
+    text = memo_path.read_text(encoding="utf-8")
+    # Both quantities must appear in prose with explicit role distinction.
+    assert "Quantity A" in text, (
+        "L5b-F F-M4b: §3 prose should label Quantity A (underlying gap)"
+    )
+    assert "Quantity B" in text, (
+        "L5b-F F-M4b: §3 prose should label Quantity B (conservative adjustment)"
+    )
+    # Both numeric ranges present.
+    assert "two-hundred-to-three-hundred" in text, (
+        "L5b-F F-M4b: §3 must reference 200-300 bps underlying gap"
+    )
+    assert "one-hundred-to-two-hundred" in text, (
+        "L5b-F F-M4b: §3 must reference 100-200 bps conservative adjustment"
+    )
+    # Strategic Note C reference present.
+    assert "Strategic Note C" in text, (
+        "L5b-F F-M4b: §3 should cite Strategic Note C clarification"
+    )
+
+
+# ===========================================================================
+# L5b-F Phase 6 — F-O1 lazy credential gating (2 new tests)
+# ===========================================================================
+# Closes Codex 5.5 + ChatGPT 5.5 R6 finding F-O1 (import-time
+# FRED_API_KEY raise prevented analysis-module test collection without
+# the env var; fixed via require_fred_api_key() lazy helper).
+
+def test_lf6_require_fred_api_key_returns_value_when_set(monkeypatch):
+    """L5b-F F.6.1 POS: ``require_fred_api_key()`` returns the FRED
+    API key value when ``FRED_API_KEY`` is set in config. Verifies
+    the happy-path lazy validation contract."""
+    import macro_pipeline.config as _config
+
+    monkeypatch.setattr(_config, "FRED_API_KEY", "test_fake_key_value")
+    result = _config.require_fred_api_key()
+    assert result == "test_fake_key_value", (
+        f"L5b-F F-O1: require_fred_api_key() should return the FRED "
+        f"key value when set; got {result!r}"
+    )
+
+
+def test_lf6_require_fred_api_key_raises_when_none(monkeypatch):
+    """L5b-F F.6.2 NEG: ``require_fred_api_key()`` raises
+    ``RuntimeError`` with an actionable error message when
+    ``FRED_API_KEY`` is None (not set in environment). Closes R6
+    finding F-O1 fail-closed-at-call-site contract."""
+    import macro_pipeline.config as _config
+
+    monkeypatch.setattr(_config, "FRED_API_KEY", None)
+    with pytest.raises(RuntimeError, match=r"FRED_API_KEY is not set"):
+        _config.require_fred_api_key()
+
+
+def test_lf6_require_fred_api_key_raises_on_empty_string(monkeypatch):
+    """L5b-F F.6.3 NEG: ``require_fred_api_key()`` raises
+    ``RuntimeError`` even when ``FRED_API_KEY`` is an empty string
+    (not just None). Defense in depth against degenerate env-var
+    assignments — an empty-string export should NOT silently pass
+    through to ``Fred(api_key="")`` which would fail at network call
+    time with an opaque auth error."""
+    import macro_pipeline.config as _config
+
+    monkeypatch.setattr(_config, "FRED_API_KEY", "")  # empty string
+    with pytest.raises(RuntimeError, match=r"FRED_API_KEY is not set"):
+        _config.require_fred_api_key()

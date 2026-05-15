@@ -5428,6 +5428,118 @@ def validate_gate24_forecast_sigma() -> GateReport:
                     f"v1={v1_probe.diagnostic_only}); expected v2=False / "
                     "v1=True"
                 )
+
+            # ----------------------------------------------------------
+            # L5b-F F-H1 — Criteria 15 + 16: v2 band recomputation
+            # ----------------------------------------------------------
+            # Closes Codex 5.5 + ChatGPT 5.5 R6 finding F-H1 (v2 wrapper
+            # was copying v1's quadrature band rather than applying the
+            # covariance + coverage inflation factor). Two runtime
+            # probes verify the FIX widens the band correctly under
+            # coverage shortfall (criterion 15) AND positive covariance
+            # (criterion 16).
+            #
+            # Criterion 15 — v2 band widens when empirical_coverage < 0.90.
+            v2_cov_baseline = derive_forecast_sigma_v2(
+                ridge_residual_se_hac=0.05,
+                isotonic_bootstrap_se=0.07,
+                historical_return_sigma=0.15,
+                analog_period_dispersion_sigma=0.12,
+                calibrated_probability=0.50,
+                horizon="1Y",
+                joint_bootstrap_covariance=0.0,
+                empirical_coverage_95=1.0,
+            )
+            v2_cov_widened = derive_forecast_sigma_v2(
+                ridge_residual_se_hac=0.05,
+                isotonic_bootstrap_se=0.07,
+                historical_return_sigma=0.15,
+                analog_period_dispersion_sigma=0.12,
+                calibrated_probability=0.50,
+                horizon="1Y",
+                joint_bootstrap_covariance=0.0,
+                empirical_coverage_95=0.75,  # below 0.90 → inflation
+            )
+            baseline_width_cov = (
+                v2_cov_baseline.calibrated_probability_band_upper
+                - v2_cov_baseline.calibrated_probability_band_lower
+            )
+            widened_width_cov = (
+                v2_cov_widened.calibrated_probability_band_upper
+                - v2_cov_widened.calibrated_probability_band_lower
+            )
+            summary["criterion_15_baseline_width"] = baseline_width_cov
+            summary["criterion_15_widened_width"] = widened_width_cov
+            summary["criterion_15_ratio"] = (
+                widened_width_cov / baseline_width_cov
+                if baseline_width_cov > 0 else float("nan")
+            )
+            if widened_width_cov > baseline_width_cov * 1.05:
+                findings.append(
+                    f"Criterion 15 PASS [L5b-F F-H1]: v2 band widens "
+                    f"when empirical_coverage_95<0.90 (baseline width "
+                    f"{baseline_width_cov:.4f} at coverage=1.0; widened "
+                    f"width {widened_width_cov:.4f} at coverage=0.75; "
+                    f"ratio {widened_width_cov/baseline_width_cov:.4f}); "
+                    "closes R6 reviewer finding that v2 copied v1's "
+                    "band without applying coverage inflation"
+                )
+            else:
+                findings.append(
+                    f"FAIL: Criterion 15 [L5b-F F-H1] - v2 band did "
+                    f"not widen under coverage shortfall (baseline="
+                    f"{baseline_width_cov}, widened={widened_width_cov})"
+                )
+
+            # Criterion 16 — v2 band widens when covariance > 0.
+            _sigma_v1_sq_for_c16 = 0.05 ** 2 + 0.07 ** 2
+            _cov_for_doubled = 1.5 * _sigma_v1_sq_for_c16
+            v2_cov_zero = derive_forecast_sigma_v2(
+                ridge_residual_se_hac=0.05,
+                isotonic_bootstrap_se=0.07,
+                historical_return_sigma=0.15,
+                analog_period_dispersion_sigma=0.12,
+                calibrated_probability=0.50,
+                horizon="1Y",
+                joint_bootstrap_covariance=0.0,
+                empirical_coverage_95=1.0,
+            )
+            v2_cov_positive = derive_forecast_sigma_v2(
+                ridge_residual_se_hac=0.05,
+                isotonic_bootstrap_se=0.07,
+                historical_return_sigma=0.15,
+                analog_period_dispersion_sigma=0.12,
+                calibrated_probability=0.50,
+                horizon="1Y",
+                joint_bootstrap_covariance=_cov_for_doubled,
+                empirical_coverage_95=1.0,
+            )
+            width_zero_cov = (
+                v2_cov_zero.calibrated_probability_band_upper
+                - v2_cov_zero.calibrated_probability_band_lower
+            )
+            width_positive_cov = (
+                v2_cov_positive.calibrated_probability_band_upper
+                - v2_cov_positive.calibrated_probability_band_lower
+            )
+            summary["criterion_16_width_zero_cov"] = width_zero_cov
+            summary["criterion_16_width_positive_cov"] = width_positive_cov
+            if width_positive_cov > width_zero_cov * 1.5:
+                findings.append(
+                    f"Criterion 16 PASS [L5b-F F-H1]: v2 band widens "
+                    f"when joint_bootstrap_covariance>0 (zero-cov "
+                    f"width {width_zero_cov:.4f}; positive-cov width "
+                    f"{width_positive_cov:.4f}; ratio "
+                    f"{width_positive_cov/width_zero_cov:.4f}); "
+                    "closes R6 reviewer finding (sigma_v2 with "
+                    "covariance widens band beyond v1 quadrature)"
+                )
+            else:
+                findings.append(
+                    f"FAIL: Criterion 16 [L5b-F F-H1] - v2 band did "
+                    f"not widen under positive covariance (zero-cov="
+                    f"{width_zero_cov}, positive-cov={width_positive_cov})"
+                )
         except ImportError as exc:
             findings.append(
                 f"FAIL: Criterion 12 [KICK-2] - derive_forecast_sigma_v2 "
@@ -6154,7 +6266,9 @@ def validate_gate27_regime_conditional_validation() -> GateReport:
             compute_regime_conditional_oos_validation,
         )
 
-        # Criterion 27.1 - API present + 14 no-default fields.
+        # Criterion 27.1 - API present + 32 no-default fields
+        # (14 L5b-D baseline + 5 L5b-F Phase 2 sample-size+cap fields +
+        # 13 L5b-F Phase 4 Murphy/OOD/Lucas fields).
         from dataclasses import MISSING as _MISSING_GATE27
         expected_fields = {
             "full_sample_brier", "recession_subset_brier",
@@ -6168,6 +6282,20 @@ def validate_gate27_regime_conditional_validation() -> GateReport:
             "regime_sensitivity_flag",
             "n_recession_obs", "n_expansion_obs", "n_pre_1978_obs",
             "pre_1978_handling",
+            # L5b-F Phase 2 — sample-size + confidence cap fields (5 new).
+            "horizon", "n_eff_recession", "n_eff_expansion",
+            "max_confidence_cap", "diagnostic_only",
+            # L5b-F Phase 4 — Murphy decomposition by stratum (8 new).
+            "reliability_recession", "resolution_recession",
+            "uncertainty_recession",
+            "reliability_expansion", "resolution_expansion",
+            "uncertainty_expansion",
+            "murphy_ci_recession", "murphy_ci_expansion",
+            # L5b-F Phase 4 — OOD reserve (1 new; F-M2 fail-closed).
+            "ood_reserve_fraction",
+            # L5b-F Phase 4 — Lucas critique (4 new; F-M3).
+            "lucas_flag", "regime_shift_test",
+            "pre_post_metric_delta", "lucas_warning_text",
         }
         actual_fields = set(
             RegimeConditionalDiagnostics.__dataclass_fields__.keys()
@@ -6265,6 +6393,8 @@ def validate_gate27_regime_conditional_validation() -> GateReport:
             forward_returns_binary=_y,
             observation_dates=_dates,
             regime_classifier=_classifier,
+            horizon=1,  # L5b-F Phase 2 — required keyword-only kwarg
+            ood_reserve_fraction=0.10,  # L5b-F Phase 4 F-M2 — fail-closed
         )
         _flag_consistent = isinstance(_diag, RegimeConditionalDiagnostics) and (
             _diag.n_recession_obs == _n_rec
@@ -6309,6 +6439,24 @@ def validate_gate27_regime_conditional_validation() -> GateReport:
                 n_expansion_obs=10,
                 n_pre_1978_obs=0,
                 pre_1978_handling="bogus",  # invalid; must raise
+                horizon=1,
+                n_eff_recession=10,
+                n_eff_expansion=10,
+                max_confidence_cap=0.85,
+                diagnostic_only=False,
+                reliability_recession=float("nan"),
+                resolution_recession=float("nan"),
+                uncertainty_recession=float("nan"),
+                reliability_expansion=float("nan"),
+                resolution_expansion=float("nan"),
+                uncertainty_expansion=float("nan"),
+                murphy_ci_recession=(float("nan"), float("nan")),
+                murphy_ci_expansion=(float("nan"), float("nan")),
+                ood_reserve_fraction=0.10,
+                lucas_flag=False,
+                regime_shift_test=None,
+                pre_post_metric_delta=None,
+                lucas_warning_text=None,
             )
             findings.append(
                 "FAIL: Criterion 27.4 [L5b-D] - invalid pre_1978_handling "
@@ -6327,11 +6475,117 @@ def validate_gate27_regime_conditional_validation() -> GateReport:
                 f"type {type(exc).__name__}: {exc}"
             )
 
+        # ----------------------------------------------------------
+        # L5b-F Phase 2 — Criteria 27.5 + 27.6: regime-stratified
+        # confidence cap enforcement (F-H2)
+        # ----------------------------------------------------------
+        # Criterion 27.5 — 10Y horizon regime-stratified output produces
+        # max_confidence_cap = 0.55 per Standing Order #10 hard cap.
+        try:
+            _diag_10y = compute_regime_conditional_oos_validation(
+                calibrated_probabilities=_p,
+                forward_returns_binary=_y,
+                observation_dates=_dates,
+                regime_classifier=_classifier,
+                horizon=10,  # 10Y triggers the hard cap per SO #10
+                ood_reserve_fraction=0.10,  # L5b-F Phase 4 F-M2
+            )
+            _diag_1y = compute_regime_conditional_oos_validation(
+                calibrated_probabilities=_p,
+                forward_returns_binary=_y,
+                observation_dates=_dates,
+                regime_classifier=_classifier,
+                horizon=1,   # 1Y triggers the standard cap per Vision §10
+                ood_reserve_fraction=0.10,  # L5b-F Phase 4 F-M2
+            )
+            summary["criterion_27_5_cap_at_10y"] = _diag_10y.max_confidence_cap
+            summary["criterion_27_5_cap_at_1y"] = _diag_1y.max_confidence_cap
+            if (
+                _diag_10y.max_confidence_cap == 0.55
+                and _diag_1y.max_confidence_cap == 0.85
+            ):
+                findings.append(
+                    "Criterion 27.5 PASS [L5b-F F-H2]: regime-stratified "
+                    "confidence cap enforcement — horizon=10 produces "
+                    "max_confidence_cap=0.55 (Standing Order #10 hard "
+                    "cap); horizon=1 produces max_confidence_cap=0.85 "
+                    "(Vision v2.0 §10 standard cap); closes Codex 5.5 + "
+                    "ChatGPT 5.5 R6 finding F-H2 on 10Y regime-"
+                    "stratified hard cap"
+                )
+            else:
+                findings.append(
+                    f"FAIL: Criterion 27.5 [L5b-F F-H2] - cap enforcement "
+                    f"misaligned (10Y cap={_diag_10y.max_confidence_cap}, "
+                    f"1Y cap={_diag_1y.max_confidence_cap}); expected "
+                    "0.55 / 0.85"
+                )
+        except Exception as exc:
+            findings.append(
+                f"FAIL: Criterion 27.5 [L5b-F F-H2] - unexpected exception "
+                f"type {type(exc).__name__}: {exc}"
+            )
+
+        # Criterion 27.6 — Invariant 8 enforcement: max_confidence_cap
+        # must match horizon (10Y=0.55, else=0.85). Mismatched cap raises.
+        try:
+            RegimeConditionalDiagnostics(
+                full_sample_brier=0.25,
+                recession_subset_brier=0.25,
+                expansion_subset_brier=0.25,
+                full_sample_climatology_brier=0.25,
+                recession_climatology_brier=0.25,
+                expansion_climatology_brier=0.25,
+                full_sample_brier_improvement=0.0,
+                recession_brier_improvement=0.0,
+                expansion_brier_improvement=0.0,
+                regime_sensitivity_flag=False,
+                n_recession_obs=120,
+                n_expansion_obs=120,
+                n_pre_1978_obs=0,
+                pre_1978_handling="diagnostic_only",
+                horizon=10,                 # 10Y horizon
+                n_eff_recession=10,
+                n_eff_expansion=10,
+                max_confidence_cap=0.85,    # WRONG: must be 0.55 for 10Y
+                diagnostic_only=False,
+                reliability_recession=float("nan"),
+                resolution_recession=float("nan"),
+                uncertainty_recession=float("nan"),
+                reliability_expansion=float("nan"),
+                resolution_expansion=float("nan"),
+                uncertainty_expansion=float("nan"),
+                murphy_ci_recession=(float("nan"), float("nan")),
+                murphy_ci_expansion=(float("nan"), float("nan")),
+                ood_reserve_fraction=0.10,
+                lucas_flag=False,
+                regime_shift_test=None,
+                pre_post_metric_delta=None,
+                lucas_warning_text=None,
+            )
+            findings.append(
+                "FAIL: Criterion 27.6 [L5b-F F-H2] - inconsistent "
+                "max_confidence_cap (horizon=10 + cap=0.85) should raise "
+                "ValueError per invariant 8; no exception"
+            )
+        except ValueError:
+            findings.append(
+                "Criterion 27.6 PASS [L5b-F F-H2]: invariant 8 enforcement "
+                "confirms RegimeConditionalDiagnostics.__post_init__ "
+                "rejects max_confidence_cap inconsistent with horizon "
+                "(10Y cap must be 0.55 per Standing Order #10)"
+            )
+        except Exception as exc:
+            findings.append(
+                f"FAIL: Criterion 27.6 [L5b-F F-H2] - unexpected exception "
+                f"type {type(exc).__name__}: {exc}"
+            )
+
     except ImportError as exc:
         findings.append(f"FAIL: Criterion 27.1 - import error: {exc}")
 
     warnings_list.append(
-        "Criterion 27.5 (all 7 L5b-D tests in "
+        "Criterion 27.7 (all L5b-D + L5b-F Phase 2 tests in "
         "tests/test_regime_conditional_validation.py PASS) asserted "
         "via full pytest"
     )

@@ -23,10 +23,41 @@ for _d in (DATA_CACHE, DATA_DERIVED, DATA_OUTPUT):
     _d.mkdir(parents=True, exist_ok=True)
 
 FRED_API_KEY = os.environ.get("FRED_API_KEY")
-if not FRED_API_KEY:
-    raise RuntimeError(
-        "FRED_API_KEY is not set. Add it to .env at project root or export it."
-    )
+# L5b-F Phase 6 (F-O1) — lazy credential gating per Strategic Note A.
+# Closes Codex 5.5 + ChatGPT 5.5 R6 finding F-O1: prior to L5b-F, the
+# config module raised RuntimeError at import time if FRED_API_KEY was
+# missing, which prevented tests for unrelated modules (e.g.,
+# regime_conditional_validation, fdr_gating) from collecting on CI/dev
+# machines without the env var. Post-L5b-F: FRED_API_KEY may be None at
+# import; callers invoking FRED API endpoints must call
+# require_fred_api_key() at the call site to validate explicitly.
+
+
+def require_fred_api_key() -> str:
+    """Return the FRED API key, raising RuntimeError if not set.
+
+    L5b-F Phase 6 (F-O1) lazy validation helper. Call this from
+    FRED-API call sites instead of importing the module-level
+    ``FRED_API_KEY`` constant — this enables analysis modules
+    (regime_conditional_validation, fdr_gating, etc.) to import
+    without requiring FRED_API_KEY in the environment.
+
+    Raises
+    ------
+    RuntimeError
+        When ``FRED_API_KEY`` is unset OR empty string (defensive
+        against degenerate env-var assignments). The check uses
+        ``not FRED_API_KEY`` truthiness rather than ``is None`` so
+        an empty-string assignment is caught at the call site.
+    """
+    if not FRED_API_KEY:
+        raise RuntimeError(
+            "FRED_API_KEY is not set. Add it to .env at project root "
+            "or export it. (L5b-F F-O1: lazy credential gating; "
+            "validation occurs at FRED API call site rather than at "
+            "macro_pipeline.config import time)"
+        )
+    return FRED_API_KEY
 
 # Master business-day index start (preprocessing guide Stage 1.5).
 MASTER_INDEX_START = "1959-01-01"

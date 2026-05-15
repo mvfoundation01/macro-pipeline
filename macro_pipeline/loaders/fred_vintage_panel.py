@@ -36,7 +36,11 @@ import pandas as pd
 from fredapi import Fred
 
 from macro_pipeline.cache import atomic_write_bytes, atomic_write_parquet, read_cache_validated
-from macro_pipeline.config import DATA_CACHE, FRED_API_KEY
+from macro_pipeline.config import (
+    DATA_CACHE,
+    FRED_API_KEY,
+    require_fred_api_key,  # L5b-F F-O1 lazy credential validation
+)
 
 log = logging.getLogger(__name__)
 
@@ -78,7 +82,7 @@ def build_vintage_panel(series_id: str, fred: Fred | None = None) -> pd.DataFram
     observation. ``get_pit_value`` interprets the half-open interval
     ``[realtime_start, realtime_end)`` as the visibility window.
     """
-    fred = fred or Fred(api_key=FRED_API_KEY)
+    fred = fred or Fred(api_key=require_fred_api_key())  # L5b-F F-O1
     raw = fred.get_series_all_releases(series_id)
     if raw is None or raw.empty:
         raise ValueError(f"FRED returned no vintage rows for {series_id}")
@@ -240,7 +244,7 @@ def materialize_all_vintage_panels(
     (default) skips series whose parquet already exists.
     """
     targets = list(only) if only else list(VINTAGE_REQUIRED_SERIES)
-    fred = Fred(api_key=FRED_API_KEY)
+    fred = Fred(api_key=require_fred_api_key())  # L5b-F F-O1 lazy validation
     out: dict[str, Path] = {}
     for sid in targets:
         try:
