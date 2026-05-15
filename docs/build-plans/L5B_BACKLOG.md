@@ -537,6 +537,177 @@ Baseline seven-hundred-eighty to eight-hundred-two. NEG-flavor distribution: nin
 
 ---
 
+### L5b-G — AP-AUTH-49 precommit infrastructure cherry-pick to main (2026-05-15)
+
+**ACCEPT tag**: `l5b-g-accept` (on `main`; NOT on `claude/layer-5-build`).
+**Branch**: `main` only — out-of-band relative to the `claude/layer-5-build` build branch.
+**Authority**: R6 reviewer recommendation (Codex 5.5 plus ChatGPT 5.5 dual concur) plus Strategic disposition cycle 2026-05-15 (small standalone reviewer-driven sub-phase; AP-AUTH-53 eighth-instance pattern).
+**Approach**: Option B (copy plus manual commit) per Strategic preference — cleaner separation versus Option A cherry-pick (which would risk pulling layer-5-build artifacts not in scope).
+
+**Scope**: Migrate nine precommit infrastructure files from `claude/layer-5-build` to `main`. Resolves R5 push remediation cycle tactical workaround (untracked validator scripts at `scripts/precommit/` outside git tracking) into permanent tracked configuration. Plus migrate `docs/ap_register.md` to `main` (full AP-AUTH register at AP-AUTH-50 through AP-AUTH-54 state post-L5b-E migration; institutional documentation treated as in-scope per Strategic disposition).
+
+**Resolution**: AP-AUTH-49 marked RESOLVED in `docs/ap_register.md` with reference to L5b-G commit. Future `docs/**/*.md` commits on `main` no longer require Track A's untracked-validators tactical workaround.
+
+**AP-AUTH-54 envelope**: documentation-primary within-envelope variant at eight instances (envelope STAYS CLOSED entering and exiting L5b-G; no novel sub-characteristic surfaced).
+
+**Diff stat**: ten files; nine-hundred-fifteen insertions; zero deletions.
+
+**Files migrated**:
+
+- `scripts/precommit/validate_dual_grep_in_verification.py` (AP-AUTH-41 v6 enforcer; later refined to v7 at L5b-H)
+- `scripts/precommit/validate_no_cumulative_arithmetic.py` (AP-AUTH-42 enforcer)
+- `scripts/precommit/install_hook.py`
+- `scripts/precommit/README.md`
+- `scripts/precommit/tests/dual_grep_should_fail.md` plus `dual_grep_should_pass.md` (renamed at L5b-H with `_VERIFICATION.md` suffix per v7 filename allowlist)
+- `scripts/precommit/tests/no_cumulative_arithmetic_should_fail.md` plus `no_cumulative_arithmetic_should_pass.md`
+- `scripts/precommit/tests/run_hook_self_tests.py`
+- `docs/ap_register.md` (full register at AP-AUTH-47 through AP-AUTH-54 state)
+
+**Test delta**: zero new pytest tests (infrastructure-only sub-phase; pytest baseline unchanged at eight-hundred-two on `claude/layer-5-build`).
+
+**Caller updates**: zero in production code (main-branch hook orchestrator at `.git/hooks/pre-commit` already referenced `scripts/precommit/validate_*.py` paths verbatim; precommit infrastructure now satisfies hook expectations at file-presence level).
+
+**AP-AUTH delta**: zero new codifications. AP-AUTH-49 marked RESOLVED in `docs/ap_register.md` on `main` per Strategic disposition Step 5.
+
+**Sxx delta**: zero.
+
+**Effort variance**: small standalone sub-phase; Strategic nominal thirty-to-forty-five minutes; agent-time approximately fifteen-to-twenty minutes (well under nominal).
+
+---
+
+### L5b-H — AP-AUTH-41 v7 scope refinement plus AP-AUTH-55 codification plus l5b-complete tag move (2026-05-15)
+
+**ACCEPT tag**: `l5b-h-accept` (on `claude/layer-5-build`); `l5b-complete` tag MOVED from `59cb6d0` (L5b-E ACCEPT) to L5b-H ACCEPT commit per pre-flight Task T2.
+**Authority**: R6 reviewer recommendation (Codex 5.5 specific mechanism: filename allowlist plus heading-aware verifier plus Update Log exemption; ChatGPT 5.5 concurrence) plus Strategic disposition cycle 2026-05-15 (final sprint sub-phase; three coordinated tasks). FIFTEENTH and final sub-phase of the L5b sprint; sprint re-closure ceremony.
+**Approach**: atomic commit combining T1 (validator scope refinement) plus T3 (AP-AUTH-55 codification) plus retrospective update — ensures the v7 validator is active at hook validation time when the AP-AUTH-55 entry is scanned.
+
+**Three coordinated tasks**:
+
+| Task | Scope | Outcome |
+|---|---|---|
+| **T1** | AP-AUTH-41 v6 to v7 scope refinement (filename allowlist `*_VERIFICATION.md` plus heading-aware parsing plus Update Log exemption) | Closes R5 docs-suite commit false-positive risk on version-history annotations in vision / methodology / methodology-review v2.0 docs |
+| **T2** | `l5b-complete` tag MOVED from `59cb6d0` (L5b-E ACCEPT) to L5b-H ACCEPT commit (LOCAL plus ORIGIN) | Sprint re-closure ceremony at fifteen of fifteen ACCEPT |
+| **T3** | AP-AUTH-55 codification (push verification at ACCEPT cycle) | Formalises informal Note E enforcement from L5b-F + L5b-G; codifies discipline learned at R5 root-cause analysis |
+
+**AP-AUTH-54 envelope**: ninth instance per Strategic disposition (internal-implementation hardening on validator scope; parallel to KICK-4/5/6 + L5b-A through L5b-D pattern). Envelope RE-OPENS at nine instances; expected STAYS CLOSED at nine instances post-L5b-H. Multi-axis within-envelope variant: T1 internal-implementation refinement (validator scope change) plus T3 documentation codification (AP-AUTH-55 entry).
+
+**T1 implementation summary** (AP-AUTH-41 v7):
+
+- Validator: `scripts/precommit/validate_dual_grep_in_verification.py` v6 to v7
+- Filename allowlist regex: `_VERIFICATION\.md$` case-insensitive
+- Heading-aware state machine: enters "verification" scope on heading matching `\b(mirror integrity|alignment audit|verification|alignment)\b`; enters "update log" exempt state on heading matching `\bupdate\s+log\b`; default state "other" (no enforcement)
+- `re.search()` used (NOT `re.match()`) to handle numbered-prefix headings like `## §1 — Mirror integrity verification`
+- Update Log exemption takes precedence when both Update Log and verification phrases appear in the same heading
+
+**T1 test delta**: zero new pytest tests in `tests/` (validator is precommit-time infrastructure, not pytest-collected). Eight self-tests in `scripts/precommit/tests/run_hook_self_tests.py` (three v6 preserved plus five v7 new):
+
+- v7 baseline: should_pass + should_fail (renamed from v6 with `_VERIFICATION.md` suffix)
+- v7 Update Log exemption (`update_log_exempt_VERIFICATION.md`)
+- v7 heading-scope: alignment claim under non-verification heading (`non_verification_heading_should_pass_VERIFICATION.md`)
+- v7 empty body degenerate (`empty_body_should_pass_VERIFICATION.md`)
+- v7 filename allowlist: non-matching suffix staged (uses should_pass fixture content staged under `*_VERIFICATION_REPORT.md` filename to verify scope-skip)
+
+All eight self-tests PASS. NEG-flavor distribution: two strict NEG (v6 baseline fail + v6 cumulative-arithmetic fail) plus six POS / POS-inv = two of eight equals twenty-five percent strict-NEG; with POS-inv counted as NEG-flavor per L5-B1 convention, five of eight equals sixty-three percent NEG-flavor; floor met.
+
+**T2 implementation summary** (`l5b-complete` tag move):
+
+- `git tag -d l5b-complete` (delete local at `59cb6d0`)
+- `git push origin --delete l5b-complete` (delete remote at `59cb6d0`)
+- `git tag l5b-complete` (re-create at L5b-H HEAD post-commit)
+- `git push origin l5b-complete` (push new)
+- Verification: both LOCAL plus ORIGIN `l5b-complete` resolve to L5b-H ACCEPT commit
+- `l5b-e-accept` remains at `59cb6d0` UNCHANGED (preserves L5b-E ACCEPT anchor for institutional record per pre-flight)
+
+**T3 implementation summary** (AP-AUTH-55 entry):
+
+- New entry inserted in `docs/ap_register.md` after AP-AUTH-54 entry
+- Symptom: R5 root-cause framing (Track A ACCEPT reports cited "HEAD at XXXXXXX" without distinguishing local versus origin)
+- Mitigation discipline four-point list: ACCEPT report cross-reference (local plus origin) plus Phase 7 push step (branch plus explicit tag name) plus ls-remote verification plus reviewer fetch confirmation
+- Enforcement: Strategic disposition templates updated; Track A pre-flight template updated; future ACCEPT reports without push verification = institutionally incomplete
+- Cross-reference: R5 cycle plus L5b-F Note E plus L5b-H pre-flight Task T3 plus AP-AUTH-49 RESOLVED sibling
+
+**Sxx-NN triage**: zero new Sxx markers filed at L5b-H. Thirteenth consecutive prospective-only-or-zero Sxx outcome at the sprint level (eleven Sxx-13..23 inline markers plus L5b-E zero plus L5b-F zero plus L5b-G zero plus L5b-H zero = thirteen).
+
+**Test delta**: zero new pytest tests (T1 is precommit infrastructure refinement; T2 is tag-move operation; T3 is documentation entry). Pytest baseline unchanged at eight-hundred-two on `claude/layer-5-build`.
+
+**Caller updates**: zero (precommit hook orchestrator unchanged; T1 is validator-internal refinement; existing hook references unchanged).
+
+**AP-AUTH delta**: plus one. AP-AUTH-55 codified at this commit per Task T3. AP-AUTH register on `claude/layer-5-build`: one through fifty-five (was one through fifty-four entering L5b-H).
+
+**Sxx delta**: zero.
+
+**Effort variance**: Strategic nominal two-to-three hours; risk-adjusted three-to-four hours; convergence-prior projection one-and-a-half to two hours. Actual: within projection (T1 thirty-to-forty-five minutes plus T3 fifteen minutes plus L5B_BACKLOG retrospective update fifteen minutes plus T2 tag-move plus push verification fifteen minutes).
+
+---
+
+## L5b SPRINT RE-CLOSURE — Cumulative summary (2026-05-15)
+
+**Status**: fifteen of fifteen L5b sub-phases ACCEPT-tagged. L5b OOS hardening sprint CLOSED for the second time. Initial closure at L5b-E ACCEPT (twelve of twelve) was procedurally premature: R6 external reviewer cycle returned RATIFY-WITH-FINDINGS surfacing nine findings (four HIGH plus five MEDIUM) plus F-O1 OPERATIONAL plus AP-AUTH-49 latent debt plus AP-AUTH-41 v7 scope refinement need. L5b-F closed the nine reviewer findings + F-O1 in monolithic scope; L5b-G closed AP-AUTH-49 (precommit infra cherry-pick to main); L5b-H closes the remaining latent debt: AP-AUTH-41 v7 scope refinement + AP-AUTH-55 codification + `l5b-complete` tag move.
+
+Sprint re-closure ceremony at this DUAL TAG: `l5b-h-accept` plus MOVED `l5b-complete` (from `59cb6d0` to L5b-H ACCEPT commit).
+
+### ACCEPT tag inventory (fifteen sub-phases)
+
+| # | Sub-phase | Tag | Branch | Notes |
+|---|---|---|---|---|
+| 1 | KICK-1 (isotonic fit_window invariant) | `l5b-kick-1-accept` | `claude/layer-5-build` | reviewer-driven kickoff |
+| 2 | KICK-2 (forecast σ v2 wrapper + Gate 24) | `l5b-kick-2-accept` | same | AP-AUTH-53 codified |
+| 3 | KICK-3 (L5-C bin reduction + Gate 22) | `l5b-kick-3-accept` | same | reviewer-driven |
+| 4 | KICK-4 (inner-CV z-scaler) | `l5b-kick-4-accept` | same | AP-AUTH-54 first instance |
+| 5 | KICK-5 (bootstrap diagnostics) | `l5b-kick-5-accept` | same | AP-AUTH-54 codified |
+| 6 | KICK-6 (Ridge inference labeling) | `l5b-kick-6-accept` | same | AP-AUTH-54 lightest envelope |
+| 7 | KICK-7 (DMS source memo) | `l5b-kick-7-accept` | same | documentation-primary; AP-AUTH-55 deferred at this point |
+| 8 | L5b-A (stationary block bootstrap) | `l5b-a-accept` | same | original OOS hardening scope begins |
+| 9 | L5b-B (structural break tests) | `l5b-b-accept` | same | original OOS hardening |
+| 10 | L5b-C (BH FDR gating + Gate 26 NEW) | `l5b-c-accept` | same | original OOS hardening |
+| 11 | L5b-D (regime-conditional + Gate 27 NEW) | `l5b-d-accept` | same | original OOS hardening |
+| 12 | L5b-E (sprint retrospective + Gate 28 NEW; initial sprint closure) | `l5b-e-accept` (preserved at `59cb6d0`) | same | superseded by L5b-F/G/H remediation arc |
+| 13 | L5b-F (R6 remediation: four HIGH + five MEDIUM + F-O1) | `l5b-f-accept` | same | reviewer-driven remediation per R6 |
+| 14 | L5b-G (AP-AUTH-49 precommit infra cherry-pick) | `l5b-g-accept` | **`main`** | latent-debt closure on main |
+| 15 | L5b-H (AP-AUTH-41 v7 + AP-AUTH-55 + tag move) | **`l5b-h-accept`** plus MOVED **`l5b-complete`** | `claude/layer-5-build` | reviewer-driven final hardening; sprint re-closure |
+
+### Cumulative deltas (L5 closure to L5b-H ACCEPT)
+
+| Metric | Value at `layer5-complete` baseline | Value at L5b-H (final) | Delta |
+|---|---|---|---|
+| Pytest count on `claude/layer-5-build` | seven-hundred-seventeen | eight-hundred-two | plus eighty-five across fifteen sub-phases |
+| Gate count | twenty-five (Gate 25 SEALED at L5-G) | twenty-eight | plus three (Gate 26 L5b-C + Gate 27 L5b-D + Gate 28 L5b-E) |
+| Gate criteria added (cumulative) | n/a | plus thirty-one (twenty-seven across L5b kickoff arc plus four at L5b-F) | plus thirty-one |
+| AP-AUTH register | one through fifty-two | one through fifty-five | plus three (AP-AUTH-53 KICK-2; AP-AUTH-54 KICK-5; AP-AUTH-55 L5b-H) |
+| Formal Sxx register (`L5_BUILD_SXX_LOG.md`) | S-one through S-twelve all RESOLVED | unchanged | zero new filings |
+| Prospective-only Sxx markers (inline) | zero | eleven (Sxx-13 through Sxx-23 NOT-TRIGGERED per AP-AUTH-46) | plus eleven |
+| New modules under `macro_pipeline/analysis/` | n/a | two (`fdr_gating.py` + `regime_conditional_validation.py`) | plus two |
+| New dataclasses | n/a | four (`BootstrapDiagnostics` + `StructuralBreakDiagnostics` + `FDRGatingDiagnostics` + `RegimeConditionalDiagnostics`) | plus four |
+| `RegimeConditionalDiagnostics` field expansion | n/a | thirty-two no-default fields (L5b-D baseline fourteen + Phase 2 five + Phase 4 thirteen) | plus eighteen at L5b-F |
+| Convergence streak | thirteen of thirteen at L5-H ACCEPT | twenty-eight of twenty-eight at L5b-H ACCEPT | plus fifteen consecutive perfect-ACCEPT sub-phases (entire L5b arc) |
+| Sprint window | n/a | three calendar days (2026-05-13 KICK-1 through 2026-05-15 L5b-H ACCEPT) | three calendar days |
+| Reviewer-concern closure (R6) | n/a (review window opened post-L5-H push) | nine R6 findings (four HIGH + five MEDIUM) plus F-O1 OPERATIONAL = ten of ten | one-hundred percent at L5b-F |
+| AP-AUTH-54 envelope | n/a (codified at KICK-5 ACCEPT) | nine instances (RE-OPENED at L5b-F as eighth; RE-OPENED at L5b-H as ninth; STAYS CLOSED at nine post-L5b-H) | within-envelope multi-axis variants |
+| Banked headroom (cumulative under risk-adjusted budget) | approximately fifty hours at L5 closure | approximately ninety-to-ninety-five hours | plus approximately forty-to-forty-five hours |
+
+### Sprint Re-Closure narrative
+
+The L5b sprint had an initial closure at L5b-E ACCEPT (twelve of twelve sub-phases) which was procedurally premature: R6 external reviewer cycle returned RATIFY-WITH-FINDINGS surfacing nine reviewer findings (four HIGH plus five MEDIUM) plus F-O1 OPERATIONAL plus AP-AUTH-49 latent debt plus AP-AUTH-41 v7 scope refinement need. The remediation arc:
+
+- **L5b-F** (commit `7293acb`, tag `l5b-f-accept`): closed all nine R6 findings plus F-O1 in MONOLITHIC scope; plus eighty-two new tests; Gate 24 plus two criteria; Gate 27 plus two criteria
+- **L5b-G** (commit `412235d` on `main`, tag `l5b-g-accept`): closed AP-AUTH-49 latent debt via precommit infrastructure cherry-pick to main; plus zero new pytest tests (infrastructure-only)
+- **L5b-H** (this commit, tag `l5b-h-accept` plus MOVED `l5b-complete`): closed AP-AUTH-41 v7 scope refinement plus AP-AUTH-55 codification plus `l5b-complete` tag move; plus zero new pytest tests (validator + tag + documentation only)
+
+This sprint re-closure ceremony at L5b-H is the institutional closure of all R6-cycle findings plus AP-AUTH-49 plus AP-AUTH-41 v7 latent debt. Post-L5b-H, the sprint stands at fifteen of fifteen ACCEPT with no outstanding R6 reviewer findings, no AP-AUTH latent debt, and the convergence prior at twenty-eight of twenty-eight perfect-ACCEPT sub-phases (thirteen L5 plus fifteen L5b).
+
+### Next phase (post-L5b-H ACCEPT)
+
+L5b sprint RE-CLOSED. Strategic preference per L5b-H pre-flight §15:
+
+- **Option II (preferred)**: directly to L1.7 MANUAL_INPUT pre-flight. R7 light cycle skipped — all R6 findings closed at L5b-F + verified by Track A per-finding matrix; R7 would add wall-clock delay without clear additional information value.
+- **Option I (alternative)**: R7 reviewer re-engagement (light cycle verifying remediation) if V prefers external validation before L1.7 transition.
+
+Documentation suite v2.0 commit on `main` is complete at HEAD `412235d` (L5b-G ACCEPT). Sprint state is ready for L1.7 transition; Track A standing by for L1.7 pre-flight per Strategic post-L5b-H workflow.
+
+**L5b sprint TRULY COMPLETE at this DUAL TAG.** Master Prompt v3.1 §15 L5b scope CLOSED at second-time sprint closure (initial closure at L5b-E ACCEPT superseded by L5b-F/G/H remediation arc per R6 reviewer findings + AP-AUTH-49 + AP-AUTH-41 v7 + AP-AUTH-55 codification).
+
+---
+
 ## L5b-2 — Implement L3 loaders for ISM New Orders (NAPMNOI) + CB LEI
 
 **Source**: `scoring/crps.py` lines 14-22 documents that `LAYER3_ACTIVE_COMPONENTS` is currently 4 of spec's 6 components. `ism_pmi_neworders` (NAPMNOI) returns FRED 400 (series does not exist post-2018 ISM licensing change); `lei_3d_rule` (CB LEI 6M annualized) has no Tier 1-4 loader (PHILLY_LEI_PROXY blocked by `check_double_counting` vs T10Y3M).

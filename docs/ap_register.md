@@ -209,4 +209,27 @@ L5b-E is OUTSIDE this envelope per Strategic disposition 4 at L5b-E ACCEPT — s
 
 ---
 
-**END — ap_register.md (AP-AUTH-50 + AP-AUTH-51 + AP-AUTH-52 + AP-AUTH-53 + AP-AUTH-54 entries; cumulative provenance §0)**
+## AP-AUTH-55 (NEW; codified 2026-05-15 at L5b-H) — Push verification at ACCEPT cycle
+
+**Symptom**: Track A ACCEPT reports cite "HEAD at XXXXXXX" without distinguishing local-HEAD from origin-HEAD. Local commits never explicitly pushed to origin cause downstream reviewer reachability gaps. External reviewers' `git fetch origin XXXXXXX` fails with "couldn't find remote ref"; full review cycle blocked on procedural visibility.
+
+**Surfaced**: R5 push remediation cycle (2026-05-15) — both R6 external reviewers (Codex 5.5 + ChatGPT 5.5) returned procedural REJECT verdicts because `origin/claude/layer-5-build` was at `e13db61` while local HEAD was at `59cb6d0`. Twelve L5b sprint commits plus thirteen tags had been authored locally but never pushed. Root cause: no Strategic disposition explicitly required `git push origin <branch>` at sub-phase ACCEPT cycle; Track A's "HEAD at XXXXXXX" wording in ACCEPT reports did not distinguish local versus remote state, and the discipline gap went undetected until external reviewers attempted to fetch the artifacts.
+
+**Mitigation discipline**:
+
+1. **ACCEPT report MUST cite both LOCAL HEAD and ORIGIN HEAD as match**. Phrase: "HEAD (local) ... HEAD (origin) ... synced". Bare "HEAD at XXXXXXX" is REVISE-REQUIRED.
+2. **Phase 7 (commit + tag) procedure MUST include explicit push steps**: `git push origin <branch>` followed by `git push origin <tag-name>` (explicit tag name only; NEVER `git push origin --tags` which would publish unrelated tags).
+3. **Verification step**: post-push `git ls-remote --heads --tags origin` showing branch HEAD + relevant tag(s) both point to the ACCEPT commit. Capture verbatim output in ACCEPT report.
+4. **Reviewer prompts MUST require external reviewers to do** `git fetch && git log origin/<branch> -1` confirmation before substantive review begins. If `git fetch origin <commit>` returns "couldn't find remote ref", reviewer surfaces back to Track A for push completion before substantive review.
+
+**Enforcement**: Strategic disposition templates updated to mandate Phase 7 push step plus ACCEPT report cross-reference (local + origin). Track A pre-flight prompt templates updated to mandate push verification before declaring sub-phase complete. Future ACCEPT reports without push verification are institutionally incomplete; Strategic surfaces back to Track A for push completion before formal ACCEPT confirmation. The R5 remediation cycle (2026-05-15) is the canonical example of this discipline gap; this entry codifies the corrective discipline.
+
+**Cross-reference**:
+- R5 push remediation cycle (2026-05-15): `origin/claude/layer-5-build` advanced from `e13db61` to `59cb6d0` via explicit fast-forward push (twelve L5b sprint commits) plus thirteen explicit L5b tag pushes
+- Strategic L5b-F Note E (informal enforcement at L5b-F + L5b-G + L5b-H ACCEPT cycles)
+- Strategic L5b-H pre-flight Task T3 (codification mandate; this entry)
+- AP-AUTH-49 RESOLVED (L5b-G, 2026-05-15) — sibling latent-debt closure pattern at same sprint sub-phase cadence
+
+---
+
+**END — ap_register.md (AP-AUTH-50 + AP-AUTH-51 + AP-AUTH-52 + AP-AUTH-53 + AP-AUTH-54 + AP-AUTH-55 entries; cumulative provenance §0)**

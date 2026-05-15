@@ -20,29 +20,75 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 PRECOMMIT_DIR = REPO_ROOT / "scripts" / "precommit"
 FIXTURES_DIR = PRECOMMIT_DIR / "tests"
 
-# Each tuple: (validator_module, fixture_filename, expected_exit_code, label)
+# Each tuple: (validator_module, fixture_filename, staging_filename,
+#              expected_exit_code, label).
+# staging_filename allows the fixture to be staged under a DIFFERENT
+# name than its source — used to test v7 filename-allowlist gate
+# (stage existing fixture under a non-`*_VERIFICATION.md` name to
+# verify the validator skips it). Use None to stage under the
+# fixture_filename verbatim (the common case).
 SELF_TESTS = [
+    # ---- AP-AUTH-41 v7 dual-grep tests (renamed from v6 + 3 new v7 cases) ----
     (
         "validate_dual_grep_in_verification.py",
-        "dual_grep_should_pass.md",
+        "dual_grep_should_pass_VERIFICATION.md",
+        None,
         0,
-        "dual_grep pass",
+        "dual_grep pass (v7 baseline)",
     ),
     (
         "validate_dual_grep_in_verification.py",
-        "dual_grep_should_fail.md",
+        "dual_grep_should_fail_VERIFICATION.md",
+        None,
         1,
-        "dual_grep fail",
+        "dual_grep fail (v7 baseline; rows under verification heading)",
     ),
+    # L5b-H v7 new: Update Log exemption.
+    (
+        "validate_dual_grep_in_verification.py",
+        "update_log_exempt_VERIFICATION.md",
+        None,
+        0,
+        "v7 Update Log exempt (R5 docs-suite false-positive fix)",
+    ),
+    # L5b-H v7 new: non-verification heading scope.
+    (
+        "validate_dual_grep_in_verification.py",
+        "non_verification_heading_should_pass_VERIFICATION.md",
+        None,
+        0,
+        "v7 heading-scope: alignment claim under non-verification heading",
+    ),
+    # L5b-H v7 new: empty body degenerate input.
+    (
+        "validate_dual_grep_in_verification.py",
+        "empty_body_should_pass_VERIFICATION.md",
+        None,
+        0,
+        "v7 empty body (degenerate-valid)",
+    ),
+    # L5b-H v7 new: filename allowlist gate — stage should_pass fixture
+    # under a close-but-not-match filename (suffix ``_REPORT.md`` instead
+    # of ``_VERIFICATION.md``); v7 must skip it (out of scope).
+    (
+        "validate_dual_grep_in_verification.py",
+        "dual_grep_should_pass_VERIFICATION.md",
+        "dual_grep_should_pass_VERIFICATION_REPORT.md",
+        0,
+        "v7 filename allowlist: non-matching suffix skipped",
+    ),
+    # ---- AP-AUTH-42 cumulative-arithmetic tests (preserved from v6) ----
     (
         "validate_no_cumulative_arithmetic.py",
         "no_cumulative_arithmetic_should_pass.md",
+        None,
         0,
         "no_cumulative_arithmetic pass",
     ),
     (
         "validate_no_cumulative_arithmetic.py",
         "no_cumulative_arithmetic_should_fail.md",
+        None,
         1,
         "no_cumulative_arithmetic fail",
     ),
@@ -67,12 +113,19 @@ def _staged_path_for_fixture(fixture: Path) -> Path:
     raise NotImplementedError  # placeholder; see _run_one for actual approach
 
 
-def _run_one(validator_name: str, fixture_filename: str, expected: int,
+def _run_one(validator_name: str, fixture_filename: str,
+             staging_filename: str | None, expected: int,
              label: str) -> bool:
     """Run one validator against one fixture; return True if pass.
 
     Strategy: stage the fixture under a temporary docs/ subdirectory so
     the validator's in-scope check passes. Tear down after.
+
+    L5b-H AP-AUTH-41 v7 extension: ``staging_filename`` parameter lets
+    a fixture be staged under a different filename than its source.
+    Used to test v7 filename-allowlist (stage existing fixture under
+    a non-``_VERIFICATION.md`` name to verify the validator skips it).
+    Pass ``None`` to stage under the fixture filename verbatim.
     """
     fixture_src = FIXTURES_DIR / fixture_filename
     if not fixture_src.exists():
@@ -80,9 +133,10 @@ def _run_one(validator_name: str, fixture_filename: str, expected: int,
               file=sys.stderr)
         return False
 
+    target_filename = staging_filename or fixture_filename
     docs_staging = REPO_ROOT / "docs" / "_precommit_selftest"
     docs_staging.mkdir(parents=True, exist_ok=True)
-    staged_path = docs_staging / fixture_filename
+    staged_path = docs_staging / target_filename
     staged_path.write_text(
         fixture_src.read_text(encoding="utf-8"), encoding="utf-8"
     )
@@ -126,8 +180,8 @@ def main() -> int:
     print(f"Running {len(SELF_TESTS)} self-tests on pre-commit validators...\n")
     passed = 0
     failed = 0
-    for validator_name, fixture, expected, label in SELF_TESTS:
-        if _run_one(validator_name, fixture, expected, label):
+    for validator_name, fixture, staging, expected, label in SELF_TESTS:
+        if _run_one(validator_name, fixture, staging, expected, label):
             passed += 1
         else:
             failed += 1
