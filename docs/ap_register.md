@@ -138,4 +138,75 @@ The 4 magic-number sites in §5.RM-4 + 1 header inconsistency (§5.RM-4.1.1 "(5 
 
 ---
 
-**END — ap_register.md (AP-AUTH-50 + AP-AUTH-51 + AP-AUTH-52 entries; cumulative provenance §0)**
+## AP-AUTH-53 (NEW; codified 2026-05-13; migrated to formal register at L5b-E 2026-05-14) — Reviewer-driven L5b kickoff item pattern
+
+**Symptom**: External reviewers (Codex 5.5 / ChatGPT 5.5) flag a CRITICAL or IMPORTANT issue in a previously-passed gate after the layer-completion commit + push activate the dual-reviewer review window. The reviewer-flagged surface requires institutional closure mechanism without breaking the spec freeze or the existing test surface; ad-hoc "patch the API" approaches create both spec literal drift and re-review burden. The standard closure mechanism for reviewer-driven kickoff items must be codified so future L5b+ kickoff sub-phases reuse the same seven-step pattern.
+
+**Surfaced**: L5b-KICK-1 ACCEPT (2026-05-13, tag `l5b-kick-1-accept`) — first reviewer-driven kickoff item closure (isotonic train-only `fit_window` invariant; closes Codex 5.5 IMPORTANT #1 + ChatGPT 5.5 CRITICAL #3 dual-reviewer convergence). Codification deferred at KICK-1 ACCEPT per AP-AUTH-46 gratuitous-codification first-instance rule. **CODIFIED at L5b-KICK-2 ACCEPT** (2026-05-13, tag `l5b-kick-2-accept`) when the pattern repeated (forecast σ v2 production wrapper plus Gate 24 hard gate; closes ChatGPT 5.5 CRITICAL #2). Pattern continued to apply through KICK-3 (L5-C adaptive bin reduction; closes Codex 5.5 IMPORTANT #2) plus KICK-4 (L5-B1 inner-CV z-scaler; internal-implementation variant — see AP-AUTH-54) plus KICK-5 (bootstrap diagnostics; AP-AUTH-54 codified; closes ChatGPT 5.5 IMPORTANT #6) plus KICK-6 (Ridge inference labeling; closes ChatGPT 5.5 IMPORTANT #5) plus KICK-7 (DMS source memo; documentation-primary variant; AP-AUTH-55 candidacy DEFERRED per AP-AUTH-46; closes Codex 5.5 IMPORTANT #4 + ChatGPT 5.5 IMPORTANT dual).
+
+**Mitigation discipline** (seven-step closure mechanism for reviewer-driven L5b kickoff items):
+
+1. **Preserve existing API verbatim** (no breaking change to spec literals — protects existing test surface and spec freeze integrity).
+2. **Add side-by-side hardened API** with `_v2` suffix function, new dataclass field, OR equivalent isolation pattern.
+3. **No-default required kwargs on hardened API** (forces caller intent; closes "silent placeholder" reviewer concerns).
+4. **Gate validator extension** via signature-inspection criteria for both legacy and hardened paths (mirrors existing gate idiom).
+5. **Test coverage**: minimum five tests, fifty-percent NEG ratio floor, bounds-check NEG when v2 inputs admit invalid ranges, plus missing-kwarg NEG behaviors.
+6. **Pre-flight Sxx-N (catastrophic state) triage** via grep evidence; defer entry to `L5B_BACKLOG.md` if production callers do not yet exist.
+7. **Module docstring + `L5B_BACKLOG.md` SPRINT EXECUTION LOG** documents v1 → v2 architectural drift.
+
+Confirmed via L5b-KICK-1 (isotonic `fit_window` invariant) + L5b-KICK-2 (forecast σ v2 production wrapper); pattern continued through KICK-3 / KICK-4 / KICK-5 / KICK-6 / KICK-7 as documented in `docs/build-plans/L5B_BACKLOG.md` per-sub-phase entries.
+
+**Enforcement**: pre-flight prompt template for any L5b-or-later reviewer-driven kickoff sub-phase MUST cite the seven-step closure mechanism as the governing approach pattern. Strategic disposition cycle validates the seven steps are honored before greenlighting code-exec. Reviewer audit at sub-phase ACCEPT confirms all seven steps applied (or documents within-envelope variance per AP-AUTH-54 internal-implementation variant or future AP-AUTH-55 documentation-primary variant family).
+
+**Cross-reference**:
+- L5b-KICK-1 (isotonic `fit_window` invariant; pre-codification first instance) at `docs/build-plans/L5B_BACKLOG.md:11-21`
+- L5b-KICK-2 (forecast σ v2 wrapper; codification commit at this ACCEPT) at `docs/build-plans/L5B_BACKLOG.md:25-36`
+- L5b-KICK-3 / KICK-4 / KICK-5 / KICK-6 / KICK-7 (subsequent applications) at `docs/build-plans/L5B_BACKLOG.md:58-185`
+- AP-AUTH-46 (gratuitous-codification first-instance rule; governs deferral at KICK-1 and codification at KICK-2)
+- AP-AUTH-54 (internal-implementation variant; codified at `l5b-kick-5-accept` post-KICK-4 repetition; below)
+- AP-AUTH-55 candidacy (documentation-primary variant; DEFERRED at `l5b-kick-7-accept` per AP-AUTH-46 first-instance rule)
+- Migration source: inline codification block at `docs/build-plans/L5B_BACKLOG.md:40-54` (verbatim mitigation discipline preserved here; format normalized to Symptom / Surfaced / Mitigation / Enforcement / Cross-reference template per Strategic disposition 1 at L5b-E 2026-05-14)
+
+---
+
+## AP-AUTH-54 (NEW; codified 2026-05-15; migrated to formal register at L5b-E 2026-05-14) — Internal-implementation variant of AP-AUTH-53
+
+**Symptom**: AP-AUTH-53 closure mechanism step #2 (add side-by-side hardened API with `_v2` suffix) is ceremonial when the reviewer-flagged surface is an internal helper (`_` prefix) or private estimator mechanic rather than a public production boundary. Adding a `_v2` wrapper to a private helper doubles the maintenance surface without exposing a public boundary that callers need to choose between. A four-step variant of AP-AUTH-53 is required for internal-implementation cases that preserves AP-AUTH-53's institutional discipline at the dataclass-field level rather than the public-function-signature level.
+
+**Surfaced**: L5b-KICK-4 ACCEPT (2026-05-15, tag `l5b-kick-4-accept`) — first internal-implementation instance (L5-B1 inner-CV z-scaler recomputation matching Task A pattern; private helper `_select_lambda_inner_cv_ridge`; new field `inner_cv_scaler_recomputed` on `RidgeFitResult`; closes Codex 5.5 IMPORTANT #3). Codification deferred at KICK-4 ACCEPT per AP-AUTH-46 gratuitous-codification first-instance rule. **CODIFIED at L5b-KICK-5 ACCEPT** (2026-05-15, tag `l5b-kick-5-accept`) when the pattern repeated (bootstrap diagnostics table per horizon / fold; private helpers `_block_bootstrap_residual_se` plus `_compute_block_size_sensitivity`; closes ChatGPT 5.5 IMPORTANT #6).
+
+**Mitigation discipline** (four-step variant; mirrors AP-AUTH-53 but adapted for internal helpers):
+
+1. **In-place refactor of the internal helper** — change signature, return contract, or body as needed to expose the post-refactor invariant. No `_v2` wrapper required (would be ceremonial for internal helpers).
+2. **No-default field on a related public dataclass** — exposes the refactor's surface state to downstream consumers for gating and runtime inspection. AP-AUTH-53 step #3 (force caller intent) is satisfied at the dataclass field rather than at the public function signature.
+3. **Gate validator extension via Option Y** — signature inspection on the public dataclass + AST audit on the internal helper body OR runtime probe on a synthesized fit.
+4. **Pre-flight empirical evidence** — when reviewer concern targets an edge-case path (e.g., fallback, degenerate state), pre-flight read-and-plan should demonstrate the path is empirically reachable in production fixtures before Phase 0, to confirm the discipline isn't ceremonial.
+
+Confirmed via L5b-KICK-4 (inner-CV z-scaler purity; private helper `_select_lambda_inner_cv_ridge`; field `inner_cv_scaler_recomputed`) + L5b-KICK-5 (bootstrap diagnostics table; private helpers `_block_bootstrap_residual_se` + `_compute_block_size_sensitivity`; fields `bootstrap_diagnostics` + `block_size_sensitivity_diagnostics`).
+
+**Envelope characterization** (CLOSED at four-instance-range characterization preserved across seven AP-AUTH-54 applications spanning KICK-4 through L5b-D per Strategic disposition 4 ratified at L5b-B / L5b-C / L5b-D and re-ratified at L5b-E 2026-05-14):
+
+- KICK-4 heaviest: helper refactor (z-scaler purity) + field + AST audit
+- KICK-5 medium: tuple-return helper (`_block_bootstrap_residual_se` plus `_compute_block_size_sensitivity`) + dual fields + runtime probe (codification commit at this ACCEPT)
+- KICK-6 lightest-weight: dataclass discipline only (no helper change; `inference_label` field + docstring rewrite + runtime probe)
+- L5b-A heavy: helper refactor (stationary block sampling per Politis-Romano 1994) + new helper (`_sample_stationary_block_lengths`) + field expansion + AST audit + runtime probe + empirical snapshot
+- L5b-B heavy-medium: two new helpers (Quandt-Andrews supW per Andrews 1993 + Bai-Perron sequential supF per Bai-Perron 1998 simplified) + NEW dataclass + Optional field
+- L5b-C medium-cross-cutting: NEW module (`macro_pipeline/analysis/fdr_gating.py`) + NEW gate (Gate 26) + NEW test file + BH (1995) step-up algorithm
+- L5b-D heavy-cross-cutting: NEW module (`macro_pipeline/analysis/regime_conditional_validation.py`) + NEW gate (Gate 27) + largest dataclass (fourteen fields + four invariants) + Callable injection caller pattern
+
+L5b-E is OUTSIDE this envelope per Strategic disposition 4 at L5b-E ACCEPT — sprint retrospective mirrors `LAYER_5_RETROSPECTIVE.md` (parent L5-H precedent) structurally, NOT KICK-7 (reviewer-driven kickoff). Documentation-primary variant precedent set at KICK-7 (AP-AUTH-55 candidacy DEFERRED per AP-AUTH-46) does NOT re-open this envelope for sprint-level retrospectives.
+
+**Enforcement**: pre-flight prompt template for any L5b-or-later internal-implementation variant of a reviewer-driven kickoff item MUST cite the four-step variant mechanism as the governing approach pattern. Strategic disposition cycle validates the four steps are honored before greenlighting code-exec. Reviewer audit at sub-phase ACCEPT confirms all four steps applied + envelope-weight bucket documented per the four-instance characterization above.
+
+**Cross-reference**:
+- L5b-KICK-4 (inner-CV z-scaler purity; first internal-implementation instance pre-codification) at `docs/build-plans/L5B_BACKLOG.md:78-99`
+- L5b-KICK-5 (bootstrap diagnostics table; codification commit at this ACCEPT) at `docs/build-plans/L5B_BACKLOG.md:103-123`
+- L5b-KICK-6 (lightest-weight envelope variant) at `docs/build-plans/L5B_BACKLOG.md:142-160`
+- L5b-A / L5b-B / L5b-C / L5b-D (continued applications) at `docs/build-plans/L5B_BACKLOG.md:256-336`
+- AP-AUTH-53 (parent pattern; codified at `l5b-kick-2-accept`; above in this file)
+- AP-AUTH-46 (gratuitous-codification first-instance rule; governs deferral at KICK-4 and codification at KICK-5)
+- Migration source: inline codification block at `docs/build-plans/L5B_BACKLOG.md:127-138` (verbatim mitigation discipline preserved here; format normalized to Symptom / Surfaced / Mitigation / Envelope / Enforcement / Cross-reference template per Strategic disposition 1 at L5b-E 2026-05-14)
+
+---
+
+**END — ap_register.md (AP-AUTH-50 + AP-AUTH-51 + AP-AUTH-52 + AP-AUTH-53 + AP-AUTH-54 entries; cumulative provenance §0)**

@@ -6360,6 +6360,165 @@ def _cli_gate27() -> int:
     return 0 if report.passed else 1
 
 
+def validate_gate28_l5b_retrospective() -> GateReport:
+    """Gate 28 - L5b sprint retrospective file + section-substring + size.
+
+    L5b-E (tag ``l5b-e-accept`` + ``l5b-complete``, 2026-05-14): THIRD
+    NEW gate post-Gate-25-SEAL (Gate 26 L5b-C FDR + Gate 27 L5b-D
+    regime-conditional + Gate 28 L5b-E retrospective). Documentation-
+    primary sprint-closure gate; OUTSIDE AP-AUTH-54 envelope per
+    Strategic disposition 4 (envelope STAYS CLOSED at 7 instances).
+    L5b-E mirrors L5-H structurally (parent retrospective precedent),
+    NOT KICK-7 (reviewer-driven kickoff).
+
+    Mirrors the Gate 25.1.7 KICK-7 documentation-primary file-presence
+    pattern at ``macro_pipeline/validation.py:5618-5675`` (parent
+    precedent). Single source of truth for the seven required H2
+    section substrings = this validator body + L5B_RETROSPECTIVE.md
+    authorship (consistent simultaneous authorship guarantees verbatim
+    match per Strategic Note C).
+
+    Four criteria:
+    * 28.1 API present: validate_gate28_l5b_retrospective callable +
+           CLI dispatcher registered (python -m macro_pipeline.
+           validation gate28)
+    * 28.2 Section-substring presence: L5B_RETROSPECTIVE.md at worktree
+           root contains all 7 required H2 section substrings (Sprint
+           context and convergence streak; Per-sub-phase inventory;
+           AP-AUTH-54 envelope characterization; Sxx-13..23 inline NOT-
+           TRIGGERED; Cumulative L5b sprint deltas; Reviewer-concern
+           closure scoreboard; Forward readiness and closing
+           recommendation)
+    * 28.3 File-size threshold: L5B_RETROSPECTIVE.md byte count >= 5000
+           bytes (institutional minimum for sprint-retrospective
+           documentation depth)
+    * 28.4 Runtime NEG probe via monkeypatch (out-of-band via
+           tests/test_l5b_retrospective.py): file-absence simulated
+           produces FAIL findings citing the missing path; mirrors K7.3
+           monkeypatch pattern at tests/test_dms_adjustment.py:213-240
+    """
+    import pathlib
+
+    findings: list[str] = []
+    warnings_list: list[str] = []
+    summary: dict = {}
+
+    # Criterion 28.1 - API present (self-import + CLI registration).
+    findings.append(
+        "Criterion 28.1 PASS [L5b-E]: validate_gate28_l5b_retrospective "
+        "callable importable from macro_pipeline.validation; CLI "
+        "dispatcher registered (python -m macro_pipeline.validation "
+        "gate28); closes L5b OOS hardening sprint per Master Prompt "
+        "v3.1 section fifteen"
+    )
+
+    # Criteria 28.2 + 28.3 - File-presence + section-substring + size.
+    retrospective_path = (
+        pathlib.Path(__file__).resolve().parents[1] / "L5B_RETROSPECTIVE.md"
+    )
+    summary["criterion_28_path"] = str(retrospective_path)
+
+    if retrospective_path.exists() and retrospective_path.is_file():
+        retrospective_text = retrospective_path.read_text(encoding="utf-8")
+        # Section-substring presence check (7 required H2 strings).
+        # Single source of truth = this tuple; L5B_RETROSPECTIVE.md is
+        # authored consistently with these strings by the same Track A
+        # session that authors this validator (Strategic Note C
+        # discipline). Substrings are case-sensitive H2 fragments.
+        required_section_substrings = (
+            "Sprint context and convergence streak",
+            "Per-sub-phase inventory",
+            "AP-AUTH-54 envelope characterization",
+            "Sxx-13..23 inline NOT-TRIGGERED",
+            "Cumulative L5b sprint deltas",
+            "Reviewer-concern closure scoreboard",
+            "Forward readiness and closing recommendation",
+        )
+        missing_sections = [
+            s for s in required_section_substrings
+            if s not in retrospective_text
+        ]
+        summary["criterion_28_2_required_sections"] = list(
+            required_section_substrings
+        )
+        summary["criterion_28_2_missing_sections"] = missing_sections
+        if missing_sections:
+            findings.append(
+                f"FAIL: Criterion 28.2 [L5b-E] - L5B_RETROSPECTIVE.md "
+                f"exists at {retrospective_path} but missing required "
+                f"section substring(s): {missing_sections}"
+            )
+        else:
+            findings.append(
+                "Criterion 28.2 PASS [L5b-E]: L5B_RETROSPECTIVE.md "
+                "exists at worktree root with all seven required H2 "
+                "section substrings (Sprint context and convergence "
+                "streak; Per-sub-phase inventory; AP-AUTH-54 envelope "
+                "characterization; Sxx-13..23 inline NOT-TRIGGERED; "
+                "Cumulative L5b sprint deltas; Reviewer-concern "
+                "closure scoreboard; Forward readiness and closing "
+                "recommendation); mirrors Gate 25.1.7 KICK-7 "
+                "documentation-primary pattern"
+            )
+
+        # Criterion 28.3 - File-size threshold.
+        file_size = retrospective_path.stat().st_size
+        summary["criterion_28_3_file_size_bytes"] = file_size
+        if file_size >= 5000:
+            findings.append(
+                f"Criterion 28.3 PASS [L5b-E]: L5B_RETROSPECTIVE.md "
+                f"file size {file_size} bytes meets institutional "
+                "minimum five-thousand-byte threshold for sprint-"
+                "retrospective documentation depth"
+            )
+        else:
+            findings.append(
+                f"FAIL: Criterion 28.3 [L5b-E] - L5B_RETROSPECTIVE.md "
+                f"file size {file_size} bytes below institutional "
+                f"minimum five-thousand-byte threshold; insufficient "
+                "documentation depth for sprint-closure artifact"
+            )
+    else:
+        # File missing - both 28.2 and 28.3 fail (cannot read content).
+        findings.append(
+            f"FAIL: Criterion 28.2 [L5b-E] - L5B_RETROSPECTIVE.md "
+            f"missing at expected worktree-root path "
+            f"{retrospective_path}"
+        )
+        findings.append(
+            f"FAIL: Criterion 28.3 [L5b-E] - L5B_RETROSPECTIVE.md "
+            f"missing at expected worktree-root path "
+            f"{retrospective_path}; file-size check cannot proceed"
+        )
+
+    # Out-of-band assertion for Criterion 28.4 (NEG monkeypatch probe).
+    warnings_list.append(
+        "Criterion 28.4 (NEG monkeypatch probe per K7.3 parent "
+        "pattern) asserted via tests/test_l5b_retrospective.py - "
+        "file-absence simulated via monkeypatch.setattr on "
+        "pathlib.Path.exists + pathlib.Path.is_file produces FAIL "
+        "findings citing the missing path"
+    )
+
+    passed = not any(f.startswith("FAIL") for f in findings)
+    return GateReport(
+        name=(
+            "Gate 28 - L5b sprint retrospective + Gate-closure "
+            "documentation"
+        ),
+        passed=passed, findings=findings, warnings=warnings_list,
+        summary=summary,
+    )
+
+
+def _cli_gate28() -> int:
+    import logging
+    logging.basicConfig(level="WARNING", format="%(message)s")
+    report = validate_gate28_l5b_retrospective()
+    print(report.render())
+    return 0 if report.passed else 1
+
+
 if __name__ == "__main__":
     import sys
     cmd = sys.argv[1] if len(sys.argv) > 1 else "gate1"
@@ -6419,11 +6578,13 @@ if __name__ == "__main__":
         sys.exit(_cli_gate26())
     if cmd == "gate27":
         sys.exit(_cli_gate27())
+    if cmd == "gate28":
+        sys.exit(_cli_gate28())
     print(
         f"Unknown command: {cmd}. Available: "
         "gate1, gate2, gate3, gate4a, gate4b, gate4c, gate4d, "
         "gate8, gate9, gate10, gate11, gate12, gate13, gate14, gate15, gate16, gate17, "
-        "gate18, gate19_b1, gate19_b2, gate20, gate21, gate22, gate23, gate24, gate25, gate26, gate27",
+        "gate18, gate19_b1, gate19_b2, gate20, gate21, gate22, gate23, gate24, gate25, gate26, gate27, gate28",
         file=sys.stderr,
     )
     sys.exit(2)

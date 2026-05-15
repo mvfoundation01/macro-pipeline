@@ -337,6 +337,142 @@ L5b sprint advances to original OOS hardening scope: L5b-A (block bootstrap robu
 
 ---
 
+### L5b-E — Sprint retrospective + Gate 28 NEW (2026-05-14)
+
+**ACCEPT tag**: `l5b-e-accept` plus `l5b-complete` (DUAL TAG marking L5b sprint completion).
+**Authority**: Master Prompt v3.1 §15 (L5b OOS hardening sprint closure mandate) plus Strategic disposition cycle 2026-05-14 (five rulings ratified on Track A read-and-plan output).
+**Approach**: documentation-primary sprint retrospective; OUTSIDE AP-AUTH-54 envelope per Strategic disposition four (Option (a) ratified — envelope STAYS CLOSED at seven instances). FIFTH original-scope OOS hardening sub-phase post-kickoff (final L5b sub-phase); closes the L5b sprint with DUAL TAG.
+**Option**: Y (Strategic-approved 2026-05-14) — Gate 28 NEW via signature inspection plus file-presence plus section-substring presence plus file-size threshold. Four criteria (28.1 / 28.2 / 28.3 / 28.4) mirroring the Gate 25.1.7 KICK-7 documentation-primary parent precedent at `macro_pipeline/validation.py:5618-5675`.
+
+**Strategic disposition rulings reflected** (five from 2026-05-14 §E greenlight block):
+- **Disposition 1 (Finding 1 APPROVE in scope as Phase 5)**: AP-AUTH-53 plus AP-AUTH-54 codifications migrated verbatim from inline `L5B_BACKLOG.md:40-54` and `:127-138` to formal `docs/ap_register.md` (closes register-staleness gap; approximately fifteen minutes defensive addition).
+- **Disposition 2 (Finding 2 APPROVE inline framing)**: retrospective §4 frames Sxx-13 through Sxx-23 as inline NOT-TRIGGERED markers per AP-AUTH-46 gratuitous-Sxx guard with line-ref citations to each marker in this file.
+- **Disposition 3 (Finding 3 APPROVE corrected count)**: convergence streak phrased as "twenty-four of twenty-four entering L5b-E becoming twenty-five of twenty-five at L5b-E ACCEPT (sprint completion)".
+- **Disposition 4 (Finding 4 APPROVE Option (a))**: AP-AUTH-54 envelope STAYS CLOSED at seven instances; L5b-E mirrors L5-H structurally (sprint retrospective), not KICK-7 (reviewer-driven kickoff). Documentation-primary variant precedent (KICK-7) does NOT re-open envelope for sprint retrospectives.
+- **Disposition 5 (plan timing APPROVE)**: three-to-four-hour actual end-to-end estimate ratified; within risk-adjusted three-to-five-hour band; no compression mandate.
+
+**Gate 28 NEW** four criteria (mirroring Gate 25.1.7 KICK-7 file-presence pattern at `macro_pipeline/validation.py:5618`):
+- **Criterion 28.1 (API present)**: `validate_gate28_l5b_retrospective` callable importable from `macro_pipeline.validation`; CLI dispatcher registers it via `python -m macro_pipeline.validation gate28`.
+- **Criterion 28.2 (section-substring presence)**: `L5B_RETROSPECTIVE.md` at worktree root contains all seven required H2 section substrings (Sprint context and convergence streak / Per-sub-phase inventory / AP-AUTH-54 envelope characterization / Sxx-13..23 inline NOT-TRIGGERED / Cumulative L5b sprint deltas / Reviewer-concern closure scoreboard / Forward readiness and closing recommendation).
+- **Criterion 28.3 (file-size threshold)**: `L5B_RETROSPECTIVE.md` byte count is at least five-thousand bytes (institutional minimum for sprint-retrospective documentation depth; parallels Gate 25.1.7 implicit content-validation discipline).
+- **Criterion 28.4 (runtime NEG probe via monkeypatch in test)**: file-absence simulated via `monkeypatch.setattr(pathlib.Path, "exists", fake_exists)` plus `is_file` produces FAIL finding citing the missing path; mirrors K7.3 monkeypatch pattern at `tests/test_dms_adjustment.py:213-240`.
+
+**Sxx-NN triage**: zero new Sxx markers filed at L5b-E (documentation-primary sub-phase with greenfield retrospective plus new gate plus new test file; no prospective-only catastrophic-state probe relevant). Twelfth consecutive prospective-only-or-zero Sxx outcome across the L5b sprint (Sxx-13 through Sxx-23 inline NOT-TRIGGERED at KICK-1 through L5b-D plus zero new at L5b-E).
+
+**Module placement**: new file `L5B_RETROSPECTIVE.md` at worktree root (sibling to `LAYER_5_RETROSPECTIVE.md` and `LAYER_3_5b_RETROSPECTIVE.md` parent precedents). Gate 28 validator added inline in `macro_pipeline/validation.py` (mirrors Gate 25.1.7 inline placement within the existing composite validator pattern). NEW test file `tests/test_l5b_retrospective.py` (sibling to `tests/test_dms_adjustment.py` K7.3 parent precedent).
+
+**AP-AUTH register migration** (Phase 5 of code-exec per Strategic Disposition 1): AP-AUTH-53 (Reviewer-driven L5b kickoff item pattern; codified at `l5b-kick-2-accept` 2026-05-13) plus AP-AUTH-54 (Internal-implementation variant of AP-AUTH-53; codified at `l5b-kick-5-accept` 2026-05-15) entries copied verbatim from inline `L5B_BACKLOG.md:40-54` and `:127-138` into formal `docs/ap_register.md`. Format normalized to match parent template (Symptom / Surfaced / Mitigation discipline / Enforcement / Cross-reference structure).
+
+**Test delta**: plus three new tests in NEW `tests/test_l5b_retrospective.py` (E.1 file-exists POS plus E.2 seven-required-substrings POS-inv plus E.3 monkeypatch missing-file NEG; NEG-flavor two of three equals sixty-seven percent at sub-phase level per L5-B1 accounting convention where POS-inv counts as NEG-flavor; floor met). Baseline seven-hundred-seventy-seven to seven-hundred-eighty.
+
+**Caller updates**: zero in production tree (greenfield retrospective plus gate plus test file).
+
+**AP-AUTH delta**: zero new codifications. AP-AUTH-53 plus AP-AUTH-54 verbatim entries migrated to formal `docs/ap_register.md` per Strategic Disposition 1. No new institutional pattern surfaced at sprint-retrospective level (L5b-E mirrors L5-H structurally per Strategic Disposition 4).
+
+**Sxx delta**: zero.
+
+**Effort variance**: documentation-primary sub-phase; three-to-four hours actual end-to-end estimated per Strategic Disposition 5 (within risk-adjusted three-to-five-hour band; no compression mandate). Effort distribution: Phase 0 state verification approximately fifteen minutes; Phase 1 retrospective authoring approximately sixty to ninety minutes; Phase 2 backlog update approximately thirty to forty-five minutes; Phase 3 Gate 28 addition approximately thirty minutes; Phase 4 test file approximately thirty minutes; Phase 5 register migration approximately fifteen minutes; Phase 6 full pytest plus Gate 28 CLI approximately fifteen minutes; Phase 7 verification plus commit plus DUAL TAG approximately fifteen minutes.
+
+---
+
+## L5b SPRINT COMPLETE — Cumulative summary (2026-05-14)
+
+**Status**: twelve of twelve L5b sub-phases ACCEPT-tagged. Seven reviewer-driven kickoff (KICK-1 through KICK-7) plus four original OOS hardening (L5b-A through L5b-D) plus L5b-E sprint retrospective ALL COMPLETE. L5b OOS hardening sprint CLOSED with DUAL TAG `l5b-e-accept` plus `l5b-complete`.
+
+### ACCEPT tag inventory (twelve sub-phases)
+
+| # | Sub-phase | Tag | Closes reviewer concern (if any) |
+|---|---|---|---|
+| 1 | Isotonic train-only `fit_window` invariant | `l5b-kick-1-accept` | Codex 5.5 IMP #1 + ChatGPT 5.5 CRIT #3 (dual) |
+| 2 | Forecast σ v2 production wrapper + Gate 24 hard gate | `l5b-kick-2-accept` | ChatGPT 5.5 CRIT #2 (also Codex 5.5 IMP) |
+| 3 | L5-C adaptive bin reduction + Gate 22 diagnostic status | `l5b-kick-3-accept` | Codex 5.5 IMP #2 |
+| 4 | L5-B1 inner-CV z-scaler recomputation (Task A parity) | `l5b-kick-4-accept` | Codex 5.5 IMP #3 |
+| 5 | Bootstrap diagnostics table per horizon/fold | `l5b-kick-5-accept` | ChatGPT 5.5 IMP #6 |
+| 6 | Ridge inference labeling separation | `l5b-kick-6-accept` | ChatGPT 5.5 IMP #5 |
+| 7 | DMS source memo (documentation-primary) | `l5b-kick-7-accept` | Codex 5.5 IMP #4 + ChatGPT 5.5 IMP (dual) |
+| 8 | Stationary block bootstrap (Politis-Romano 1994) | `l5b-a-accept` | (original OOS hardening scope) |
+| 9 | Structural break tests (Andrews 1993 + Bai-Perron 1998) | `l5b-b-accept` | (original OOS hardening scope) |
+| 10 | Benjamini-Hochberg FDR gating + Gate 26 NEW | `l5b-c-accept` | (original OOS hardening scope) |
+| 11 | Regime-conditional OOS Brier validation + Gate 27 NEW | `l5b-d-accept` | (original OOS hardening scope) |
+| 12 | **Sprint retrospective + Gate 28 NEW** | **`l5b-e-accept` + `l5b-complete` (DUAL TAG)** | (sprint closure) |
+
+### Cumulative deltas (L5 closure to L5b-E ACCEPT)
+
+| Metric | Value at `layer5-complete` | Value at `l5b-complete` (target) | Delta |
+|---|---|---|---|
+| Pytest count | seven-hundred-seventeen | seven-hundred-eighty | plus sixty-three across twelve sub-phases |
+| Gate count | twenty-five (Gate 25 composite SEALED at L5-G via 25.1 plus 25.2 PASS) | twenty-eight | plus three (Gate 26 L5b-C + Gate 27 L5b-D + Gate 28 L5b-E) |
+| Gate criteria added | n/a (baseline) | plus twenty-seven across L5b sprint | plus twenty-seven |
+| AP-AUTH register | one through fifty-two | one through fifty-four | plus two (AP-AUTH-53 at KICK-2; AP-AUTH-54 at KICK-5) |
+| Formal Sxx register (`L5_BUILD_SXX_LOG.md`) | S-one through S-twelve (all RESOLVED) | unchanged | zero new filings |
+| Prospective-only Sxx markers (inline in this file) | zero | eleven (Sxx-13 through Sxx-23) | plus eleven NOT-TRIGGERED per AP-AUTH-46 |
+| New modules under `macro_pipeline/analysis/` | n/a | two (`fdr_gating.py` from L5b-C; `regime_conditional_validation.py` from L5b-D) | plus two |
+| New dataclasses | n/a | four (`BootstrapDiagnostics` KICK-5; `StructuralBreakDiagnostics` L5b-B; `FDRGatingDiagnostics` L5b-C; `RegimeConditionalDiagnostics` L5b-D) | plus four |
+| New private helpers | n/a | at least five (geometric block sampler L5b-A; Quandt-Andrews supW L5b-B; Bai-Perron sequential supF L5b-B; BH step-up L5b-C; regime aggregator L5b-D) | plus five-or-more |
+| Convergence streak | thirteen of thirteen at L5-H ACCEPT | twenty-five of twenty-five at L5b-E ACCEPT | plus twelve consecutive perfect-ACCEPT sub-phases |
+| Banked headroom under risk-adj budget | approximately fifty hours at L5 closure | approximately eighty-eight to ninety-two hours | plus approximately thirty-eight to forty-two hours |
+| Sprint window | n/a | two calendar days (2026-05-13 KICK-1 through 2026-05-14 L5b-E ACCEPT) | shortest multi-sub-phase sprint of the build to date |
+| Reviewer-concern closure | n/a (review window opened post-L5-H push) | eight of eight closed (one-hundred percent) | see scoreboard below |
+
+### AP-AUTH-53 + AP-AUTH-54 envelope characterization (CLOSED at seven instances per Strategic Disposition 4)
+
+| Instance | Sub-phase | Envelope weight | Surface |
+|---|---|---|---|
+| 1 | KICK-4 | heaviest | helper refactor (`_select_lambda_inner_cv_ridge`) + no-default field (`inner_cv_scaler_recomputed`) + AST audit |
+| 2 | KICK-5 | medium | tuple-return helper (`_block_bootstrap_residual_se` + `_compute_block_size_sensitivity`) + dual no-default fields + runtime probe (**AP-AUTH-54 codified here**) |
+| 3 | KICK-6 | lightest-weight | dataclass discipline only (no helper change); no-default field (`inference_label`) + docstring rewrite + runtime probe |
+| 4 | L5b-A | heavy | helper refactor (stationary block sampling) + new helper (`_sample_stationary_block_lengths`) + field expansion + AST + runtime + empirical snapshot |
+| 5 | L5b-B | heavy-medium | two new helpers (Quandt-Andrews + Bai-Perron) + NEW dataclass + Optional field |
+| 6 | L5b-C | medium-cross-cutting | NEW module (`analysis/fdr_gating.py`) + NEW gate (Gate 26) + NEW test file + BH(1995) algorithm |
+| 7 | L5b-D | heavy-cross-cutting | NEW module (`analysis/regime_conditional_validation.py`) + NEW gate (Gate 27) + largest dataclass (fourteen fields) + Callable injection |
+
+**L5b-E is OUTSIDE this envelope per Strategic Disposition 4** — sprint retrospective is structurally L5-H peer (parent retrospective precedent), not KICK-7 peer (reviewer-driven kickoff). Documentation-primary variant precedent set at KICK-7 (AP-AUTH-55 codification DEFERRED per AP-AUTH-46 gratuitous-codification guard) does NOT re-open envelope for sprint retrospectives. The envelope characterization preserves four envelope-weight buckets (heaviest / heavy / medium / lightest-weight) populated across the seven AP-AUTH-54 instances; range is closed and stable.
+
+### Pattern velocity (effort actual per sub-phase ACCEPT report)
+
+| Sub-phase | Effort actual / risk-adj | Rolling cumulative variance |
+|---|---|---|
+| KICK-1 | one-and-a-half hours | minus-fifty-eight percent vs risk-adj |
+| KICK-2 | one-and-six-tenths hours | held |
+| KICK-3 | one-and-seven-tenths hours | held |
+| KICK-4 | one-and-a-half hours | held |
+| KICK-5 | one-and-seven-tenths hours | held |
+| KICK-6 | one-and-three-tenths hours (smallest by LOC) | tightened |
+| KICK-7 | one-and-a-half hours estimated (memo-content dominant) | held |
+| L5b-A | within budget | held |
+| L5b-B | within budget | held |
+| L5b-C | within budget | held |
+| L5b-D | within budget | held |
+| L5b-E | three-to-four hours estimated (documentation-primary; retrospective + gate + test + register migration) | held within risk-adj three-to-five-hour band |
+
+### Reviewer-concern closure scoreboard (eight of eight equals one-hundred percent)
+
+- Codex 5.5: all four IMPORTANT items closed (IMP #1 at KICK-1; IMP #2 at KICK-3; IMP #3 at KICK-4; IMP #4 at KICK-7)
+- ChatGPT 5.5: all four IMPORTANT items closed (CRIT #2 at KICK-2; IMP #6 at KICK-5; IMP #5 at KICK-6; IMP at KICK-7)
+- Plus KICK-1 closes ChatGPT 5.5 CRITICAL #3 as dual-reviewer convergence with Codex 5.5 IMP #1
+- Plus KICK-7 closes Codex 5.5 IMP #4 and ChatGPT 5.5 IMP simultaneously (dual-reviewer convergence)
+- Aggregate: eight unique concerns; eight closed; one-hundred percent closure rate within the KICKOFF arc (KICK-1 through KICK-7)
+
+### Institutional pattern compounding
+
+- **AP-AUTH-53 codification at KICK-2 ACCEPT**: reviewer-driven L5b kickoff item pattern formalised after second instance (KICK-1 was deferred per AP-AUTH-46 first-instance rule; KICK-2 ACCEPT triggered codification per pattern-repetition rule). Migrated to formal `docs/ap_register.md` at L5b-E.
+- **AP-AUTH-54 codification at KICK-5 ACCEPT**: internal-implementation variant of AP-AUTH-53 formalised after second internal-implementation instance (KICK-4 deferred per same first-instance rule; KICK-5 codified upon repetition). Migrated to formal `docs/ap_register.md` at L5b-E.
+- **AP-AUTH-55 deferral at KICK-7 ACCEPT**: documentation-primary variant of AP-AUTH-53 NOT codified per AP-AUTH-46 first-instance rule (KICK-7 was the first documentation-primary instance; revisit at L6+ if pattern repeats).
+- **Sxx-13 through Sxx-23 prospective-only inline NOT-TRIGGERED markers**: eleven consecutive NOT-TRIGGERED outcomes across the sprint (KICK-1 through L5b-D) demonstrate AP-AUTH-46 gratuitous-Sxx guard working as designed. Formal `L5_BUILD_SXX_LOG.md` register unchanged at S-12 RESOLVED-OPTION-A.
+
+### Next phase (post-L5b-E ACCEPT)
+
+L5b sprint CLOSED. Downstream paths per Strategic post-L5b-E workflow (per `07_STRATEGIC_CLAUDE_L5b-E_DISPOSITION_PROMPT.md` §"Post-L5b-E ACCEPT workflow"):
+
+- **Path A**: re-engage Codex 5.5 plus ChatGPT 5.5 dual-reviewer cycle via v2.0 review guides (`03_CODEX_CODE_REVIEW_v2.md` + `02_CHATGPT_METHODOLOGY_REVIEW_v2.md`) for second-round review of the L5b sprint outputs (AP-AUTH-53 / 54 closure mechanisms plus OOS hardening additions: block bootstrap; structural breaks; FDR; regime-conditional Brier).
+- **Path B**: proceed to L1.7 MANUAL_INPUT framework per Vision v2.0 §15 phased plan progression toward L8a Core UI MVP (target completion 2026-07-28 per Vision v2.0 §15).
+
+V selects path post-L5b-E ACCEPT. Documentation suite v2.0 commit (per `06_CLAUDE_CODE_COMMIT_PROMPT.md`) remains pending and can be executed at any time after L5b-E ACCEPT per Strategic Disposition Note E.
+
+**L5b-A through L5b-E sequence (this file) plus KICK-1 through KICK-7 sequence (this file) jointly complete the L5b OOS hardening sprint.** Master Prompt v3.1 §15 L5b scope CLOSED at this DUAL TAG.
+
+---
+
 ## L5b-2 — Implement L3 loaders for ISM New Orders (NAPMNOI) + CB LEI
 
 **Source**: `scoring/crps.py` lines 14-22 documents that `LAYER3_ACTIVE_COMPONENTS` is currently 4 of spec's 6 components. `ism_pmi_neworders` (NAPMNOI) returns FRED 400 (series does not exist post-2018 ISM licensing change); `lei_3d_rule` (CB LEI 6M annualized) has no Tier 1-4 loader (PHILLY_LEI_PROXY blocked by `check_double_counting` vs T10Y3M).
