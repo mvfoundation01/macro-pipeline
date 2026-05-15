@@ -9,9 +9,9 @@ auditable).
 
 Sub-phase ledger
 ----------------
-L1.7-A  schema definition (COMPLETE — tag l1.7-a-accept @ 296cee5)
-L1.7-B  validation logic (THIS SUB-PHASE)
-L1.7-C  full persistence (versioning + migration)
+L1.7-A  schema definition           (COMPLETE — l1.7-a-accept @ 296cee5)
+L1.7-B  validation logic            (COMPLETE — l1.7-b-accept @ 92385e9)
+L1.7-C  persistence + versioning    (THIS SUB-PHASE)
 L1.7-D  integration with L2/L3/L5 + Gate 29 NEW
 L1.7-E  edge cases + retrospective
 
@@ -20,8 +20,10 @@ Public API
 Schema (L1.7-A):
   ``ManualInputField``           Single overridable input with UX metadata.
   ``ManualInputSchedule``        Full set of manual inputs (loaded from YAML).
-  ``load_manual_inputs(path)``   YAML -> ManualInputSchedule (stub).
-  ``save_manual_inputs(...)``    ManualInputSchedule -> YAML (stub).
+  ``load_manual_inputs(path)``   YAML -> ManualInputSchedule (stub; prefer
+                                 ``load_manual_inputs_robust`` for new code).
+  ``save_manual_inputs(...)``    ManualInputSchedule -> YAML (stub; prefer
+                                 ``save_manual_inputs_atomic`` for new code).
   ``SCHEMA_VERSION_CURRENT``     Current schema version (int).
   ``CATEGORY_VALID``             Valid category names (frozenset).
 
@@ -31,9 +33,26 @@ Validation (L1.7-B):
   ``ValidationViolation``        Single V-rule violation (frozen).
   ``ConfidenceCapViolation``     Hard-fail exception for V5 (Standing
                                  Order #9 confidence cap breach).
+
+Persistence + versioning (L1.7-C):
+  ``LoadResult``                 Frozen wrapper for loaded schedule +
+                                 replication-kit metadata (Vision §14).
+  ``load_manual_inputs_robust``  Existence + parse + version + migration.
+  ``save_manual_inputs_atomic``  Atomic YAML write (sibling tmp + os.replace).
+  ``migrate_manual_inputs``      Version-dispatch migration shim.
+  ``ManualInputLoadError``       Load failure (ValueError subclass).
+  ``ManualInputMigrationError``  Migration failure (ValueError subclass).
 """
 from __future__ import annotations
 
+from macro_pipeline.manual_input.persistence import (
+    LoadResult,
+    ManualInputLoadError,
+    ManualInputMigrationError,
+    load_manual_inputs_robust,
+    migrate_manual_inputs,
+    save_manual_inputs_atomic,
+)
 from macro_pipeline.manual_input.schema import (
     CATEGORY_VALID,
     SCHEMA_VERSION_CURRENT,
@@ -64,4 +83,11 @@ __all__ = [
     "ValidationReport",
     "ValidationViolation",
     "validate_schedule",
+    # L1.7-C persistence + versioning
+    "LoadResult",
+    "ManualInputLoadError",
+    "ManualInputMigrationError",
+    "load_manual_inputs_robust",
+    "migrate_manual_inputs",
+    "save_manual_inputs_atomic",
 ]
