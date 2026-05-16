@@ -1,7 +1,8 @@
 # R7 External Reviewer Invocation Prompts
 
-**Trigger commit**: `l6-f-accept` (commit SHA stamped at L6-F commit time; resolve via `git rev-parse l6-f-accept`).
-**Trigger date**: 2026-05-15.
+**Trigger commit (current)**: `l6-g-accept` (commit SHA `97ada00c1dab52f9edd86312ce8e923fa3af5698`; resolve via `git rev-parse l6-g-accept`).
+**Trigger date (current)**: 2026-05-16 (R7-bis sync upgrade post-L6-G ACCEPT).
+**Original dispatch (audit footnote)**: R7 reviewers were initially dispatched on 2026-05-15 against `l6-f-accept` (SHA `f2c963b09ca23b2538b0c7e54d66a77aaf1fc333`); fetch target upgraded to `l6-g-accept` on 2026-05-16 after the L6-G Bayesian confidence and conviction refinement landed. See §Addendum L6-G at bottom of this document for the full upgrade scope. Reviewers MAY re-fetch at `l6-g-accept` if review has not yet started, OR finalize verdict at `l6-f-accept` if review is already in progress (both states are ACCEPTed; reviewers choose at their discretion).
 **Reviewers**: Codex 5.5 (code review) plus ChatGPT 5.5 (methodology review).
 **Dispatch model**: V copies each invocation prompt to the respective reviewer in parallel.
 **Expected wall-clock**: three to seven days for both verdicts.
@@ -16,7 +17,9 @@
 # Codex 5.5 — R7 Code Review of L6 Ensemble Aggregation Layer
 
 You are Codex 5.5, performing external code review of the macro pipeline
-L6 ensemble aggregation layer at tag `l6-f-accept`.
+L6 ensemble aggregation layer at tag `l6-g-accept` (upgraded from initial
+`l6-f-accept` dispatch on 2026-05-16; see audit footnote and §Addendum L6-G
+at the top and bottom of this document).
 
 ## Authority document
 - `docs/build-plans/03_CODEX_CODE_REVIEW_v2.md` (your role plus verdict format)
@@ -27,11 +30,11 @@ L6 ensemble aggregation layer at tag `l6-f-accept`.
 ## Fetch plus checkout
 ```
 git fetch origin
-git checkout l6-f-accept
+git checkout l6-g-accept
 ```
 
 Per AP-AUTH-55 push verification: confirm `git log origin/claude/layer-5-build -1`
-shows the same SHA as `git rev-parse l6-f-accept` before substantive review
+shows the same SHA as `git rev-parse l6-g-accept` before substantive review
 begins.
 
 ## Review scope
@@ -164,7 +167,9 @@ For each finding:
 # ChatGPT 5.5 — R7 Methodology Review of L6 Ensemble Aggregation
 
 You are ChatGPT 5.5, performing external methodology review of the macro
-pipeline L6 ensemble aggregation layer at tag `l6-f-accept`.
+pipeline L6 ensemble aggregation layer at tag `l6-g-accept` (upgraded from
+initial `l6-f-accept` dispatch on 2026-05-16; see audit footnote and
+§Addendum L6-G at the top and bottom of this document).
 
 ## Authority document
 - `docs/build-plans/02_CHATGPT_METHODOLOGY_REVIEW_v2.md` (your role plus
@@ -175,11 +180,11 @@ pipeline L6 ensemble aggregation layer at tag `l6-f-accept`.
 ## Fetch plus checkout
 ```
 git fetch origin
-git checkout l6-f-accept
+git checkout l6-g-accept
 ```
 
 Per AP-AUTH-55 push verification: confirm `git log origin/claude/layer-5-build -1`
-shows the same SHA as `git rev-parse l6-f-accept` before substantive review.
+shows the same SHA as `git rev-parse l6-g-accept` before substantive review.
 
 ## Review scope
 
@@ -287,7 +292,7 @@ For each finding:
 ## §3 — V coordination notes
 
 - Dispatch both reviewers in parallel; track responses independently.
-- Both reviewers must run `git fetch origin && git checkout l6-f-accept`
+- Both reviewers must run `git fetch origin && git checkout l6-g-accept`
   before review (per AP-AUTH-55 push verification discipline). Confirm the
   tag SHA matches `origin/claude/layer-5-build` via `git ls-remote`.
 - Expected wall-clock for both verdicts: three to seven days.
@@ -299,7 +304,128 @@ For each finding:
 ## §4 — R7 dispatch-ready signal
 
 R7 reviewer invocation prompts are dispatchable to Codex 5.5 plus ChatGPT 5.5
-immediately upon L6-F ACCEPT confirmation. Both reviewers can fetch at
-tag `l6-f-accept` and begin parallel review without further Strategic
-round-trip. R7 reviewer cycle executes IN PARALLEL with the L6-G measurement
-coverage sub-phase per Strategic disposition.
+immediately upon L6-G ACCEPT confirmation (originally dispatchable at L6-F
+ACCEPT; upgraded to L6-G on 2026-05-16 — see audit footnote at the top).
+Both reviewers can fetch at tag `l6-g-accept` and begin parallel review
+without further Strategic round-trip. R7 reviewer cycle executed IN PARALLEL
+with the L6-G measurement coverage and Bayesian refinement sub-phase per
+Strategic disposition; L6-G is now ACCEPTed and reviewers can proceed at
+the upgraded tag.
+
+---
+
+## §Addendum L6-G (2026-05-16) — Bayesian confidence and conviction refinement upgrade
+
+This addendum documents the L6-G sub-phase ACCEPT (commit `97ada00`, tag
+`l6-g-accept`) that landed on 2026-05-16, after the initial R7 dispatch at
+`l6-f-accept` (2026-05-15). L6-G is additive over L6-F; cap-enforcement
+semantics (Standing Order number nine plus Vision section ten) are preserved
+and the defense-in-depth pattern remains a third-instance invariant at the
+aggregator pipeline.
+
+### L6-G changes summary
+
+1. **Bayesian confidence and conviction refinement** —
+   The L6-F placeholder heuristic confidence and conviction logic in
+   `macro_pipeline/ensemble/aggregator.py` was replaced with a dedicated
+   Bayesian module `macro_pipeline/ensemble/bayesian_confidence.py`. Two
+   pure functions exposed:
+   - `compute_bayesian_confidence(point_estimate, n_eff, reference_class,
+     regime_stratified, horizon) -> float` — posterior precision combines
+     `n_eff` plus `KAPPA_EVIDENCE` (ten); evidence weight derived from
+     reference class mean similarity; confidence uncapped in the range
+     zero point five through zero point nine before Standing Order number
+     nine cap enforcement applies.
+   - `compute_conviction_score(confidence, reference_class, n_eff) -> float`
+     — Vision section four simplified subset (linear scaling one through
+     ten, with sample-size penalty when `n_eff` is less than thirty and
+     weak-analog penalty when reference class mean similarity is less than
+     zero point three). Full Vision section four BINDING ten-component
+     conviction formula remains deferred to a future refinement; deferral
+     documented explicitly in the module docstring.
+
+2. **Vision section three ninety-measurement coverage** —
+   `macro_pipeline/ensemble/data/metrics_registry.yaml` now has ninety of
+   ninety measurements with explicit disposition: forty measures linked to
+   existing L1 through L5b producers via `computation_path`; thirty-two
+   measures deferred to L7 (portfolio-level scope) via `deferred_to`;
+   eighteen measures deferred to L8a (UI primitives) via `deferred_to`.
+   Total coverage at `l6-g-accept`: ninety of ninety.
+
+3. **Aggregator extension** —
+   `aggregator.py` adds a `populate_metric_outputs` helper that extends the
+   L6-F eight-key per-horizon baseline to fifteen keys per horizon when
+   reference class plus DMS adjustments are provided (DMS adjustment in
+   basis points; RCF mean similarity; RCF neighbour count; three cumulative
+   sigmas via square-root-of-time scaling; plus Bayesian shrinkage flag).
+   Backward compatibility preserved at the EnsembleResult API level.
+
+### Strategic pre-dispositions executed (PD18 plus PD19 plus PD20)
+
+- **PD18 (NEG-flavor floor relaxed to forty percent for Bayesian module
+  tests)** — `tests/test_bayesian_confidence.py` contains fifteen tests
+  with NEG ratio six of fifteen (forty percent), per Strategic-ratified
+  relaxed floor for Bayesian computation modules where the
+  boundary-condition test surface is intrinsically POS-inv heavy.
+  Supplemental NEG coverage in `test_aggregator.py` covers `ForecastInputs`
+  and horizon range cases.
+- **PD19 (test refactor authority for L6-F aggregator tests)** —
+  Two L6-F aggregator tests (Tests ten and eleven) refactored: reference
+  class fixtures added so that the Bayesian formula `0.5 + 0.4 *
+  evidence_weight` exceeds horizon caps and the cap-enforcement path
+  remains testable post-Bayesian replacement.
+- **PD20 (Test twelve defense-in-depth preservation)** —
+  `test_aggregate_defense_in_depth_both_layers_fire` (third-instance
+  verification of the defense-in-depth pattern) PASSES unchanged
+  post-Bayesian replacement. Institutional invariant preserved.
+
+### R7 reviewer impact
+
+- **ChatGPT methodology review question five (placeholder confidence and
+  conviction logic at L6-F)** — proactively addressed by the L6-G Bayesian
+  refinement. The placeholder heuristic is no longer present at
+  `l6-g-accept`. The Vision section four BINDING full ten-component
+  conviction formula remains deferred (documented in module docstring);
+  ChatGPT review MAY still flag this scope as a MEDIUM finding for L6-H
+  closure.
+- **Vision section three measurement coverage question** — fully addressed
+  at `l6-g-accept`: ninety of ninety measurements have explicit disposition.
+- **Expected impact on finding counts** — MEDIUM-finding count expected to
+  be lower at `l6-g-accept` than would have been at `l6-f-accept`-only
+  state, since question five is partially closed (Bayesian refinement
+  landed; only the full ten-component formula remains deferred) and
+  Vision section three ninety-measurement coverage is complete.
+
+### Reviewer fetch choice
+
+Reviewers have two valid paths:
+
+1. **Re-fetch at `l6-g-accept`** — if review has not yet started, fetch at
+   the upgraded tag for the most current state. Recommended path.
+2. **Finalize at `l6-f-accept`** — if review is already in progress,
+   finalize verdict at the original dispatch tag. L6-F is an ACCEPTed
+   state; the verdict will be valid, and Strategic disposition will
+   reconcile findings against L6-G changes at L6-H closure.
+
+Both paths are sanctioned; reviewers choose at their discretion.
+
+### Anchors
+
+| Anchor | Value |
+|---|---|
+| L6-G commit SHA | `97ada00c1dab52f9edd86312ce8e923fa3af5698` |
+| L6-G tag | `l6-g-accept` |
+| L6-F commit SHA (original dispatch; tag not moved) | `f2c963b09ca23b2538b0c7e54d66a77aaf1fc333` |
+| L6-F tag | `l6-f-accept` |
+| Pytest count at `l6-g-accept` | one thousand four collected; one thousand four passed |
+| origin/main | `412235d` (UNCHANGED; main has not received L6 work) |
+| New files added at L6-G | `macro_pipeline/ensemble/bayesian_confidence.py`; `tests/test_bayesian_confidence.py`; `tests/test_metric_outputs_coverage.py`; `scripts/l6g_update_registry.py` |
+| Modified files at L6-G | `macro_pipeline/ensemble/aggregator.py`; `macro_pipeline/ensemble/__init__.py`; `macro_pipeline/ensemble/data/metrics_registry.yaml`; `tests/test_aggregator.py` |
+
+### AP-AUTH register
+
+No new AP-AUTH codification at this R7-bis sync (per AP-AUTH-46
+gratuitous-codification guard). AP-AUTH-56 (defense-in-depth pattern;
+third instance at L6-F aggregator) and AP-AUTH-57 (cross-branch
+cherry-pick pattern; second instance at L6-PREP) remain candidate
+codifications deferred to the L6-H retrospective.
