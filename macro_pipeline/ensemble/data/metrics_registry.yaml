@@ -1,1357 +1,2071 @@
 registry_version: 1
 n_metrics: 90
-# Vision v2.0 §3 ninety-measurement catalogue.
-# Ordered by (subcategory_index, metric_id) for stable diffs.
-# Per L6-A: subcategory names use Vision §3 statistical taxonomy
-# (probability / uncertainty / ...) NOT Strategic-hypothesis macro-thematic
-# names (valuation / macro_regime / ...). See macro_pipeline/ensemble/metadata.py
-# module docstring for reconciliation note.
-# Per L6-A Strategic Risk #2: computation_path null until L6-G populates;
-# deferred_to null at L6-A unless explicitly L7/L8a per D7 split.
 metrics:
-
-# ============================================================================
-# §3.1 — Probability measures (8)
-# ============================================================================
-
 - metric_id: cumulative_distribution_function
-  name: "Cumulative distribution function F(x)"
+  name: Cumulative distribution function F(x)
   subcategory: probability
   subcategory_index: 1
   layer_origin: L6
   unit: probability
   update_frequency: on_request
-  description_l1: "The chance the outcome is at or below a chosen value."
-  description_l2: "F(x) = P(X <= x); the running total of probability up to the threshold x. Used to convert a forecast distribution into single-number probabilities."
-  description_l3: "F: R -> [0, 1], non-decreasing, right-continuous, F(-inf)=0, F(+inf)=1. Empirical CDF F_n(x) = (1/n) sum 1{X_i <= x} converges to F per Glivenko-Cantelli."
+  description_l1: The chance the outcome is at or below a chosen value.
+  description_l2: F(x) = P(X <= x); the running total of probability up to the threshold
+    x. Used to convert a forecast distribution into single-number probabilities.
+  description_l3: 'F: R -> [0, 1], non-decreasing, right-continuous, F(-inf)=0, F(+inf)=1.
+    Empirical CDF F_n(x) = (1/n) sum 1{X_i <= x} converges to F per Glivenko-Cantelli.'
   range_min: 0.0
   range_max: 1.0
-  typical_range: [0.0, 1.0]
+  typical_range:
+  - 0.0
+  - 1.0
   invert_for_signal: false
-  citations: ["Casella-Berger (2002) §1.5"]
-
+  citations:
+  - "Casella-Berger (2002) \xA71.5"
+  computation_path: null
+  deferred_to: L8a
 - metric_id: probability_conditional
-  name: "Conditional probability P(A|B)"
+  name: Conditional probability P(A|B)
   subcategory: probability
   subcategory_index: 1
   layer_origin: L6
   unit: probability
   update_frequency: on_request
-  description_l1: "How likely outcome A is when we already know outcome B happened."
-  description_l2: "P(A|B) = P(A and B) / P(B) when P(B) > 0. Updating a probability given new information; core to all Bayesian reasoning."
-  description_l3: "Defined on (Omega, F, P) probability space; satisfies sigma-additivity in A. Drives Bayes' theorem P(A|B) = P(B|A)P(A)/P(B)."
+  description_l1: How likely outcome A is when we already know outcome B happened.
+  description_l2: P(A|B) = P(A and B) / P(B) when P(B) > 0. Updating a probability
+    given new information; core to all Bayesian reasoning.
+  description_l3: Defined on (Omega, F, P) probability space; satisfies sigma-additivity
+    in A. Drives Bayes' theorem P(A|B) = P(B|A)P(A)/P(B).
   range_min: 0.0
   range_max: 1.0
-  typical_range: [0.0, 1.0]
+  typical_range:
+  - 0.0
+  - 1.0
   invert_for_signal: false
-  citations: ["Kolmogorov (1933)"]
-
+  citations:
+  - Kolmogorov (1933)
+  computation_path: null
+  deferred_to: L8a
 - metric_id: probability_joint
-  name: "Joint probability P(A and B)"
+  name: Joint probability P(A and B)
   subcategory: probability
   subcategory_index: 1
   layer_origin: L6
   unit: probability
   update_frequency: on_request
-  description_l1: "How likely two outcomes both happen at the same time."
-  description_l2: "P(A and B) for events A, B; factors as P(A)P(B|A). Equal to product P(A)P(B) iff A and B independent."
-  description_l3: "Defined via the product sigma-algebra; independence iff P(A and B) = P(A)P(B) for all A in F_A, B in F_B."
+  description_l1: How likely two outcomes both happen at the same time.
+  description_l2: P(A and B) for events A, B; factors as P(A)P(B|A). Equal to product
+    P(A)P(B) iff A and B independent.
+  description_l3: Defined via the product sigma-algebra; independence iff P(A and
+    B) = P(A)P(B) for all A in F_A, B in F_B.
   range_min: 0.0
   range_max: 1.0
-  typical_range: [0.0, 1.0]
+  typical_range:
+  - 0.0
+  - 1.0
   invert_for_signal: false
-  citations: ["Kolmogorov (1933)"]
-
+  citations:
+  - Kolmogorov (1933)
+  computation_path: null
+  deferred_to: L8a
 - metric_id: probability_outcome
-  name: "Marginal probability P(outcome)"
+  name: Marginal probability P(outcome)
   subcategory: probability
   subcategory_index: 1
   layer_origin: L6
   unit: probability
   update_frequency: on_request
-  description_l1: "How likely a single outcome is, all things considered."
-  description_l2: "P(outcome) is the marginal probability of a specific event; the headline forecast quantity reported alongside confidence + conviction (Vision §4)."
-  description_l3: "Marginal P(A) = integral P(A|theta) dPi(theta) under prior Pi (Bayesian posterior predictive). Vision §4 requires CI lower/upper alongside the point estimate."
+  description_l1: How likely a single outcome is, all things considered.
+  description_l2: "P(outcome) is the marginal probability of a specific event; the\
+    \ headline forecast quantity reported alongside confidence + conviction (Vision\
+    \ \xA74)."
+  description_l3: "Marginal P(A) = integral P(A|theta) dPi(theta) under prior Pi (Bayesian\
+    \ posterior predictive). Vision \xA74 requires CI lower/upper alongside the point\
+    \ estimate."
   range_min: 0.0
   range_max: 1.0
-  typical_range: [0.0, 1.0]
+  typical_range:
+  - 0.0
+  - 1.0
   invert_for_signal: false
-  citations: ["Vision v2.0 §4"]
-
+  citations:
+  - "Vision v2.0 \xA74"
+  computation_path: null
+  deferred_to: L8a
 - metric_id: probability_union
-  name: "Union probability P(A or B)"
+  name: Union probability P(A or B)
   subcategory: probability
   subcategory_index: 1
   layer_origin: L6
   unit: probability
   update_frequency: on_request
-  description_l1: "How likely at least one of two outcomes happens."
-  description_l2: "P(A or B) = P(A) + P(B) - P(A and B). Inclusion-exclusion principle; central to compound-event reasoning."
-  description_l3: "Generalises to P(union_i A_i) = sum_i P(A_i) - sum_{i<j} P(A_i and A_j) + ... per Bonferroni inclusion-exclusion expansion."
+  description_l1: How likely at least one of two outcomes happens.
+  description_l2: P(A or B) = P(A) + P(B) - P(A and B). Inclusion-exclusion principle;
+    central to compound-event reasoning.
+  description_l3: Generalises to P(union_i A_i) = sum_i P(A_i) - sum_{i<j} P(A_i and
+    A_j) + ... per Bonferroni inclusion-exclusion expansion.
   range_min: 0.0
   range_max: 1.0
-  typical_range: [0.0, 1.0]
+  typical_range:
+  - 0.0
+  - 1.0
   invert_for_signal: false
-  citations: ["Bonferroni (1936)"]
-
+  citations:
+  - Bonferroni (1936)
+  computation_path: null
+  deferred_to: L8a
 - metric_id: quantile_function
-  name: "Quantile function q_p"
+  name: Quantile function q_p
   subcategory: probability
   subcategory_index: 1
   layer_origin: L6
   unit: native_units
   update_frequency: on_request
-  description_l1: "The value below which a chosen fraction of outcomes fall."
-  description_l2: "q_p = inf{x : F(x) >= p}; the inverse of the CDF. Vision UI shows 5/10/25/50/75/90/95 percentiles by default per §1 Pillar 4."
-  description_l3: "Generalized inverse Q(p) = inf{x : F(x) >= p}; coincides with F^{-1}(p) when F is strictly increasing. Used for distributional summaries + risk metrics (VaR = q_alpha of loss)."
+  description_l1: The value below which a chosen fraction of outcomes fall.
+  description_l2: "q_p = inf{x : F(x) >= p}; the inverse of the CDF. Vision UI shows\
+    \ 5/10/25/50/75/90/95 percentiles by default per \xA71 Pillar 4."
+  description_l3: 'Generalized inverse Q(p) = inf{x : F(x) >= p}; coincides with F^{-1}(p)
+    when F is strictly increasing. Used for distributional summaries + risk metrics
+    (VaR = q_alpha of loss).'
+  range_min: null
+  range_max: null
+  typical_range: null
   invert_for_signal: false
-  citations: ["Hyndman-Fan (1996)"]
-
+  citations:
+  - Hyndman-Fan (1996)
+  computation_path: null
+  deferred_to: L8a
 - metric_id: survival_function
-  name: "Survival function S(x)"
+  name: Survival function S(x)
   subcategory: probability
   subcategory_index: 1
   layer_origin: L6
   unit: probability
   update_frequency: on_request
-  description_l1: "The chance the outcome exceeds a chosen value."
-  description_l2: "S(x) = P(X > x) = 1 - F(x). Used for tail-event framing; same information as CDF, different conventional emphasis."
-  description_l3: "Common in survival analysis + tail-risk; hazard function h(x) = -d log S(x) / dx. Complementary representation to F(x) for continuous distributions."
+  description_l1: The chance the outcome exceeds a chosen value.
+  description_l2: S(x) = P(X > x) = 1 - F(x). Used for tail-event framing; same information
+    as CDF, different conventional emphasis.
+  description_l3: Common in survival analysis + tail-risk; hazard function h(x) =
+    -d log S(x) / dx. Complementary representation to F(x) for continuous distributions.
   range_min: 0.0
   range_max: 1.0
-  typical_range: [0.0, 1.0]
+  typical_range:
+  - 0.0
+  - 1.0
   invert_for_signal: false
-  citations: ["Kalbfleisch-Prentice (2002)"]
-
+  citations:
+  - Kalbfleisch-Prentice (2002)
+  computation_path: null
+  deferred_to: L8a
 - metric_id: tail_probability
-  name: "Tail probability P(X > x_threshold)"
+  name: Tail probability P(X > x_threshold)
   subcategory: probability
   subcategory_index: 1
   layer_origin: L6
   unit: probability
   update_frequency: on_request
-  description_l1: "How likely the outcome is bigger than a threshold of interest."
-  description_l2: "P(X > x) where x is an institutionally meaningful threshold (e.g., drawdown > 35%; return < -20%). Vision §1 Pillar 4 mandates tail probabilities alongside central estimates."
-  description_l3: "For thresholds in the distribution tail (typically beyond 95th or below 5th percentile); extreme value theory (Pickands 1975; Generalized Pareto fit) supports the parametric tail when N is small."
+  description_l1: How likely the outcome is bigger than a threshold of interest.
+  description_l2: "P(X > x) where x is an institutionally meaningful threshold (e.g.,\
+    \ drawdown > 35%; return < -20%). Vision \xA71 Pillar 4 mandates tail probabilities\
+    \ alongside central estimates."
+  description_l3: For thresholds in the distribution tail (typically beyond 95th or
+    below 5th percentile); extreme value theory (Pickands 1975; Generalized Pareto
+    fit) supports the parametric tail when N is small.
   range_min: 0.0
   range_max: 1.0
-  typical_range: [0.0, 0.5]
+  typical_range:
+  - 0.0
+  - 0.5
   invert_for_signal: false
-  citations: ["Pickands (1975)", "McNeil-Frey-Embrechts (2005)"]
-
-# ============================================================================
-# §3.2 — Uncertainty measures (7)
-# ============================================================================
-
+  citations:
+  - Pickands (1975)
+  - McNeil-Frey-Embrechts (2005)
+  computation_path: null
+  deferred_to: L8a
 - metric_id: analog_dispersion_sigma
-  name: "Analog-period dispersion sigma"
+  name: Analog-period dispersion sigma
   subcategory: uncertainty
   subcategory_index: 2
   layer_origin: L6
   unit: native_units
   update_frequency: on_request
-  description_l1: "How spread out the historical look-alikes are."
-  description_l2: "Cross-analog standard deviation of forecast targets across the top reference-class matches. One of the three sigma values in Vision §5 Triple sigma reporting."
-  description_l3: "sigma_analog = sqrt((1/(K-1)) sum_{k=1..K} (y_k - mean(y))^2) over K reference-class analogs identified per Vision §6 cosine-similarity scoring on the eight-dimensional macro state vector."
+  description_l1: How spread out the historical look-alikes are.
+  description_l2: "Cross-analog standard deviation of forecast targets across the\
+    \ top reference-class matches. One of the three sigma values in Vision \xA75 Triple\
+    \ sigma reporting."
+  description_l3: "sigma_analog = sqrt((1/(K-1)) sum_{k=1..K} (y_k - mean(y))^2) over\
+    \ K reference-class analogs identified per Vision \xA76 cosine-similarity scoring\
+    \ on the eight-dimensional macro state vector."
+  range_min: null
+  range_max: null
+  typical_range: null
   invert_for_signal: false
-  citations: ["Vision v2.0 §5", "Tetlock-Gardner (2015) §10"]
-
+  citations:
+  - "Vision v2.0 \xA75"
+  - "Tetlock-Gardner (2015) \xA710"
+  computation_path: macro_pipeline/ensemble/aggregator.py:populate_metric_outputs
+  deferred_to: null
 - metric_id: confidence_interval
-  name: "Confidence interval (frequentist)"
+  name: Confidence interval (frequentist)
   subcategory: uncertainty
   subcategory_index: 2
   layer_origin: L6
   unit: native_units
   update_frequency: on_request
-  description_l1: "A range where the true value probably falls."
-  description_l2: "Frequentist CI: [theta_L, theta_U] such that P(theta in [L, U]) = 1 - alpha across repeated samples. Vision §1 default reports 95% CI alongside the point estimate."
-  description_l3: "Coverage 1-alpha (default 0.95) per frequentist long-run interpretation; NOT a posterior probability. Wald, exact Clopper-Pearson, score, profile likelihood variants for different parameter spaces."
+  description_l1: A range where the true value probably falls.
+  description_l2: "Frequentist CI: [theta_L, theta_U] such that P(theta in [L, U])\
+    \ = 1 - alpha across repeated samples. Vision \xA71 default reports 95% CI alongside\
+    \ the point estimate."
+  description_l3: Coverage 1-alpha (default 0.95) per frequentist long-run interpretation;
+    NOT a posterior probability. Wald, exact Clopper-Pearson, score, profile likelihood
+    variants for different parameter spaces.
+  range_min: null
+  range_max: null
+  typical_range: null
   invert_for_signal: false
-  citations: ["Casella-Berger (2002) §9", "Clopper-Pearson (1934)"]
-
+  citations:
+  - "Casella-Berger (2002) \xA79"
+  - Clopper-Pearson (1934)
+  computation_path: null
+  deferred_to: L8a
 - metric_id: credible_interval
-  name: "Bayesian credible interval"
+  name: Bayesian credible interval
   subcategory: uncertainty
   subcategory_index: 2
   layer_origin: L6
   unit: native_units
   update_frequency: on_request
-  description_l1: "A range where we believe the true value lies with a certain probability."
-  description_l2: "Bayesian interval [a, b] such that posterior P(theta in [a, b] | data) = 1 - alpha. Unlike a frequentist CI, this is an honest probability statement about the parameter given priors + data."
-  description_l3: "Quantile-based credible interval uses posterior quantiles q_{alpha/2}, q_{1-alpha/2}; HPD interval is the shortest such interval. Bayes-theorem-driven; depends on prior choice."
+  description_l1: A range where we believe the true value lies with a certain probability.
+  description_l2: Bayesian interval [a, b] such that posterior P(theta in [a, b] |
+    data) = 1 - alpha. Unlike a frequentist CI, this is an honest probability statement
+    about the parameter given priors + data.
+  description_l3: Quantile-based credible interval uses posterior quantiles q_{alpha/2},
+    q_{1-alpha/2}; HPD interval is the shortest such interval. Bayes-theorem-driven;
+    depends on prior choice.
+  range_min: null
+  range_max: null
+  typical_range: null
   invert_for_signal: false
-  citations: ["Gelman et al. (2013) Bayesian Data Analysis"]
-
+  citations:
+  - Gelman et al. (2013) Bayesian Data Analysis
+  computation_path: null
+  deferred_to: L7
 - metric_id: forecast_error_sigma
-  name: "Forecast error sigma"
+  name: Forecast error sigma
   subcategory: uncertainty
   subcategory_index: 2
   layer_origin: L5b
   unit: native_units
   update_frequency: on_request
-  description_l1: "How much the forecast typically misses by."
-  description_l2: "Model-uncertainty sigma around the central forecast. One of the three sigma values in Vision §5 Triple sigma reporting; combines Ridge HAC SE + isotonic bootstrap SE."
-  description_l3: "v2 quadrature (post-S-6): sigma_forecast^2 = sigma_ridge^2 + sigma_isotonic^2 + 2 * cov(ridge, isotonic) per Layer 5-E §5.E.3; cov term from joint bootstrap closes Codex/ChatGPT independence-assumption concern."
+  description_l1: How much the forecast typically misses by.
+  description_l2: "Model-uncertainty sigma around the central forecast. One of the\
+    \ three sigma values in Vision \xA75 Triple sigma reporting; combines Ridge HAC\
+    \ SE + isotonic bootstrap SE."
+  description_l3: "v2 quadrature (post-S-6): sigma_forecast^2 = sigma_ridge^2 + sigma_isotonic^2\
+    \ + 2 * cov(ridge, isotonic) per Layer 5-E \xA75.E.3; cov term from joint bootstrap\
+    \ closes Codex/ChatGPT independence-assumption concern."
+  range_min: null
+  range_max: null
+  typical_range: null
   invert_for_signal: false
-  citations: ["LAYER_5_BUILD_SPEC.md §5.E"]
-
+  citations:
+  - "LAYER_5_BUILD_SPEC.md \xA75.E"
+  computation_path: macro_pipeline/analysis/forecast_sigma.py:derive_forecast_sigma_v2
+  deferred_to: null
 - metric_id: highest_posterior_density
-  name: "Highest posterior density (HPD) interval"
+  name: Highest posterior density (HPD) interval
   subcategory: uncertainty
   subcategory_index: 2
   layer_origin: L6
   unit: native_units
   update_frequency: on_request
-  description_l1: "The shortest range that contains a chosen amount of probability."
-  description_l2: "HPD region of level 1-alpha: {theta : p(theta|data) >= k} where k chosen so the region has posterior mass 1-alpha. Equals the quantile-based credible interval for unimodal symmetric posteriors."
-  description_l3: "May be disconnected for multimodal posteriors; Box-Tiao (1973) construction. For Markov chain Monte Carlo posterior samples, computed via Chen-Shao (1999) shortest-interval algorithm."
+  description_l1: The shortest range that contains a chosen amount of probability.
+  description_l2: 'HPD region of level 1-alpha: {theta : p(theta|data) >= k} where
+    k chosen so the region has posterior mass 1-alpha. Equals the quantile-based credible
+    interval for unimodal symmetric posteriors.'
+  description_l3: May be disconnected for multimodal posteriors; Box-Tiao (1973) construction.
+    For Markov chain Monte Carlo posterior samples, computed via Chen-Shao (1999)
+    shortest-interval algorithm.
+  range_min: null
+  range_max: null
+  typical_range: null
   invert_for_signal: false
-  citations: ["Box-Tiao (1973)", "Chen-Shao (1999)"]
-
+  citations:
+  - Box-Tiao (1973)
+  - Chen-Shao (1999)
+  computation_path: null
+  deferred_to: L7
 - metric_id: prediction_interval
-  name: "Prediction interval"
+  name: Prediction interval
   subcategory: uncertainty
   subcategory_index: 2
   layer_origin: L6
   unit: native_units
   update_frequency: on_request
-  description_l1: "A range we expect the next outcome to fall in."
-  description_l2: "Interval [a, b] containing 1-alpha probability of the next-observation random variable, accounting for both parameter uncertainty AND irreducible noise. Always wider than the parameter confidence interval."
-  description_l3: "For Gaussian linear regression, prediction interval at x_new is y_hat +/- z * sqrt(sigma_hat^2 (1 + x_new^T (X^T X)^{-1} x_new)); the extra 1 vs CI captures aleatory uncertainty."
+  description_l1: A range we expect the next outcome to fall in.
+  description_l2: Interval [a, b] containing 1-alpha probability of the next-observation
+    random variable, accounting for both parameter uncertainty AND irreducible noise.
+    Always wider than the parameter confidence interval.
+  description_l3: For Gaussian linear regression, prediction interval at x_new is
+    y_hat +/- z * sqrt(sigma_hat^2 (1 + x_new^T (X^T X)^{-1} x_new)); the extra 1
+    vs CI captures aleatory uncertainty.
+  range_min: null
+  range_max: null
+  typical_range: null
   invert_for_signal: false
-  citations: ["Hyndman-Athanasopoulos (2021) §5.5"]
-
+  citations:
+  - "Hyndman-Athanasopoulos (2021) \xA75.5"
+  computation_path: null
+  deferred_to: L7
 - metric_id: standard_deviation
-  name: "Standard deviation sigma"
+  name: Standard deviation sigma
   subcategory: uncertainty
   subcategory_index: 2
   layer_origin: L6
   unit: native_units
   update_frequency: on_request
-  description_l1: "How spread out the values are around the average."
-  description_l2: "sigma = sqrt(E[(X - mu)^2]); the basic measure of distributional spread. Sample SD uses (N-1) Bessel correction for unbiased variance estimation."
-  description_l3: "Square root of variance; non-robust to outliers (use MAD for robust alternative). For non-normal distributions, sigma is necessary but insufficient to characterize distribution shape (need skewness + kurtosis)."
+  description_l1: How spread out the values are around the average.
+  description_l2: sigma = sqrt(E[(X - mu)^2]); the basic measure of distributional
+    spread. Sample SD uses (N-1) Bessel correction for unbiased variance estimation.
+  description_l3: Square root of variance; non-robust to outliers (use MAD for robust
+    alternative). For non-normal distributions, sigma is necessary but insufficient
+    to characterize distribution shape (need skewness + kurtosis).
   range_min: 0.0
+  range_max: null
+  typical_range: null
   invert_for_signal: false
-  citations: ["Casella-Berger (2002) §1.6"]
-
-# ============================================================================
-# §3.3 — Confidence + Conviction (6)
-# ============================================================================
-
+  citations:
+  - "Casella-Berger (2002) \xA71.6"
+  computation_path: null
+  deferred_to: L8a
 - metric_id: confidence_score_pct
-  name: "% Confidence (0-100)"
+  name: '% Confidence (0-100)'
   subcategory: confidence_conviction
   subcategory_index: 3
   layer_origin: L6
   unit: percent
   update_frequency: on_request
-  description_l1: "How sure we are about the forecast, on a scale of zero to a hundred."
-  description_l2: "Meta-uncertainty score per Vision §4 formula: 25% Data Quality + 25% Model Agreement + 20% Regime Stability + 15% Analog Strength + 10% Sample Size minus 5% OOD Penalty."
-  description_l3: "BINDING formula per Vision §4; hard caps per §10: 1Y/3Y/5Y = 85%, 10Y = 70%; signal conflict caps at 75%; OOD vs analogs caps at 70%. Enforced by L1.7-B V5 plus L1.7-D forecast-time helper."
+  description_l1: How sure we are about the forecast, on a scale of zero to a hundred.
+  description_l2: "Meta-uncertainty score per Vision \xA74 formula: 25% Data Quality\
+    \ + 25% Model Agreement + 20% Regime Stability + 15% Analog Strength + 10% Sample\
+    \ Size minus 5% OOD Penalty."
+  description_l3: "BINDING formula per Vision \xA74; hard caps per \xA710: 1Y/3Y/5Y\
+    \ = 85%, 10Y = 70%; signal conflict caps at 75%; OOD vs analogs caps at 70%. Enforced\
+    \ by L1.7-B V5 plus L1.7-D forecast-time helper."
   range_min: 0.0
   range_max: 100.0
-  typical_range: [40.0, 85.0]
+  typical_range:
+  - 40.0
+  - 85.0
   invert_for_signal: false
-  citations: ["Vision v2.0 §4", "Vision v2.0 §10"]
-
+  citations:
+  - "Vision v2.0 \xA74"
+  - "Vision v2.0 \xA710"
+  computation_path: macro_pipeline/ensemble/bayesian_confidence.py:compute_bayesian_confidence
+  deferred_to: null
 - metric_id: conviction_score
-  name: "Conviction (1-10)"
+  name: Conviction (1-10)
   subcategory: confidence_conviction
   subcategory_index: 3
   layer_origin: L6
   unit: score_1_10
   update_frequency: on_request
-  description_l1: "How strongly we'd act on the forecast, on a scale of one to ten."
-  description_l2: "Position-sizing implication per Vision §4 formula: combines expected return attractiveness + asymmetry + model agreement + valuation + trend + liquidity, minus tail-risk + crowding + policy + decay penalties."
-  description_l3: "BINDING per Vision §4. Critical rule: Conviction CAN BE LOWER THAN Confidence when risk/reward asymmetry is poor. Maps to position-sizing labels Avoid / Underweight / ... / Aggressive overweight."
+  description_l1: How strongly we'd act on the forecast, on a scale of one to ten.
+  description_l2: "Position-sizing implication per Vision \xA74 formula: combines\
+    \ expected return attractiveness + asymmetry + model agreement + valuation + trend\
+    \ + liquidity, minus tail-risk + crowding + policy + decay penalties."
+  description_l3: "BINDING per Vision \xA74. Critical rule: Conviction CAN BE LOWER\
+    \ THAN Confidence when risk/reward asymmetry is poor. Maps to position-sizing\
+    \ labels Avoid / Underweight / ... / Aggressive overweight."
   range_min: 1.0
   range_max: 10.0
-  typical_range: [3.0, 8.0]
+  typical_range:
+  - 3.0
+  - 8.0
   invert_for_signal: false
-  citations: ["Vision v2.0 §4"]
-
+  citations:
+  - "Vision v2.0 \xA74"
+  computation_path: macro_pipeline/ensemble/bayesian_confidence.py:compute_conviction_score
+  deferred_to: null
 - metric_id: edge
-  name: "Edge (expected-return advantage)"
+  name: Edge (expected-return advantage)
   subcategory: confidence_conviction
   subcategory_index: 3
   layer_origin: L6
   unit: percent
   update_frequency: on_request
-  description_l1: "How much the forecast says we'd earn above what's already priced in."
-  description_l2: "Edge = forecast expected return minus market-implied expected return (e.g., ERP minus realized ERP percentile); positive edge supports long; negative edge supports caution/short."
-  description_l3: "Maps to Kelly fraction f* = edge / variance; Kelly criterion (Kelly 1956) is the long-run growth-optimal fraction. Vision §1 reports edge in percent units alongside probability + confidence."
+  description_l1: How much the forecast says we'd earn above what's already priced
+    in.
+  description_l2: Edge = forecast expected return minus market-implied expected return
+    (e.g., ERP minus realized ERP percentile); positive edge supports long; negative
+    edge supports caution/short.
+  description_l3: "Maps to Kelly fraction f* = edge / variance; Kelly criterion (Kelly\
+    \ 1956) is the long-run growth-optimal fraction. Vision \xA71 reports edge in\
+    \ percent units alongside probability + confidence."
+  range_min: null
+  range_max: null
+  typical_range: null
   invert_for_signal: false
-  citations: ["Kelly (1956)"]
-
+  citations:
+  - Kelly (1956)
+  computation_path: null
+  deferred_to: L7
 - metric_id: fractional_kelly
-  name: "Fractional Kelly (0.25-0.50 f*)"
+  name: Fractional Kelly (0.25-0.50 f*)
   subcategory: confidence_conviction
   subcategory_index: 3
   layer_origin: L6
   unit: ratio
   update_frequency: on_request
-  description_l1: "A safer share of the Kelly bet to actually put on, given the world is not certain."
-  description_l2: "Conservative scaling 0.25 to 0.50 of the full Kelly fraction; reduces drawdown risk when probabilities are estimated rather than known."
-  description_l3: "Half-Kelly (0.50 f*) approximates the constant-relative-risk-aversion utility-maximizing fraction under log utility with estimation noise; quarter-Kelly (0.25 f*) is institutionally common for further drawdown protection."
+  description_l1: A safer share of the Kelly bet to actually put on, given the world
+    is not certain.
+  description_l2: Conservative scaling 0.25 to 0.50 of the full Kelly fraction; reduces
+    drawdown risk when probabilities are estimated rather than known.
+  description_l3: Half-Kelly (0.50 f*) approximates the constant-relative-risk-aversion
+    utility-maximizing fraction under log utility with estimation noise; quarter-Kelly
+    (0.25 f*) is institutionally common for further drawdown protection.
   range_min: 0.0
   range_max: 0.5
-  typical_range: [0.0, 0.5]
+  typical_range:
+  - 0.0
+  - 0.5
   invert_for_signal: false
-  citations: ["MacLean-Thorp-Ziemba (2011)"]
-
+  citations:
+  - MacLean-Thorp-Ziemba (2011)
+  computation_path: null
+  deferred_to: L7
 - metric_id: kelly_fraction
-  name: "Kelly fraction f*"
+  name: Kelly fraction f*
   subcategory: confidence_conviction
   subcategory_index: 3
   layer_origin: L6
   unit: ratio
   update_frequency: on_request
-  description_l1: "The growth-optimal share of capital to bet on the forecast."
-  description_l2: "f* = edge / variance under log utility (Kelly 1956). Always reported alongside fractional-Kelly variants for risk-managed implementation."
-  description_l3: "For binary bets with win probability p, payout b: f* = (bp - q)/b where q = 1-p. Generalises to continuous returns: f* = mu/sigma^2 minus risk-free adjustment for excess-return formulation."
+  description_l1: The growth-optimal share of capital to bet on the forecast.
+  description_l2: f* = edge / variance under log utility (Kelly 1956). Always reported
+    alongside fractional-Kelly variants for risk-managed implementation.
+  description_l3: 'For binary bets with win probability p, payout b: f* = (bp - q)/b
+    where q = 1-p. Generalises to continuous returns: f* = mu/sigma^2 minus risk-free
+    adjustment for excess-return formulation.'
+  range_min: null
+  range_max: null
+  typical_range: null
   invert_for_signal: false
-  citations: ["Kelly (1956)", "Thorp (1969)"]
-
+  citations:
+  - Kelly (1956)
+  - Thorp (1969)
+  computation_path: null
+  deferred_to: L7
 - metric_id: probability_numeric
-  name: "Probability (numeric Bayesian posterior)"
+  name: Probability (numeric Bayesian posterior)
   subcategory: confidence_conviction
   subcategory_index: 3
   layer_origin: L6
   unit: probability
   update_frequency: on_request
-  description_l1: "The headline percent chance of the outcome."
-  description_l2: "Bayesian posterior probability P(outcome | data); central forecast number. Always reported alongside CI lower/upper + % Confidence + Conviction per Vision §4 Triple Decomposition (BINDING)."
-  description_l3: "Worked derivation per Vision §4: base_rate x likelihood_adjustment x regime_adjustment, with each factor decomposable for L3 audit. CI from L5b ensemble bootstrap (stationary block per Politis-Romano 1994)."
+  description_l1: The headline percent chance of the outcome.
+  description_l2: "Bayesian posterior probability P(outcome | data); central forecast\
+    \ number. Always reported alongside CI lower/upper + % Confidence + Conviction\
+    \ per Vision \xA74 Triple Decomposition (BINDING)."
+  description_l3: "Worked derivation per Vision \xA74: base_rate x likelihood_adjustment\
+    \ x regime_adjustment, with each factor decomposable for L3 audit. CI from L5b\
+    \ ensemble bootstrap (stationary block per Politis-Romano 1994)."
   range_min: 0.0
   range_max: 1.0
-  typical_range: [0.0, 1.0]
+  typical_range:
+  - 0.0
+  - 1.0
   invert_for_signal: false
-  citations: ["Vision v2.0 §4", "Politis-Romano (1994)"]
-
-# ============================================================================
-# §3.4 — Goodness-of-fit + Calibration (10)
-# ============================================================================
-
+  citations:
+  - "Vision v2.0 \xA74"
+  - Politis-Romano (1994)
+  computation_path: macro_pipeline/ensemble/aggregator.py:aggregate_ensemble
+  deferred_to: null
 - metric_id: adjusted_r_squared
-  name: "Adjusted R-squared"
+  name: Adjusted R-squared
   subcategory: goodness_fit_calibration
   subcategory_index: 4
   layer_origin: L5
   unit: ratio
   update_frequency: on_request
-  description_l1: "How well the model fits, accounting for using more features."
-  description_l2: "R^2_adj = 1 - (1 - R^2) (n - 1) / (n - k - 1); penalises adding predictors that do not improve fit. Always less than or equal to R^2."
-  description_l3: "Approximates the unbiased estimator of the population R^2 in the linear-model case; Theil (1961). Vision §3 mandates reporting alongside R^2 for any multi-feature regression."
+  description_l1: How well the model fits, accounting for using more features.
+  description_l2: R^2_adj = 1 - (1 - R^2) (n - 1) / (n - k - 1); penalises adding
+    predictors that do not improve fit. Always less than or equal to R^2.
+  description_l3: "Approximates the unbiased estimator of the population R^2 in the\
+    \ linear-model case; Theil (1961). Vision \xA73 mandates reporting alongside R^2\
+    \ for any multi-feature regression."
+  range_min: null
   range_max: 1.0
-  typical_range: [-0.2, 1.0]
+  typical_range:
+  - -0.2
+  - 1.0
   invert_for_signal: false
-  citations: ["Theil (1961)"]
-
+  citations:
+  - Theil (1961)
+  computation_path: macro_pipeline/analysis/r_squared_panel.py
+  deferred_to: null
 - metric_id: auc_roc
-  name: "AUC under ROC curve"
+  name: AUC under ROC curve
   subcategory: goodness_fit_calibration
   subcategory_index: 4
   layer_origin: L5b
   unit: ratio
   update_frequency: on_request
-  description_l1: "How well the model separates ups from downs, where 1.0 is perfect and 0.5 is random."
-  description_l2: "Area under the Receiver Operating Characteristic curve; integrates true-positive rate against false-positive rate across all classification thresholds. Discrimination-focused metric."
-  description_l3: "AUC = P(score(positive) > score(negative)) for randomly selected positive/negative pair; equivalent to Mann-Whitney U statistic normalised. Insensitive to calibration; pair with Brier for full assessment."
+  description_l1: How well the model separates ups from downs, where 1.0 is perfect
+    and 0.5 is random.
+  description_l2: Area under the Receiver Operating Characteristic curve; integrates
+    true-positive rate against false-positive rate across all classification thresholds.
+    Discrimination-focused metric.
+  description_l3: AUC = P(score(positive) > score(negative)) for randomly selected
+    positive/negative pair; equivalent to Mann-Whitney U statistic normalised. Insensitive
+    to calibration; pair with Brier for full assessment.
   range_min: 0.0
   range_max: 1.0
-  typical_range: [0.5, 0.8]
+  typical_range:
+  - 0.5
+  - 0.8
   invert_for_signal: false
-  citations: ["Hanley-McNeil (1982)"]
-
+  citations:
+  - Hanley-McNeil (1982)
+  computation_path: null
+  deferred_to: L7
 - metric_id: brier_improvement_vs_climatology
-  name: "Brier improvement vs climatology"
+  name: Brier improvement vs climatology
   subcategory: goodness_fit_calibration
   subcategory_index: 4
   layer_origin: L5b
   unit: ratio
   update_frequency: on_request
-  description_l1: "How much better the forecast is than just guessing the historical average."
-  description_l2: "1 - (Brier_model / Brier_climatology); positive values mean model beats the naive constant-rate baseline. Vision §13 Calibration Public Accountability reports this prominently."
-  description_l3: "Climatology = constant forecast equal to historical base rate; benchmark for skill assessment per Murphy (1973) decomposition. Negative values signal a model that is statistically worse than knowing nothing."
-  typical_range: [-0.2, 0.5]
+  description_l1: How much better the forecast is than just guessing the historical
+    average.
+  description_l2: "1 - (Brier_model / Brier_climatology); positive values mean model\
+    \ beats the naive constant-rate baseline. Vision \xA713 Calibration Public Accountability\
+    \ reports this prominently."
+  description_l3: Climatology = constant forecast equal to historical base rate; benchmark
+    for skill assessment per Murphy (1973) decomposition. Negative values signal a
+    model that is statistically worse than knowing nothing.
+  range_min: null
+  range_max: null
+  typical_range:
+  - -0.2
+  - 0.5
   invert_for_signal: false
-  citations: ["Murphy (1973)", "Vision v2.0 §13"]
-
+  citations:
+  - Murphy (1973)
+  - "Vision v2.0 \xA713"
+  computation_path: macro_pipeline/analysis/brier_reliability.py:BrierDecomposition
+  deferred_to: null
 - metric_id: brier_score
-  name: "Brier score"
+  name: Brier score
   subcategory: goodness_fit_calibration
   subcategory_index: 4
   layer_origin: L5b
   unit: ratio
   update_frequency: on_request
-  description_l1: "Average squared error of probability forecasts; lower is better."
-  description_l2: "Brier = (1/N) sum (p_i - y_i)^2 where p_i in [0,1] is forecast, y_i in {0,1} is realised outcome. Lower is better; bounded in [0, 1] for binary outcomes."
-  description_l3: "Strictly proper scoring rule (Brier 1950); decomposes into reliability + resolution + uncertainty per Murphy (1973). Regime-conditional Brier per L5b-D supports recession vs expansion sub-sample assessment."
+  description_l1: Average squared error of probability forecasts; lower is better.
+  description_l2: Brier = (1/N) sum (p_i - y_i)^2 where p_i in [0,1] is forecast,
+    y_i in {0,1} is realised outcome. Lower is better; bounded in [0, 1] for binary
+    outcomes.
+  description_l3: Strictly proper scoring rule (Brier 1950); decomposes into reliability
+    + resolution + uncertainty per Murphy (1973). Regime-conditional Brier per L5b-D
+    supports recession vs expansion sub-sample assessment.
   range_min: 0.0
   range_max: 1.0
-  typical_range: [0.0, 0.5]
+  typical_range:
+  - 0.0
+  - 0.5
   invert_for_signal: true
-  citations: ["Brier (1950)", "Murphy (1973)"]
-
+  citations:
+  - Brier (1950)
+  - Murphy (1973)
+  computation_path: macro_pipeline/analysis/brier_reliability.py:BrierDecomposition
+  deferred_to: null
 - metric_id: calibration_slope
-  name: "Calibration slope"
+  name: Calibration slope
   subcategory: goodness_fit_calibration
   subcategory_index: 4
   layer_origin: L5b
   unit: ratio
   update_frequency: on_request
-  description_l1: "Whether forecasts of 70% really happen about 70% of the time."
-  description_l2: "Slope of realised-outcome rate regressed on forecast probability; 1.0 is perfect calibration; >1 underconfident, <1 overconfident. Vision §13 mandates publication of calibration slope alongside Brier."
-  description_l3: "Cox (1958) calibration regression: logit(y) = alpha + beta * logit(p_hat); beta=1, alpha=0 is perfect. Reliability diagram is the binned visualisation; isotonic post-hoc calibration (L5-RM-6) corrects systematic miscalibration."
-  typical_range: [0.5, 1.5]
+  description_l1: Whether forecasts of 70% really happen about 70% of the time.
+  description_l2: "Slope of realised-outcome rate regressed on forecast probability;\
+    \ 1.0 is perfect calibration; >1 underconfident, <1 overconfident. Vision \xA7\
+    13 mandates publication of calibration slope alongside Brier."
+  description_l3: 'Cox (1958) calibration regression: logit(y) = alpha + beta * logit(p_hat);
+    beta=1, alpha=0 is perfect. Reliability diagram is the binned visualisation; isotonic
+    post-hoc calibration (L5-RM-6) corrects systematic miscalibration.'
+  range_min: null
+  range_max: null
+  typical_range:
+  - 0.5
+  - 1.5
   invert_for_signal: false
-  citations: ["Cox (1958)", "Vision v2.0 §13"]
-
+  citations:
+  - Cox (1958)
+  - "Vision v2.0 \xA713"
+  computation_path: macro_pipeline/models/isotonic_calibrator.py:IsotonicCalibrationResult
+  deferred_to: null
 - metric_id: crps
-  name: "Continuous Ranked Probability Score (CRPS)"
+  name: Continuous Ranked Probability Score (CRPS)
   subcategory: goodness_fit_calibration
   subcategory_index: 4
   layer_origin: L5
   unit: native_units
   update_frequency: on_request
-  description_l1: "How well a full forecast distribution matches realised outcomes; lower is better."
-  description_l2: "CRPS = integral (F(x) - 1{y <= x})^2 dx; generalises Brier from binary to continuous outcomes. Strictly proper for evaluating distributional forecasts."
-  description_l3: "For Gaussian forecast N(mu, sigma^2) and observation y, closed-form CRPS = sigma * (1/sqrt(pi) - 2 phi((y-mu)/sigma)) + (y-mu)*(2 Phi((y-mu)/sigma) - 1). Implementation in L5 scoring module."
+  description_l1: How well a full forecast distribution matches realised outcomes;
+    lower is better.
+  description_l2: CRPS = integral (F(x) - 1{y <= x})^2 dx; generalises Brier from
+    binary to continuous outcomes. Strictly proper for evaluating distributional forecasts.
+  description_l3: For Gaussian forecast N(mu, sigma^2) and observation y, closed-form
+    CRPS = sigma * (1/sqrt(pi) - 2 phi((y-mu)/sigma)) + (y-mu)*(2 Phi((y-mu)/sigma)
+    - 1). Implementation in L5 scoring module.
   range_min: 0.0
+  range_max: null
+  typical_range: null
   invert_for_signal: true
-  citations: ["Matheson-Winkler (1976)", "Gneiting-Raftery (2007)"]
-
+  citations:
+  - Matheson-Winkler (1976)
+  - Gneiting-Raftery (2007)
+  computation_path: macro_pipeline/scoring/crps.py
+  deferred_to: null
 - metric_id: log_loss
-  name: "Logarithmic loss (cross-entropy)"
+  name: Logarithmic loss (cross-entropy)
   subcategory: goodness_fit_calibration
   subcategory_index: 4
   layer_origin: L5b
   unit: nats
   update_frequency: on_request
-  description_l1: "How surprised we are by what actually happened; lower is better."
-  description_l2: "log_loss = -(1/N) sum (y_i log p_i + (1-y_i) log (1-p_i)); information-theoretic loss; strictly proper. Heavily penalises confident wrong predictions."
-  description_l3: "Equals negative log-likelihood of Bernoulli; cross-entropy between forecast and one-hot truth distribution. Penalty for p_i = 0 when y_i = 1 is infinite; small-probability floor (epsilon clip) is standard."
+  description_l1: How surprised we are by what actually happened; lower is better.
+  description_l2: log_loss = -(1/N) sum (y_i log p_i + (1-y_i) log (1-p_i)); information-theoretic
+    loss; strictly proper. Heavily penalises confident wrong predictions.
+  description_l3: Equals negative log-likelihood of Bernoulli; cross-entropy between
+    forecast and one-hot truth distribution. Penalty for p_i = 0 when y_i = 1 is infinite;
+    small-probability floor (epsilon clip) is standard.
   range_min: 0.0
+  range_max: null
+  typical_range: null
   invert_for_signal: true
-  citations: ["Good (1952)"]
-
+  citations:
+  - Good (1952)
+  computation_path: null
+  deferred_to: L7
 - metric_id: r_squared
-  name: "R-squared (coefficient of determination)"
+  name: R-squared (coefficient of determination)
   subcategory: goodness_fit_calibration
   subcategory_index: 4
   layer_origin: L5
   unit: ratio
   update_frequency: on_request
-  description_l1: "What share of variation the model explains, where 1.0 is perfect."
-  description_l2: "R^2 = 1 - SS_res / SS_tot; share of variance in the outcome explained by the model. Can be negative for OOS evaluation (worse than mean baseline)."
-  description_l3: "In-sample R^2 monotone non-decreasing in features added; OOS R^2 the institutionally meaningful version. Vision §3 mandates pairing with adjusted R^2 for multi-feature comparison."
+  description_l1: What share of variation the model explains, where 1.0 is perfect.
+  description_l2: R^2 = 1 - SS_res / SS_tot; share of variance in the outcome explained
+    by the model. Can be negative for OOS evaluation (worse than mean baseline).
+  description_l3: "In-sample R^2 monotone non-decreasing in features added; OOS R^2\
+    \ the institutionally meaningful version. Vision \xA73 mandates pairing with adjusted\
+    \ R^2 for multi-feature comparison."
+  range_min: null
   range_max: 1.0
-  typical_range: [-0.5, 1.0]
+  typical_range:
+  - -0.5
+  - 1.0
   invert_for_signal: false
-  citations: ["Wright (1921)"]
-
+  citations:
+  - Wright (1921)
+  computation_path: macro_pipeline/analysis/r_squared_panel.py
+  deferred_to: null
 - metric_id: reliability_diagram
-  name: "Reliability diagram"
+  name: Reliability diagram
   subcategory: goodness_fit_calibration
   subcategory_index: 4
   layer_origin: L5b
   unit: visual
   update_frequency: on_request
-  description_l1: "A chart that shows whether predicted percentages match reality."
-  description_l2: "Binned plot of realised outcome rate vs forecast probability; perfect calibration is the 45-degree line. Vision §13 mandates publication alongside Brier score."
-  description_l3: "Murphy (1973) reliability decomposition Brier = REL - RES + UNC; reliability diagram is the visual companion. Adaptive bin reduction (L5b-KICK-3) handles small-N tail bins."
+  description_l1: A chart that shows whether predicted percentages match reality.
+  description_l2: "Binned plot of realised outcome rate vs forecast probability; perfect\
+    \ calibration is the 45-degree line. Vision \xA713 mandates publication alongside\
+    \ Brier score."
+  description_l3: Murphy (1973) reliability decomposition Brier = REL - RES + UNC;
+    reliability diagram is the visual companion. Adaptive bin reduction (L5b-KICK-3)
+    handles small-N tail bins.
+  range_min: null
+  range_max: null
+  typical_range: null
   invert_for_signal: false
-  citations: ["Murphy (1973)", "DeGroot-Fienberg (1983)"]
-
+  citations:
+  - Murphy (1973)
+  - DeGroot-Fienberg (1983)
+  computation_path: macro_pipeline/analysis/brier_reliability.py:BrierDecomposition
+  deferred_to: null
 - metric_id: sharpness
-  name: "Sharpness (forecast concentration)"
+  name: Sharpness (forecast concentration)
   subcategory: goodness_fit_calibration
   subcategory_index: 4
   layer_origin: L5b
   unit: ratio
   update_frequency: on_request
-  description_l1: "How concentrated the forecast is around its central estimate."
-  description_l2: "Average forecast variance across the test set; smaller is sharper. A sharp + calibrated forecast is preferred to a vague + calibrated one (Gneiting-Balabdaoui-Raftery 2007)."
-  description_l3: "Sharpness alone is not desirable (sharp wrong is worse than vague right); calibration is the necessary condition + sharpness is the further skill margin per Gneiting et al. (2007) maximise-sharpness-subject-to-calibration principle."
+  description_l1: How concentrated the forecast is around its central estimate.
+  description_l2: Average forecast variance across the test set; smaller is sharper.
+    A sharp + calibrated forecast is preferred to a vague + calibrated one (Gneiting-Balabdaoui-Raftery
+    2007).
+  description_l3: Sharpness alone is not desirable (sharp wrong is worse than vague
+    right); calibration is the necessary condition + sharpness is the further skill
+    margin per Gneiting et al. (2007) maximise-sharpness-subject-to-calibration principle.
   range_min: 0.0
+  range_max: null
+  typical_range: null
   invert_for_signal: true
-  citations: ["Gneiting-Balabdaoui-Raftery (2007)"]
-
-# ============================================================================
-# §3.5 — Statistical significance (9)
-# ============================================================================
-
+  citations:
+  - Gneiting-Balabdaoui-Raftery (2007)
+  computation_path: null
+  deferred_to: L7
 - metric_id: degrees_of_freedom
-  name: "Degrees of freedom (df)"
+  name: Degrees of freedom (df)
   subcategory: statistical_significance
   subcategory_index: 5
   layer_origin: L5
   unit: count
   update_frequency: on_request
-  description_l1: "How many independent pieces of information went into a statistic."
-  description_l2: "Sample size n minus number of fitted parameters; tunes t/F/chi-squared distributions. Low df widens critical values + reduces power."
-  description_l3: "For Newey-West HAC SE the effective df accounts for bandwidth + autocorrelation; HAC-adjusted df can be substantially below n. Vision §10 sample-size honesty plus Hodrick (1992) overlapping-obs adjustment relevant."
+  description_l1: How many independent pieces of information went into a statistic.
+  description_l2: Sample size n minus number of fitted parameters; tunes t/F/chi-squared
+    distributions. Low df widens critical values + reduces power.
+  description_l3: "For Newey-West HAC SE the effective df accounts for bandwidth +\
+    \ autocorrelation; HAC-adjusted df can be substantially below n. Vision \xA710\
+    \ sample-size honesty plus Hodrick (1992) overlapping-obs adjustment relevant."
   range_min: 0.0
+  range_max: null
+  typical_range: null
   invert_for_signal: false
-  citations: ["Fisher (1925)"]
-
+  citations:
+  - Fisher (1925)
+  computation_path: null
+  deferred_to: L8a
 - metric_id: effective_sample_size
-  name: "Effective sample size N_eff"
+  name: Effective sample size N_eff
   subcategory: statistical_significance
   subcategory_index: 5
   layer_origin: L5
   unit: count
   update_frequency: on_request
-  description_l1: "How many truly independent observations the data is worth."
-  description_l2: "N_eff = N / (1 + 2 sum rho(k)); accounts for autocorrelation reducing information content. Vision §10 requires reporting both N and N_eff for sample-size honesty."
-  description_l3: "Newey-West-style autocorrelation correction; for 10Y forecasts with monthly data and N~113, N_eff often ~11 non-overlapping windows. Hodrick (1992) overlapping-obs correction applied at HAC SE stage."
+  description_l1: How many truly independent observations the data is worth.
+  description_l2: "N_eff = N / (1 + 2 sum rho(k)); accounts for autocorrelation reducing\
+    \ information content. Vision \xA710 requires reporting both N and N_eff for sample-size\
+    \ honesty."
+  description_l3: Newey-West-style autocorrelation correction; for 10Y forecasts with
+    monthly data and N~113, N_eff often ~11 non-overlapping windows. Hodrick (1992)
+    overlapping-obs correction applied at HAC SE stage.
   range_min: 0.0
+  range_max: null
+  typical_range: null
   invert_for_signal: false
-  citations: ["Hodrick (1992)", "Vision v2.0 §10"]
-
+  citations:
+  - Hodrick (1992)
+  - "Vision v2.0 \xA710"
+  computation_path: macro_pipeline/analysis/effective_sample_size.py:n_eff_nonoverlap
+  deferred_to: null
 - metric_id: p_value_hac_adjusted
-  name: "p-value (HAC-adjusted, Newey-West)"
+  name: p-value (HAC-adjusted, Newey-West)
   subcategory: statistical_significance
   subcategory_index: 5
   layer_origin: L5
   unit: probability
   update_frequency: on_request
-  description_l1: "The chance of seeing this result by luck, allowing for clustered errors."
-  description_l2: "p-value computed with Newey-West heteroscedasticity + autocorrelation consistent standard errors. Required for any time-series regression with autocorrelation."
-  description_l3: "Newey-West (1987) HAC kernel with bandwidth = horizon - 1 per L5-B §5.B.1.3; sensitivity sweep at {h-1, Andrews-auto, max(2, h//4)}. Robust to overlapping observations."
+  description_l1: The chance of seeing this result by luck, allowing for clustered
+    errors.
+  description_l2: p-value computed with Newey-West heteroscedasticity + autocorrelation
+    consistent standard errors. Required for any time-series regression with autocorrelation.
+  description_l3: "Newey-West (1987) HAC kernel with bandwidth = horizon - 1 per L5-B\
+    \ \xA75.B.1.3; sensitivity sweep at {h-1, Andrews-auto, max(2, h//4)}. Robust\
+    \ to overlapping observations."
   range_min: 0.0
   range_max: 1.0
-  typical_range: [0.0, 1.0]
+  typical_range:
+  - 0.0
+  - 1.0
   invert_for_signal: true
-  citations: ["Newey-West (1987)"]
-
+  citations:
+  - Newey-West (1987)
+  computation_path: macro_pipeline/analysis/newey_west_hac.py:fit_ols_hac
+  deferred_to: null
 - metric_id: p_value_raw
-  name: "p-value (raw, unadjusted)"
+  name: p-value (raw, unadjusted)
   subcategory: statistical_significance
   subcategory_index: 5
   layer_origin: L5
   unit: probability
   update_frequency: on_request
-  description_l1: "The chance of seeing this result by luck, before any adjustments."
-  description_l2: "Pre-FDR, pre-HAC p-value from a single hypothesis test. Always reported alongside HAC + BH-FDR adjusted versions per Vision §3 + L5b-C discipline."
-  description_l3: "Misuse of raw p-values in multiple-testing contexts is the canonical statistical-significance error; Benjamini-Hochberg q-values + HAC adjustment counter this."
+  description_l1: The chance of seeing this result by luck, before any adjustments.
+  description_l2: "Pre-FDR, pre-HAC p-value from a single hypothesis test. Always\
+    \ reported alongside HAC + BH-FDR adjusted versions per Vision \xA73 + L5b-C discipline."
+  description_l3: Misuse of raw p-values in multiple-testing contexts is the canonical
+    statistical-significance error; Benjamini-Hochberg q-values + HAC adjustment counter
+    this.
   range_min: 0.0
   range_max: 1.0
-  typical_range: [0.0, 1.0]
+  typical_range:
+  - 0.0
+  - 1.0
   invert_for_signal: true
-  citations: ["Fisher (1925)"]
-
+  citations:
+  - Fisher (1925)
+  computation_path: macro_pipeline/analysis/newey_west_hac.py:fit_ols_hac
+  deferred_to: null
 - metric_id: q_value_bh_fdr
-  name: "q-value (BH FDR-adjusted)"
+  name: q-value (BH FDR-adjusted)
   subcategory: statistical_significance
   subcategory_index: 5
   layer_origin: L5b
   unit: probability
   update_frequency: on_request
-  description_l1: "p-value adjusted for testing many things at once."
-  description_l2: "Benjamini-Hochberg false discovery rate q-value; controls expected false-positive proportion in the rejected set. L5b-C FDR gating enforces q < 0.10 default threshold."
-  description_l3: "For sorted p-values p_(1) <= ... <= p_(m): q_(i) = m / i * p_(i). Step-up procedure per Benjamini-Hochberg (1995); robust to positive regression dependence (Benjamini-Yekutieli 2001)."
+  description_l1: p-value adjusted for testing many things at once.
+  description_l2: Benjamini-Hochberg false discovery rate q-value; controls expected
+    false-positive proportion in the rejected set. L5b-C FDR gating enforces q < 0.10
+    default threshold.
+  description_l3: 'For sorted p-values p_(1) <= ... <= p_(m): q_(i) = m / i * p_(i).
+    Step-up procedure per Benjamini-Hochberg (1995); robust to positive regression
+    dependence (Benjamini-Yekutieli 2001).'
   range_min: 0.0
   range_max: 1.0
-  typical_range: [0.0, 1.0]
+  typical_range:
+  - 0.0
+  - 1.0
   invert_for_signal: true
-  citations: ["Benjamini-Hochberg (1995)"]
-
+  citations:
+  - Benjamini-Hochberg (1995)
+  computation_path: macro_pipeline/analysis/fdr_gating.py:FDRGatingDiagnostics
+  deferred_to: null
 - metric_id: statistical_power
-  name: "Statistical power (1 - beta)"
+  name: Statistical power (1 - beta)
   subcategory: statistical_significance
   subcategory_index: 5
   layer_origin: L6
   unit: probability
   update_frequency: on_request
-  description_l1: "How likely we are to detect a real effect when one exists."
-  description_l2: "Probability of rejecting H_0 given H_1 is true at a specified effect size + alpha + sample size. Low power is endemic for 10Y macro forecasts (Vision §10 N_eff approx 11)."
-  description_l3: "Power = 1 - beta(theta_1); function of effect size, sigma, n, alpha. Cohen (1988) conventional thresholds: 0.80 adequate. For Vision §10 10Y horizon, power is structurally low + drives the 70% confidence cap."
+  description_l1: How likely we are to detect a real effect when one exists.
+  description_l2: "Probability of rejecting H_0 given H_1 is true at a specified effect\
+    \ size + alpha + sample size. Low power is endemic for 10Y macro forecasts (Vision\
+    \ \xA710 N_eff approx 11)."
+  description_l3: "Power = 1 - beta(theta_1); function of effect size, sigma, n, alpha.\
+    \ Cohen (1988) conventional thresholds: 0.80 adequate. For Vision \xA710 10Y horizon,\
+    \ power is structurally low + drives the 70% confidence cap."
   range_min: 0.0
   range_max: 1.0
-  typical_range: [0.05, 0.95]
+  typical_range:
+  - 0.05
+  - 0.95
   invert_for_signal: false
-  citations: ["Cohen (1988)", "Vision v2.0 §10"]
-
+  citations:
+  - Cohen (1988)
+  - "Vision v2.0 \xA710"
+  computation_path: null
+  deferred_to: L8a
 - metric_id: test_statistic
-  name: "Test statistic (supW / t / F)"
+  name: Test statistic (supW / t / F)
   subcategory: statistical_significance
   subcategory_index: 5
   layer_origin: L5b
   unit: native_units
   update_frequency: on_request
-  description_l1: "A summary number that ranks how surprising the data is."
-  description_l2: "Reduces sample evidence to a single comparable scalar; mapped to p-value via reference distribution. Most-used variants: t (mean), F (variance ratio), supW (Quandt-Andrews structural break)."
-  description_l3: "Quandt-Andrews supW = sup_t W_t per Andrews (1993); Bai-Perron (1998) sequential supF for multi-break. Each statistic has its own asymptotic distribution under H_0."
+  description_l1: A summary number that ranks how surprising the data is.
+  description_l2: 'Reduces sample evidence to a single comparable scalar; mapped to
+    p-value via reference distribution. Most-used variants: t (mean), F (variance
+    ratio), supW (Quandt-Andrews structural break).'
+  description_l3: Quandt-Andrews supW = sup_t W_t per Andrews (1993); Bai-Perron (1998)
+    sequential supF for multi-break. Each statistic has its own asymptotic distribution
+    under H_0.
+  range_min: null
+  range_max: null
+  typical_range: null
   invert_for_signal: false
-  citations: ["Andrews (1993)", "Bai-Perron (1998)"]
-
+  citations:
+  - Andrews (1993)
+  - Bai-Perron (1998)
+  computation_path: macro_pipeline/models/return_forecast.py:StructuralBreakDiagnostics
+  deferred_to: null
 - metric_id: type_i_error_alpha
-  name: "Type I error rate alpha"
+  name: Type I error rate alpha
   subcategory: statistical_significance
   subcategory_index: 5
   layer_origin: L6
   unit: probability
   update_frequency: on_request
-  description_l1: "How often we wrongly say yes when the answer is no."
-  description_l2: "Probability of rejecting H_0 when H_0 is true (false positive); set a priori as alpha (default 0.05). Multiple testing inflates the family-wise error rate beyond per-test alpha."
-  description_l3: "Bonferroni correction divides alpha by m for m tests (conservative); Benjamini-Hochberg (1995) FDR is the modern alternative controlling expected proportion of false discoveries rather than family-wise probability."
+  description_l1: How often we wrongly say yes when the answer is no.
+  description_l2: Probability of rejecting H_0 when H_0 is true (false positive);
+    set a priori as alpha (default 0.05). Multiple testing inflates the family-wise
+    error rate beyond per-test alpha.
+  description_l3: Bonferroni correction divides alpha by m for m tests (conservative);
+    Benjamini-Hochberg (1995) FDR is the modern alternative controlling expected proportion
+    of false discoveries rather than family-wise probability.
   range_min: 0.0
   range_max: 1.0
-  typical_range: [0.01, 0.10]
+  typical_range:
+  - 0.01
+  - 0.1
   invert_for_signal: true
-  citations: ["Neyman-Pearson (1933)"]
-
+  citations:
+  - Neyman-Pearson (1933)
+  computation_path: null
+  deferred_to: L8a
 - metric_id: type_ii_error_beta
-  name: "Type II error rate beta"
+  name: Type II error rate beta
   subcategory: statistical_significance
   subcategory_index: 5
   layer_origin: L6
   unit: probability
   update_frequency: on_request
-  description_l1: "How often we wrongly say no when the answer is yes."
-  description_l2: "Probability of failing to reject H_0 when H_1 is true (false negative); complement of power. Function of effect size + sample size + alpha."
-  description_l3: "Trade-off with alpha at fixed n: tighter alpha increases beta. Vision §10 macro-forecast context features structurally high beta (low power) at 10Y horizon due to small N_eff."
+  description_l1: How often we wrongly say no when the answer is yes.
+  description_l2: Probability of failing to reject H_0 when H_1 is true (false negative);
+    complement of power. Function of effect size + sample size + alpha.
+  description_l3: "Trade-off with alpha at fixed n: tighter alpha increases beta.\
+    \ Vision \xA710 macro-forecast context features structurally high beta (low power)\
+    \ at 10Y horizon due to small N_eff."
   range_min: 0.0
   range_max: 1.0
-  typical_range: [0.05, 0.95]
+  typical_range:
+  - 0.05
+  - 0.95
   invert_for_signal: true
-  citations: ["Neyman-Pearson (1933)"]
-
-# ============================================================================
-# §3.6 — Bias correction (7)
-# ============================================================================
-
+  citations:
+  - Neyman-Pearson (1933)
+  computation_path: null
+  deferred_to: L8a
 - metric_id: bayesian_shrinkage_lambda
-  name: "Bayesian shrinkage lambda"
+  name: Bayesian shrinkage lambda
   subcategory: bias_correction
   subcategory_index: 6
   layer_origin: L5
   unit: ratio
   update_frequency: on_request
-  description_l1: "How much we pull the estimate toward a prior belief to reduce noise."
-  description_l2: "Shrinkage intensity 0 to 1; 0 = no shrinkage; 1 = full shrinkage to prior. James-Stein-style improvement on the MLE in small-sample multi-parameter settings."
-  description_l3: "Selected via cross-validation in L5-A composite_refit; for 10Y forecasts Vision §10 mandates shrinkage toward 6.5% real return prior per DMS long-run series."
+  description_l1: How much we pull the estimate toward a prior belief to reduce noise.
+  description_l2: Shrinkage intensity 0 to 1; 0 = no shrinkage; 1 = full shrinkage
+    to prior. James-Stein-style improvement on the MLE in small-sample multi-parameter
+    settings.
+  description_l3: "Selected via cross-validation in L5-A composite_refit; for 10Y\
+    \ forecasts Vision \xA710 mandates shrinkage toward 6.5% real return prior per\
+    \ DMS long-run series."
   range_min: 0.0
   range_max: 1.0
-  typical_range: [0.0, 1.0]
+  typical_range:
+  - 0.0
+  - 1.0
   invert_for_signal: false
-  citations: ["James-Stein (1961)", "Vision v2.0 §10"]
-
+  citations:
+  - James-Stein (1961)
+  - "Vision v2.0 \xA710"
+  computation_path: macro_pipeline/models/composite_refit.py:fit_composite_weights
+  deferred_to: null
 - metric_id: bonferroni_correction
-  name: "Bonferroni correction"
+  name: Bonferroni correction
   subcategory: bias_correction
   subcategory_index: 6
   layer_origin: L6
   unit: ratio
   update_frequency: on_request
-  description_l1: "A simple way to adjust for testing many things by making each test stricter."
-  description_l2: "Multiply each p-value by the number of tests m; controls family-wise error rate at alpha. Conservative when tests correlate; reported alongside BH q-values."
-  description_l3: "alpha_per_test = alpha_family / m; Bonferroni (1936). Holm (1979) step-down version is uniformly more powerful while still controlling FWER."
+  description_l1: A simple way to adjust for testing many things by making each test
+    stricter.
+  description_l2: Multiply each p-value by the number of tests m; controls family-wise
+    error rate at alpha. Conservative when tests correlate; reported alongside BH
+    q-values.
+  description_l3: alpha_per_test = alpha_family / m; Bonferroni (1936). Holm (1979)
+    step-down version is uniformly more powerful while still controlling FWER.
   range_min: 0.0
+  range_max: null
+  typical_range: null
   invert_for_signal: false
-  citations: ["Bonferroni (1936)", "Holm (1979)"]
-
+  citations:
+  - Bonferroni (1936)
+  - Holm (1979)
+  computation_path: null
+  deferred_to: L7
 - metric_id: bootstrap_bias_estimate
-  name: "Bootstrap bias estimate"
+  name: Bootstrap bias estimate
   subcategory: bias_correction
   subcategory_index: 6
   layer_origin: L5b
   unit: native_units
   update_frequency: on_request
-  description_l1: "An estimate of how systematically off the point estimate might be."
-  description_l2: "bias_hat = E_boot[theta_hat] - theta_hat; bootstrap resampling estimates the discrepancy between the sample statistic and the true parameter. Correctable via theta_corrected = theta_hat - bias_hat."
-  description_l3: "Efron (1979) percentile bootstrap; stationary block bootstrap per Politis-Romano (1994) preserves autocorrelation structure. L5b-A bootstrap implementation."
+  description_l1: An estimate of how systematically off the point estimate might be.
+  description_l2: bias_hat = E_boot[theta_hat] - theta_hat; bootstrap resampling estimates
+    the discrepancy between the sample statistic and the true parameter. Correctable
+    via theta_corrected = theta_hat - bias_hat.
+  description_l3: Efron (1979) percentile bootstrap; stationary block bootstrap per
+    Politis-Romano (1994) preserves autocorrelation structure. L5b-A bootstrap implementation.
+  range_min: null
+  range_max: null
+  typical_range: null
   invert_for_signal: false
-  citations: ["Efron (1979)", "Politis-Romano (1994)"]
-
+  citations:
+  - Efron (1979)
+  - Politis-Romano (1994)
+  computation_path: macro_pipeline/models/return_forecast.py:BootstrapDiagnostics
+  deferred_to: null
 - metric_id: dms_survivorship_adjustment
-  name: "DMS survivorship adjustment"
+  name: DMS survivorship adjustment
   subcategory: bias_correction
   subcategory_index: 6
   layer_origin: L5b
   unit: bps
   update_frequency: on_request
-  description_l1: "How much we adjust US equity returns down to account for the US being a lucky winner."
-  description_l2: "Vision §8 + L5-F: -125 bps central at 5Y, -175 bps central at 10Y; sensitivity band +/- 50 bps. Mandatory for 5Y/10Y; 0 bps at 1Y/3Y per Q6 lock."
-  description_l3: "Dimson-Marsh-Staunton long-run global equity returns; US-only sample biases central estimate up by 100-200 bps annualised. Override-capable via L1.7-D Surface 3 (manual_inputs.dms_override) preserving sensitivity band Q6 lock."
+  description_l1: How much we adjust US equity returns down to account for the US
+    being a lucky winner.
+  description_l2: "Vision \xA78 + L5-F: -125 bps central at 5Y, -175 bps central at\
+    \ 10Y; sensitivity band +/- 50 bps. Mandatory for 5Y/10Y; 0 bps at 1Y/3Y per Q6\
+    \ lock."
+  description_l3: Dimson-Marsh-Staunton long-run global equity returns; US-only sample
+    biases central estimate up by 100-200 bps annualised. Override-capable via L1.7-D
+    Surface 3 (manual_inputs.dms_override) preserving sensitivity band Q6 lock.
   range_min: -500.0
   range_max: 0.0
-  typical_range: [-200.0, -100.0]
+  typical_range:
+  - -200.0
+  - -100.0
   invert_for_signal: false
-  citations: ["Dimson-Marsh-Staunton (2002 + 2024 update)", "Vision v2.0 §8"]
-
+  citations:
+  - Dimson-Marsh-Staunton (2002 + 2024 update)
+  - "Vision v2.0 \xA78"
+  computation_path: macro_pipeline/models/dms_adjustment.py:apply_dms_adjustment
+  deferred_to: null
 - metric_id: look_ahead_bias_check
-  name: "Look-ahead bias check"
+  name: Look-ahead bias check
   subcategory: bias_correction
   subcategory_index: 6
   layer_origin: L5
   unit: status
   update_frequency: on_request
-  description_l1: "A check that the model only used information available at the time of each forecast."
-  description_l2: "PIT-safety audit; verifies that each time-t forecast uses only data with vintage <= t. Implemented via vintage-aware loaders + walk-forward CV."
-  description_l3: "L3.5B PIT enforcement + Decision Lock 3.5C-D1 fail-closed semantics. Test surface includes AST audits checking no use of post-t values in feature construction."
+  description_l1: A check that the model only used information available at the time
+    of each forecast.
+  description_l2: PIT-safety audit; verifies that each time-t forecast uses only data
+    with vintage <= t. Implemented via vintage-aware loaders + walk-forward CV.
+  description_l3: L3.5B PIT enforcement + Decision Lock 3.5C-D1 fail-closed semantics.
+    Test surface includes AST audits checking no use of post-t values in feature construction.
+  range_min: null
+  range_max: null
+  typical_range: null
   invert_for_signal: false
-  citations: ["LAYER_3_5_3.5B_VERIFICATION.md"]
-
+  citations:
+  - LAYER_3_5_3.5B_VERIFICATION.md
+  computation_path: macro_pipeline/preprocessing.py:validate_ingest
+  deferred_to: null
 - metric_id: ood_reserve_mass
-  name: "Out-of-Distribution reserve mass"
+  name: Out-of-Distribution reserve mass
   subcategory: bias_correction
   subcategory_index: 6
   layer_origin: L6
   unit: probability
   update_frequency: on_request
-  description_l1: "A safety bucket of probability set aside for outcomes the model could not have anticipated."
-  description_l2: "5-15% of forecast distribution mass per Vision §7. Escalates with valuation extremes + policy regime + geopolitical risk + vol suppression + leverage opacity + concentration + signal conflict."
-  description_l3: "Vision §7 OOD escalation table maps conditions to bucket sizes (5-8% baseline; 12-15% with 2+ extreme conditions active). Enforced at L6-D OOD reserve module."
+  description_l1: A safety bucket of probability set aside for outcomes the model
+    could not have anticipated.
+  description_l2: "5-15% of forecast distribution mass per Vision \xA77. Escalates\
+    \ with valuation extremes + policy regime + geopolitical risk + vol suppression\
+    \ + leverage opacity + concentration + signal conflict."
+  description_l3: "Vision \xA77 OOD escalation table maps conditions to bucket sizes\
+    \ (5-8% baseline; 12-15% with 2+ extreme conditions active). Enforced at L6-D\
+    \ OOD reserve module."
   range_min: 0.05
   range_max: 0.15
-  typical_range: [0.05, 0.15]
+  typical_range:
+  - 0.05
+  - 0.15
   invert_for_signal: false
-  citations: ["Vision v2.0 §7"]
-
+  citations:
+  - "Vision v2.0 \xA77"
+  computation_path: macro_pipeline/ensemble/ood_and_caps.py:compute_ood_reserve
+  deferred_to: null
 - metric_id: survivorship_bias_check
-  name: "Survivorship bias check"
+  name: Survivorship bias check
   subcategory: bias_correction
   subcategory_index: 6
   layer_origin: L5
   unit: status
   update_frequency: on_request
-  description_l1: "A check for whether the data includes only winners and ignores losers."
-  description_l2: "Verifies inclusion of delisted/defaulted/failed entities in any cross-sectional analysis. For long-run macro series, DMS adjustment captures the country-level survivorship correction."
-  description_l3: "Brown-Goetzmann-Ibbotson-Ross (1992) mutual-fund survivorship bias; for macro pipeline, country survivorship is the dominant variant addressed by DMS adjustment per Vision §8."
+  description_l1: A check for whether the data includes only winners and ignores losers.
+  description_l2: Verifies inclusion of delisted/defaulted/failed entities in any
+    cross-sectional analysis. For long-run macro series, DMS adjustment captures the
+    country-level survivorship correction.
+  description_l3: "Brown-Goetzmann-Ibbotson-Ross (1992) mutual-fund survivorship bias;\
+    \ for macro pipeline, country survivorship is the dominant variant addressed by\
+    \ DMS adjustment per Vision \xA78."
+  range_min: null
+  range_max: null
+  typical_range: null
   invert_for_signal: false
-  citations: ["Brown-Goetzmann-Ibbotson-Ross (1992)"]
-
-# ============================================================================
-# §3.7 — Risk measures (9)
-# ============================================================================
-
+  citations:
+  - Brown-Goetzmann-Ibbotson-Ross (1992)
+  computation_path: macro_pipeline/models/dms_adjustment.py:apply_dms_adjustment
+  deferred_to: null
 - metric_id: beta
-  name: "Beta (market sensitivity)"
+  name: Beta (market sensitivity)
   subcategory: risk_measures
   subcategory_index: 7
   layer_origin: L5
   unit: ratio
   update_frequency: on_request
-  description_l1: "How much an asset moves when the market moves."
-  description_l2: "beta = cov(R_asset, R_market) / var(R_market); CAPM (Sharpe 1964) systematic-risk loading. Beta > 1 amplifies market moves; beta < 1 dampens."
-  description_l3: "Time-varying when regime shifts (Lucas critique); Vision §9 flags. Conditional beta via regime-state-dependent estimation; rolling-window estimation prone to small-N noise."
-  typical_range: [0.0, 2.0]
+  description_l1: How much an asset moves when the market moves.
+  description_l2: beta = cov(R_asset, R_market) / var(R_market); CAPM (Sharpe 1964)
+    systematic-risk loading. Beta > 1 amplifies market moves; beta < 1 dampens.
+  description_l3: "Time-varying when regime shifts (Lucas critique); Vision \xA79\
+    \ flags. Conditional beta via regime-state-dependent estimation; rolling-window\
+    \ estimation prone to small-N noise."
+  range_min: null
+  range_max: null
+  typical_range:
+  - 0.0
+  - 2.0
   invert_for_signal: false
-  citations: ["Sharpe (1964)"]
-
+  citations:
+  - Sharpe (1964)
+  computation_path: null
+  deferred_to: L7
 - metric_id: calmar_ratio
-  name: "Calmar ratio"
+  name: Calmar ratio
   subcategory: risk_measures
   subcategory_index: 7
   layer_origin: L6
   unit: ratio
   update_frequency: on_request
-  description_l1: "How much extra return you get for each one-percent maximum drawdown."
-  description_l2: "Calmar = annualised excess return / |maximum drawdown|; pain-adjusted Sharpe alternative. Sensitive to single worst-drawdown event."
-  description_l3: "Young (1991); typically computed over a fixed window (3Y or 5Y) to limit single-event sensitivity. Pairs naturally with Sortino for downside-risk-focused performance evaluation."
+  description_l1: How much extra return you get for each one-percent maximum drawdown.
+  description_l2: Calmar = annualised excess return / |maximum drawdown|; pain-adjusted
+    Sharpe alternative. Sensitive to single worst-drawdown event.
+  description_l3: Young (1991); typically computed over a fixed window (3Y or 5Y)
+    to limit single-event sensitivity. Pairs naturally with Sortino for downside-risk-focused
+    performance evaluation.
+  range_min: null
+  range_max: null
+  typical_range: null
   invert_for_signal: false
-  citations: ["Young (1991)"]
-
+  citations:
+  - Young (1991)
+  computation_path: null
+  deferred_to: L7
 - metric_id: conditional_value_at_risk
-  name: "Conditional Value-at-Risk (CVaR / Expected Shortfall)"
+  name: Conditional Value-at-Risk (CVaR / Expected Shortfall)
   subcategory: risk_measures
   subcategory_index: 7
   layer_origin: L6
   unit: percent
   update_frequency: on_request
-  description_l1: "Average loss in the worst scenarios beyond a chosen threshold."
-  description_l2: "CVaR_alpha = E[L | L > VaR_alpha]; the expected loss conditional on being in the tail. Coherent risk measure (Artzner-Delbaen-Eber-Heath 1999); preferred over VaR for regulatory + institutional use."
-  description_l3: "CVaR is subadditive (passes the diversification axiom); VaR is not. For Gaussian losses, closed form CVaR_alpha = mu + sigma * phi(z_alpha) / (1 - alpha) where z_alpha is the standard normal alpha-quantile."
+  description_l1: Average loss in the worst scenarios beyond a chosen threshold.
+  description_l2: CVaR_alpha = E[L | L > VaR_alpha]; the expected loss conditional
+    on being in the tail. Coherent risk measure (Artzner-Delbaen-Eber-Heath 1999);
+    preferred over VaR for regulatory + institutional use.
+  description_l3: CVaR is subadditive (passes the diversification axiom); VaR is not.
+    For Gaussian losses, closed form CVaR_alpha = mu + sigma * phi(z_alpha) / (1 -
+    alpha) where z_alpha is the standard normal alpha-quantile.
+  range_min: null
+  range_max: null
+  typical_range: null
   invert_for_signal: true
-  citations: ["Artzner-Delbaen-Eber-Heath (1999)", "Rockafellar-Uryasev (2000)"]
-
+  citations:
+  - Artzner-Delbaen-Eber-Heath (1999)
+  - Rockafellar-Uryasev (2000)
+  computation_path: null
+  deferred_to: L7
 - metric_id: information_ratio
-  name: "Information ratio"
+  name: Information ratio
   subcategory: risk_measures
   subcategory_index: 7
   layer_origin: L6
   unit: ratio
   update_frequency: on_request
-  description_l1: "Excess return over a benchmark per unit of tracking error."
-  description_l2: "IR = (R_p - R_b) / TE; measures active-management skill independent of benchmark beta exposure. Goodwin (1998) institutional usage."
-  description_l3: "TE = sigma(R_p - R_b). Annualisation by sqrt(periods_per_year). IR > 0.5 indicates plausible skill; >1.0 exceptional. Bayesian shrinkage advisable due to small-N inflation."
+  description_l1: Excess return over a benchmark per unit of tracking error.
+  description_l2: IR = (R_p - R_b) / TE; measures active-management skill independent
+    of benchmark beta exposure. Goodwin (1998) institutional usage.
+  description_l3: TE = sigma(R_p - R_b). Annualisation by sqrt(periods_per_year).
+    IR > 0.5 indicates plausible skill; >1.0 exceptional. Bayesian shrinkage advisable
+    due to small-N inflation.
+  range_min: null
+  range_max: null
+  typical_range: null
   invert_for_signal: false
-  citations: ["Goodwin (1998)"]
-
+  citations:
+  - Goodwin (1998)
+  computation_path: null
+  deferred_to: L7
 - metric_id: maximum_drawdown
-  name: "Maximum drawdown (MDD)"
+  name: Maximum drawdown (MDD)
   subcategory: risk_measures
   subcategory_index: 7
   layer_origin: L6
   unit: percent
   update_frequency: on_request
-  description_l1: "The worst peak-to-trough decline in the history."
-  description_l2: "MDD = min_{t1 < t2} (P_{t2} - max_{s <= t1} P_s) / max_{s <= t1} P_s; the largest cumulative loss from running maximum. Pain-relevant for investor experience."
-  description_l3: "Magdon-Ismail (2004) Brownian-motion expected MDD scales like sigma sqrt(T) log(T); empirical MDD typically exceeds Gaussian prediction due to fat tails + autocorrelation."
+  description_l1: The worst peak-to-trough decline in the history.
+  description_l2: MDD = min_{t1 < t2} (P_{t2} - max_{s <= t1} P_s) / max_{s <= t1}
+    P_s; the largest cumulative loss from running maximum. Pain-relevant for investor
+    experience.
+  description_l3: Magdon-Ismail (2004) Brownian-motion expected MDD scales like sigma
+    sqrt(T) log(T); empirical MDD typically exceeds Gaussian prediction due to fat
+    tails + autocorrelation.
   range_min: -1.0
   range_max: 0.0
-  typical_range: [-0.6, -0.1]
+  typical_range:
+  - -0.6
+  - -0.1
   invert_for_signal: false
-  citations: ["Magdon-Ismail-Atiya (2004)"]
-
+  citations:
+  - Magdon-Ismail-Atiya (2004)
+  computation_path: null
+  deferred_to: L7
 - metric_id: sharpe_ratio
-  name: "Sharpe ratio"
+  name: Sharpe ratio
   subcategory: risk_measures
   subcategory_index: 7
   layer_origin: L6
   unit: ratio
   update_frequency: on_request
-  description_l1: "Excess return per unit of total volatility."
-  description_l2: "Sharpe = (R - R_f) / sigma_R; classical risk-adjusted-return metric. Penalises both upside + downside volatility equally."
-  description_l3: "Sharpe (1966); annualisation by sqrt(periods_per_year). Lo (2002) shows naive annualisation breaks under autocorrelation; HAC-correct version per Newey-West needed for proper SE."
+  description_l1: Excess return per unit of total volatility.
+  description_l2: Sharpe = (R - R_f) / sigma_R; classical risk-adjusted-return metric.
+    Penalises both upside + downside volatility equally.
+  description_l3: Sharpe (1966); annualisation by sqrt(periods_per_year). Lo (2002)
+    shows naive annualisation breaks under autocorrelation; HAC-correct version per
+    Newey-West needed for proper SE.
+  range_min: null
+  range_max: null
+  typical_range: null
   invert_for_signal: false
-  citations: ["Sharpe (1966)", "Lo (2002)"]
-
+  citations:
+  - Sharpe (1966)
+  - Lo (2002)
+  computation_path: null
+  deferred_to: L7
 - metric_id: sortino_ratio
-  name: "Sortino ratio"
+  name: Sortino ratio
   subcategory: risk_measures
   subcategory_index: 7
   layer_origin: L6
   unit: ratio
   update_frequency: on_request
-  description_l1: "Excess return per unit of downside volatility."
-  description_l2: "Sortino = (R - target) / sigma_downside; penalises only below-target deviations. Preferred when upside variance is asymmetric and welcomed."
-  description_l3: "Sortino-van der Meer (1991); downside semi-variance per Markowitz (1959) original semi-deviation concept. More relevant than Sharpe for loss-averse utility functions."
+  description_l1: Excess return per unit of downside volatility.
+  description_l2: Sortino = (R - target) / sigma_downside; penalises only below-target
+    deviations. Preferred when upside variance is asymmetric and welcomed.
+  description_l3: Sortino-van der Meer (1991); downside semi-variance per Markowitz
+    (1959) original semi-deviation concept. More relevant than Sharpe for loss-averse
+    utility functions.
+  range_min: null
+  range_max: null
+  typical_range: null
   invert_for_signal: false
-  citations: ["Sortino-van der Meer (1991)"]
-
+  citations:
+  - Sortino-van der Meer (1991)
+  computation_path: null
+  deferred_to: L7
 - metric_id: tail_dependence
-  name: "Tail dependence (lambda_lower / lambda_upper)"
+  name: Tail dependence (lambda_lower / lambda_upper)
   subcategory: risk_measures
   subcategory_index: 7
   layer_origin: L6
   unit: probability
   update_frequency: on_request
-  description_l1: "How often two assets crash or rally together at the extremes."
-  description_l2: "lambda_L = lim_{u -> 0} P(X <= F_X^{-1}(u) | Y <= F_Y^{-1}(u)); same for lambda_U at upper tail. Critical for portfolio crisis-correlation behaviour."
-  description_l3: "Defined via copulas; Gaussian copula has zero tail dependence + Student-t copula non-zero. McNeil-Frey-Embrechts (2005) extreme-value-theory chapter; correlation alone is insufficient."
+  description_l1: How often two assets crash or rally together at the extremes.
+  description_l2: lambda_L = lim_{u -> 0} P(X <= F_X^{-1}(u) | Y <= F_Y^{-1}(u));
+    same for lambda_U at upper tail. Critical for portfolio crisis-correlation behaviour.
+  description_l3: Defined via copulas; Gaussian copula has zero tail dependence +
+    Student-t copula non-zero. McNeil-Frey-Embrechts (2005) extreme-value-theory chapter;
+    correlation alone is insufficient.
   range_min: 0.0
   range_max: 1.0
-  typical_range: [0.0, 0.5]
+  typical_range:
+  - 0.0
+  - 0.5
   invert_for_signal: false
-  citations: ["McNeil-Frey-Embrechts (2005)"]
-
+  citations:
+  - McNeil-Frey-Embrechts (2005)
+  computation_path: null
+  deferred_to: L7
 - metric_id: value_at_risk
-  name: "Value-at-Risk (VaR)"
+  name: Value-at-Risk (VaR)
   subcategory: risk_measures
   subcategory_index: 7
   layer_origin: L6
   unit: percent
   update_frequency: on_request
-  description_l1: "The loss we would not exceed with a chosen confidence."
-  description_l2: "VaR_alpha = inf{l : P(L > l) <= 1 - alpha}; common alpha = 0.95 or 0.99. Reports a quantile of the loss distribution."
-  description_l3: "Not subadditive (fails coherence); CVaR remedies this. Basel regulatory standard despite the deficiency. Historical / parametric / Monte Carlo variants per Jorion (2007)."
+  description_l1: The loss we would not exceed with a chosen confidence.
+  description_l2: 'VaR_alpha = inf{l : P(L > l) <= 1 - alpha}; common alpha = 0.95
+    or 0.99. Reports a quantile of the loss distribution.'
+  description_l3: Not subadditive (fails coherence); CVaR remedies this. Basel regulatory
+    standard despite the deficiency. Historical / parametric / Monte Carlo variants
+    per Jorion (2007).
+  range_min: null
+  range_max: null
+  typical_range: null
   invert_for_signal: true
-  citations: ["Jorion (2007)", "Artzner-Delbaen-Eber-Heath (1999)"]
-
-# ============================================================================
-# §3.8 — Time-series quality (6)
-# ============================================================================
-
+  citations:
+  - Jorion (2007)
+  - Artzner-Delbaen-Eber-Heath (1999)
+  computation_path: null
+  deferred_to: L7
 - metric_id: adf_stationarity_test
-  name: "Augmented Dickey-Fuller (ADF) stationarity test"
+  name: Augmented Dickey-Fuller (ADF) stationarity test
   subcategory: time_series_quality
   subcategory_index: 8
   layer_origin: L5
   unit: probability
   update_frequency: on_request
-  description_l1: "A test for whether a time series wanders without a stable level."
-  description_l2: "H_0: unit root (non-stationary) vs H_1: stationary. p-value below 0.05 rejects unit root + supports stationarity. Required before applying ARIMA/HAC methods that assume stationarity."
-  description_l3: "Dickey-Fuller (1979) + augmented with lags per Said-Dickey (1984). KPSS test (Kwiatkowski et al. 1992) tests opposite null + provides confirmation pattern."
+  description_l1: A test for whether a time series wanders without a stable level.
+  description_l2: 'H_0: unit root (non-stationary) vs H_1: stationary. p-value below
+    0.05 rejects unit root + supports stationarity. Required before applying ARIMA/HAC
+    methods that assume stationarity.'
+  description_l3: Dickey-Fuller (1979) + augmented with lags per Said-Dickey (1984).
+    KPSS test (Kwiatkowski et al. 1992) tests opposite null + provides confirmation
+    pattern.
   range_min: 0.0
   range_max: 1.0
-  typical_range: [0.0, 1.0]
+  typical_range:
+  - 0.0
+  - 1.0
   invert_for_signal: true
-  citations: ["Dickey-Fuller (1979)", "Said-Dickey (1984)"]
-
+  citations:
+  - Dickey-Fuller (1979)
+  - Said-Dickey (1984)
+  computation_path: null
+  deferred_to: L7
 - metric_id: autocorrelation_rho
-  name: "Autocorrelation rho(k)"
+  name: Autocorrelation rho(k)
   subcategory: time_series_quality
   subcategory_index: 8
   layer_origin: L5
   unit: ratio
   update_frequency: on_request
-  description_l1: "How strongly today's value relates to a value from k periods ago."
-  description_l2: "rho(k) = cov(X_t, X_{t-k}) / var(X_t); ACF at lag k. High |rho(k)| means N_eff is much smaller than nominal N; drives HAC SE + N_eff adjustments."
-  description_l3: "Ljung-Box Q(m) = n(n+2) sum_{k=1..m} rho_hat(k)^2 / (n-k) tests joint zero autocorrelation up to lag m. Sample ACF SE approx 1/sqrt(n) under iid null."
+  description_l1: How strongly today's value relates to a value from k periods ago.
+  description_l2: rho(k) = cov(X_t, X_{t-k}) / var(X_t); ACF at lag k. High |rho(k)|
+    means N_eff is much smaller than nominal N; drives HAC SE + N_eff adjustments.
+  description_l3: Ljung-Box Q(m) = n(n+2) sum_{k=1..m} rho_hat(k)^2 / (n-k) tests
+    joint zero autocorrelation up to lag m. Sample ACF SE approx 1/sqrt(n) under iid
+    null.
   range_min: -1.0
   range_max: 1.0
-  typical_range: [-1.0, 1.0]
+  typical_range:
+  - -1.0
+  - 1.0
   invert_for_signal: false
-  citations: ["Ljung-Box (1978)"]
-
+  citations:
+  - Ljung-Box (1978)
+  computation_path: null
+  deferred_to: L7
 - metric_id: cointegration_test
-  name: "Cointegration test (Engle-Granger / Johansen)"
+  name: Cointegration test (Engle-Granger / Johansen)
   subcategory: time_series_quality
   subcategory_index: 8
   layer_origin: L5
   unit: probability
   update_frequency: on_request
-  description_l1: "A test for whether two trending series move together in the long run."
-  description_l2: "Tests whether a linear combination of I(1) series is stationary. Engle-Granger (1987) two-step + Johansen (1988) VECM approaches; latter handles multiple cointegrating relations."
-  description_l3: "Reject H_0 of no cointegration via trace + max-eigenvalue tests (Johansen). Foundational for long-run equilibrium reasoning; relevant for valuation-to-rates equilibrium hypothesis testing."
+  description_l1: A test for whether two trending series move together in the long
+    run.
+  description_l2: Tests whether a linear combination of I(1) series is stationary.
+    Engle-Granger (1987) two-step + Johansen (1988) VECM approaches; latter handles
+    multiple cointegrating relations.
+  description_l3: Reject H_0 of no cointegration via trace + max-eigenvalue tests
+    (Johansen). Foundational for long-run equilibrium reasoning; relevant for valuation-to-rates
+    equilibrium hypothesis testing.
   range_min: 0.0
   range_max: 1.0
+  typical_range: null
   invert_for_signal: true
-  citations: ["Engle-Granger (1987)", "Johansen (1988)"]
-
+  citations:
+  - Engle-Granger (1987)
+  - Johansen (1988)
+  computation_path: null
+  deferred_to: L7
 - metric_id: granger_causality
-  name: "Granger causality"
+  name: Granger causality
   subcategory: time_series_quality
   subcategory_index: 8
   layer_origin: L5
   unit: probability
   update_frequency: on_request
-  description_l1: "A test for whether one series helps predict another."
-  description_l2: "X Granger-causes Y if past X improves forecast of Y beyond past Y alone. F-test on VAR coefficient restrictions; statistical-prediction sense, not philosophical causation."
-  description_l3: "Granger (1969); requires stationarity + adequate lag length (BIC / AIC selection). Caveat: confounded by latent common causes; not a substitute for randomized intervention."
+  description_l1: A test for whether one series helps predict another.
+  description_l2: X Granger-causes Y if past X improves forecast of Y beyond past
+    Y alone. F-test on VAR coefficient restrictions; statistical-prediction sense,
+    not philosophical causation.
+  description_l3: 'Granger (1969); requires stationarity + adequate lag length (BIC
+    / AIC selection). Caveat: confounded by latent common causes; not a substitute
+    for randomized intervention.'
   range_min: 0.0
   range_max: 1.0
+  typical_range: null
   invert_for_signal: true
-  citations: ["Granger (1969)"]
-
+  citations:
+  - Granger (1969)
+  computation_path: null
+  deferred_to: L7
 - metric_id: hurst_exponent
-  name: "Hurst exponent H"
+  name: Hurst exponent H
   subcategory: time_series_quality
   subcategory_index: 8
   layer_origin: L5
   unit: ratio
   update_frequency: on_request
-  description_l1: "Whether a series is mean-reverting, random, or trending in the long run."
-  description_l2: "H = 0.5 random walk; H < 0.5 mean-reverting; H > 0.5 persistent/trending. Estimated via rescaled range R/S analysis or DFA detrended fluctuation analysis."
-  description_l3: "Hurst (1951); Mandelbrot (1972) fractional Brownian motion connection. Equity-return Hurst typically near 0.5 with weak short-horizon mean reversion + medium-horizon momentum."
+  description_l1: Whether a series is mean-reverting, random, or trending in the long
+    run.
+  description_l2: H = 0.5 random walk; H < 0.5 mean-reverting; H > 0.5 persistent/trending.
+    Estimated via rescaled range R/S analysis or DFA detrended fluctuation analysis.
+  description_l3: Hurst (1951); Mandelbrot (1972) fractional Brownian motion connection.
+    Equity-return Hurst typically near 0.5 with weak short-horizon mean reversion
+    + medium-horizon momentum.
   range_min: 0.0
   range_max: 1.0
-  typical_range: [0.3, 0.7]
+  typical_range:
+  - 0.3
+  - 0.7
   invert_for_signal: false
-  citations: ["Hurst (1951)", "Mandelbrot (1972)"]
-
+  citations:
+  - Hurst (1951)
+  - Mandelbrot (1972)
+  computation_path: null
+  deferred_to: L7
 - metric_id: structural_break_supw
-  name: "Structural break test (Quandt-Andrews supW)"
+  name: Structural break test (Quandt-Andrews supW)
   subcategory: time_series_quality
   subcategory_index: 8
   layer_origin: L5b
   unit: native_units
   update_frequency: on_request
-  description_l1: "A test for whether the model's relationships changed at some unknown point in time."
-  description_l2: "supW = sup_{t in T} W_t where W_t is the Wald statistic for a structural-break-at-t null; Andrews (1993) asymptotic distribution. Identifies unknown-break-date regime shifts."
-  description_l3: "L5b-B implementation; pairs with Bai-Perron (1998) sequential supF for multiple breaks. Closes Lucas-critique guard per Vision §9 quantitative test mandate."
+  description_l1: A test for whether the model's relationships changed at some unknown
+    point in time.
+  description_l2: supW = sup_{t in T} W_t where W_t is the Wald statistic for a structural-break-at-t
+    null; Andrews (1993) asymptotic distribution. Identifies unknown-break-date regime
+    shifts.
+  description_l3: "L5b-B implementation; pairs with Bai-Perron (1998) sequential supF\
+    \ for multiple breaks. Closes Lucas-critique guard per Vision \xA79 quantitative\
+    \ test mandate."
+  range_min: null
+  range_max: null
+  typical_range: null
   invert_for_signal: true
-  citations: ["Andrews (1993)", "Bai-Perron (1998)"]
-
-# ============================================================================
-# §3.9 — Information theory (4)
-# ============================================================================
-
+  citations:
+  - Andrews (1993)
+  - Bai-Perron (1998)
+  computation_path: macro_pipeline/models/return_forecast.py:StructuralBreakDiagnostics
+  deferred_to: null
 - metric_id: cross_entropy
-  name: "Cross-entropy H(P, Q)"
+  name: Cross-entropy H(P, Q)
   subcategory: information_theory
   subcategory_index: 9
   layer_origin: L6
   unit: nats
   update_frequency: on_request
-  description_l1: "How surprising one set of probabilities is when judged against another."
-  description_l2: "H(P, Q) = -sum_x P(x) log Q(x) = H(P) + D_KL(P || Q); average bits to encode samples from P using a code optimised for Q."
-  description_l3: "Equivalent to log loss for classification when P is the empirical truth distribution. Minimisation over Q (with P fixed) yields the maximum-likelihood estimator."
+  description_l1: How surprising one set of probabilities is when judged against another.
+  description_l2: H(P, Q) = -sum_x P(x) log Q(x) = H(P) + D_KL(P || Q); average bits
+    to encode samples from P using a code optimised for Q.
+  description_l3: Equivalent to log loss for classification when P is the empirical
+    truth distribution. Minimisation over Q (with P fixed) yields the maximum-likelihood
+    estimator.
   range_min: 0.0
+  range_max: null
+  typical_range: null
   invert_for_signal: true
-  citations: ["Cover-Thomas (2006)"]
-
+  citations:
+  - Cover-Thomas (2006)
+  computation_path: null
+  deferred_to: L7
 - metric_id: kl_divergence
-  name: "Kullback-Leibler divergence D_KL(P || Q)"
+  name: Kullback-Leibler divergence D_KL(P || Q)
   subcategory: information_theory
   subcategory_index: 9
   layer_origin: L6
   unit: nats
   update_frequency: on_request
-  description_l1: "How different one distribution is from another."
-  description_l2: "D_KL(P || Q) = sum_x P(x) log (P(x) / Q(x)); always non-negative; zero iff P = Q. Asymmetric (not a metric)."
-  description_l3: "Kullback-Leibler (1951); foundational for Bayesian information criterion + maximum-likelihood asymptotics. Pinsker's inequality relates D_KL to total variation."
+  description_l1: How different one distribution is from another.
+  description_l2: D_KL(P || Q) = sum_x P(x) log (P(x) / Q(x)); always non-negative;
+    zero iff P = Q. Asymmetric (not a metric).
+  description_l3: Kullback-Leibler (1951); foundational for Bayesian information criterion
+    + maximum-likelihood asymptotics. Pinsker's inequality relates D_KL to total variation.
   range_min: 0.0
+  range_max: null
+  typical_range: null
   invert_for_signal: true
-  citations: ["Kullback-Leibler (1951)"]
-
+  citations:
+  - Kullback-Leibler (1951)
+  computation_path: null
+  deferred_to: L7
 - metric_id: mutual_information
-  name: "Mutual information I(X; Y)"
+  name: Mutual information I(X; Y)
   subcategory: information_theory
   subcategory_index: 9
   layer_origin: L6
   unit: nats
   update_frequency: on_request
-  description_l1: "How much knowing one thing tells you about another."
-  description_l2: "I(X; Y) = D_KL(P(X, Y) || P(X) P(Y)) = sum P(x, y) log (P(x, y) / (P(x) P(y))); generalises correlation to non-linear dependencies; zero iff X and Y independent."
-  description_l3: "Reiterates the Kullback-Leibler divergence between joint and product-of-marginals; symmetric. Estimation in finite samples is subtle (Kraskov et al. 2004 k-nearest-neighbours estimator)."
+  description_l1: How much knowing one thing tells you about another.
+  description_l2: I(X; Y) = D_KL(P(X, Y) || P(X) P(Y)) = sum P(x, y) log (P(x, y)
+    / (P(x) P(y))); generalises correlation to non-linear dependencies; zero iff X
+    and Y independent.
+  description_l3: Reiterates the Kullback-Leibler divergence between joint and product-of-marginals;
+    symmetric. Estimation in finite samples is subtle (Kraskov et al. 2004 k-nearest-neighbours
+    estimator).
   range_min: 0.0
+  range_max: null
+  typical_range: null
   invert_for_signal: false
-  citations: ["Cover-Thomas (2006)", "Kraskov-Stogbauer-Grassberger (2004)"]
-
+  citations:
+  - Cover-Thomas (2006)
+  - Kraskov-Stogbauer-Grassberger (2004)
+  computation_path: null
+  deferred_to: L7
 - metric_id: shannon_entropy
-  name: "Shannon entropy H(X)"
+  name: Shannon entropy H(X)
   subcategory: information_theory
   subcategory_index: 9
   layer_origin: L6
   unit: nats
   update_frequency: on_request
-  description_l1: "How uncertain or spread out a distribution of outcomes is."
-  description_l2: "H(X) = -sum_x P(x) log P(x); average information content (in nats if log is natural, bits if log_2). Maximal for the uniform distribution."
-  description_l3: "Shannon (1948); foundational for information theory. Useful as a meta-uncertainty measure complementing variance for discrete distributions."
+  description_l1: How uncertain or spread out a distribution of outcomes is.
+  description_l2: H(X) = -sum_x P(x) log P(x); average information content (in nats
+    if log is natural, bits if log_2). Maximal for the uniform distribution.
+  description_l3: Shannon (1948); foundational for information theory. Useful as a
+    meta-uncertainty measure complementing variance for discrete distributions.
   range_min: 0.0
+  range_max: null
+  typical_range: null
   invert_for_signal: false
-  citations: ["Shannon (1948)"]
-
-# ============================================================================
-# §3.10 — Bayesian measures (7)
-# ============================================================================
-
+  citations:
+  - Shannon (1948)
+  computation_path: null
+  deferred_to: L7
 - metric_id: bayes_factor
-  name: "Bayes factor BF"
+  name: Bayes factor BF
   subcategory: bayesian
   subcategory_index: 10
   layer_origin: L6
   unit: ratio
   update_frequency: on_request
-  description_l1: "How much the data favours one model over another."
-  description_l2: "BF_{10} = P(data | M_1) / P(data | M_0); the ratio of marginal likelihoods. Kass-Raftery (1995) interpretation: BF > 3 substantial; BF > 10 strong; BF > 100 decisive."
-  description_l3: "Bayesian analogue of likelihood ratio for non-nested models. Sensitive to prior choice; Bayesian information criterion BIC = -2 log P(data | M) approximates -2 log BF + constants."
+  description_l1: How much the data favours one model over another.
+  description_l2: 'BF_{10} = P(data | M_1) / P(data | M_0); the ratio of marginal
+    likelihoods. Kass-Raftery (1995) interpretation: BF > 3 substantial; BF > 10 strong;
+    BF > 100 decisive.'
+  description_l3: Bayesian analogue of likelihood ratio for non-nested models. Sensitive
+    to prior choice; Bayesian information criterion BIC = -2 log P(data | M) approximates
+    -2 log BF + constants.
   range_min: 0.0
+  range_max: null
+  typical_range: null
   invert_for_signal: false
-  citations: ["Kass-Raftery (1995)"]
-
+  citations:
+  - Kass-Raftery (1995)
+  computation_path: null
+  deferred_to: L7
 - metric_id: likelihood_function
-  name: "Likelihood P(D | theta)"
+  name: Likelihood P(D | theta)
   subcategory: bayesian
   subcategory_index: 10
   layer_origin: L6
   unit: density
   update_frequency: on_request
-  description_l1: "How well a parameter value explains the data we saw."
-  description_l2: "L(theta; D) = product f(d_i; theta) for iid samples; the data-conditional probability density viewed as a function of theta. Combines with prior to yield posterior."
-  description_l3: "Maximum likelihood estimator theta_hat_MLE = argmax L(theta; D); asymptotically normal with covariance Fisher information inverse. Profile likelihood for nuisance parameter elimination."
+  description_l1: How well a parameter value explains the data we saw.
+  description_l2: L(theta; D) = product f(d_i; theta) for iid samples; the data-conditional
+    probability density viewed as a function of theta. Combines with prior to yield
+    posterior.
+  description_l3: Maximum likelihood estimator theta_hat_MLE = argmax L(theta; D);
+    asymptotically normal with covariance Fisher information inverse. Profile likelihood
+    for nuisance parameter elimination.
+  range_min: null
+  range_max: null
+  typical_range: null
   invert_for_signal: false
-  citations: ["Fisher (1922)"]
-
+  citations:
+  - Fisher (1922)
+  computation_path: null
+  deferred_to: L7
 - metric_id: map_estimate
-  name: "Maximum a posteriori (MAP) estimate"
+  name: Maximum a posteriori (MAP) estimate
   subcategory: bayesian
   subcategory_index: 10
   layer_origin: L6
   unit: native_units
   update_frequency: on_request
-  description_l1: "The single most likely value of a parameter given the data and prior."
-  description_l2: "theta_MAP = argmax_theta p(theta | D) = argmax_theta L(D; theta) pi(theta); the mode of the posterior. Reduces to MLE when prior is uniform/flat."
-  description_l3: "Penalised maximum likelihood interpretation: MAP = argmax (log L + log pi); L2 prior = ridge; Laplace prior = lasso. Point summary; complement with posterior credible interval for uncertainty."
+  description_l1: The single most likely value of a parameter given the data and prior.
+  description_l2: theta_MAP = argmax_theta p(theta | D) = argmax_theta L(D; theta)
+    pi(theta); the mode of the posterior. Reduces to MLE when prior is uniform/flat.
+  description_l3: 'Penalised maximum likelihood interpretation: MAP = argmax (log
+    L + log pi); L2 prior = ridge; Laplace prior = lasso. Point summary; complement
+    with posterior credible interval for uncertainty.'
+  range_min: null
+  range_max: null
+  typical_range: null
   invert_for_signal: false
-  citations: ["Gauss (1809)", "Hoerl-Kennard (1970)"]
-
+  citations:
+  - Gauss (1809)
+  - Hoerl-Kennard (1970)
+  computation_path: null
+  deferred_to: L7
 - metric_id: marginal_likelihood
-  name: "Marginal likelihood / evidence P(D)"
+  name: Marginal likelihood / evidence P(D)
   subcategory: bayesian
   subcategory_index: 10
   layer_origin: L6
   unit: density
   update_frequency: on_request
-  description_l1: "How likely the data is overall, averaged across all parameter values."
-  description_l2: "P(D) = integral P(D | theta) pi(theta) dtheta; the normalising constant in Bayes' theorem. Sensitive to prior; central to Bayes factor + BIC."
-  description_l3: "Computationally hard for high-dimensional theta; Chib (1995) marginal likelihood from posterior samples; bridge sampling; nested sampling per Skilling (2006). BIC = -2 log P(D | M) approximation."
+  description_l1: How likely the data is overall, averaged across all parameter values.
+  description_l2: P(D) = integral P(D | theta) pi(theta) dtheta; the normalising constant
+    in Bayes' theorem. Sensitive to prior; central to Bayes factor + BIC.
+  description_l3: Computationally hard for high-dimensional theta; Chib (1995) marginal
+    likelihood from posterior samples; bridge sampling; nested sampling per Skilling
+    (2006). BIC = -2 log P(D | M) approximation.
   range_min: 0.0
+  range_max: null
+  typical_range: null
   invert_for_signal: false
-  citations: ["Chib (1995)", "Skilling (2006)"]
-
+  citations:
+  - Chib (1995)
+  - Skilling (2006)
+  computation_path: null
+  deferred_to: L7
 - metric_id: mcmc_r_hat
-  name: "MCMC R-hat (Gelman-Rubin convergence diagnostic)"
+  name: MCMC R-hat (Gelman-Rubin convergence diagnostic)
   subcategory: bayesian
   subcategory_index: 10
   layer_origin: L6
   unit: ratio
   update_frequency: on_request
-  description_l1: "A diagnostic that flags whether the chains used to estimate a Bayesian model have settled down."
-  description_l2: "R-hat = sqrt(between-chain variance / within-chain variance); values close to 1.0 indicate convergence. R-hat > 1.1 flags non-convergence; current best practice uses 1.01 threshold."
-  description_l3: "Gelman-Rubin (1992) potential scale reduction factor; Vehtari et al. (2021) rank-normalised improved diagnostic. Pairs with effective sample size diagnostic + trace plots."
+  description_l1: A diagnostic that flags whether the chains used to estimate a Bayesian
+    model have settled down.
+  description_l2: R-hat = sqrt(between-chain variance / within-chain variance); values
+    close to 1.0 indicate convergence. R-hat > 1.1 flags non-convergence; current
+    best practice uses 1.01 threshold.
+  description_l3: Gelman-Rubin (1992) potential scale reduction factor; Vehtari et
+    al. (2021) rank-normalised improved diagnostic. Pairs with effective sample size
+    diagnostic + trace plots.
   range_min: 1.0
-  typical_range: [1.0, 1.5]
+  range_max: null
+  typical_range:
+  - 1.0
+  - 1.5
   invert_for_signal: true
-  citations: ["Gelman-Rubin (1992)", "Vehtari et al. (2021)"]
-
+  citations:
+  - Gelman-Rubin (1992)
+  - Vehtari et al. (2021)
+  computation_path: null
+  deferred_to: L7
 - metric_id: posterior_theta
-  name: "Posterior P(theta | D)"
+  name: Posterior P(theta | D)
   subcategory: bayesian
   subcategory_index: 10
   layer_origin: L6
   unit: density
   update_frequency: on_request
-  description_l1: "Our updated belief about a parameter after seeing the data."
-  description_l2: "P(theta | D) = P(D | theta) pi(theta) / P(D) by Bayes' theorem. Full distribution over theta; summaries include mean, MAP, credible interval."
-  description_l3: "Conjugate-prior families admit closed-form posteriors (Gelman et al. 2013 chapter 2); otherwise approximated via MCMC, variational inference, or nested sampling."
+  description_l1: Our updated belief about a parameter after seeing the data.
+  description_l2: P(theta | D) = P(D | theta) pi(theta) / P(D) by Bayes' theorem.
+    Full distribution over theta; summaries include mean, MAP, credible interval.
+  description_l3: Conjugate-prior families admit closed-form posteriors (Gelman et
+    al. 2013 chapter 2); otherwise approximated via MCMC, variational inference, or
+    nested sampling.
+  range_min: null
+  range_max: null
+  typical_range: null
   invert_for_signal: false
-  citations: ["Bayes (1763)", "Gelman et al. (2013)"]
-
+  citations:
+  - Bayes (1763)
+  - Gelman et al. (2013)
+  computation_path: null
+  deferred_to: L7
 - metric_id: prior_theta
-  name: "Prior pi(theta)"
+  name: Prior pi(theta)
   subcategory: bayesian
   subcategory_index: 10
   layer_origin: L6
   unit: density
   update_frequency: on_request
-  description_l1: "Our belief about a parameter before seeing the data."
-  description_l2: "pi(theta); inputs domain knowledge + prior empirical evidence. Sensitivity analysis (Vision §1 Pillar 2) reports posterior under multiple prior choices."
-  description_l3: "Conjugate priors yield analytically tractable posteriors. Weakly-informative / reference / Jeffreys priors for sensitivity analysis. Vision §10 mandates 6.5% real return prior at 10Y horizon (Shrinkage anchor)."
+  description_l1: Our belief about a parameter before seeing the data.
+  description_l2: "pi(theta); inputs domain knowledge + prior empirical evidence.\
+    \ Sensitivity analysis (Vision \xA71 Pillar 2) reports posterior under multiple\
+    \ prior choices."
+  description_l3: "Conjugate priors yield analytically tractable posteriors. Weakly-informative\
+    \ / reference / Jeffreys priors for sensitivity analysis. Vision \xA710 mandates\
+    \ 6.5% real return prior at 10Y horizon (Shrinkage anchor)."
+  range_min: null
+  range_max: null
+  typical_range: null
   invert_for_signal: false
-  citations: ["Jeffreys (1961)", "Vision v2.0 §10"]
-
-# ============================================================================
-# §3.11 — Macro-specific measures (8)
-# ============================================================================
-
+  citations:
+  - Jeffreys (1961)
+  - "Vision v2.0 \xA710"
+  computation_path: null
+  deferred_to: L7
 - metric_id: acm_term_premium
-  name: "ACM term premium"
+  name: ACM term premium
   subcategory: macro_specific
   subcategory_index: 11
   layer_origin: L1
   unit: bps
   update_frequency: weekly
-  description_l1: "The extra yield investors demand for holding longer-dated Treasuries."
-  description_l2: "Adrian-Crump-Moench five-factor affine term-structure model decomposition; separates expected short rate from term premium component of the yield curve."
-  description_l3: "Adrian-Crump-Moench (2013); NY Fed publishes weekly. Negative term premium since mid-2010s signals unusual expectations + liquidity regime; loaded via acm_termpremium loader."
+  description_l1: The extra yield investors demand for holding longer-dated Treasuries.
+  description_l2: Adrian-Crump-Moench five-factor affine term-structure model decomposition;
+    separates expected short rate from term premium component of the yield curve.
+  description_l3: Adrian-Crump-Moench (2013); NY Fed publishes weekly. Negative term
+    premium since mid-2010s signals unusual expectations + liquidity regime; loaded
+    via acm_termpremium loader.
+  range_min: null
+  range_max: null
+  typical_range: null
   invert_for_signal: true
-  citations: ["Adrian-Crump-Moench (2013)"]
-
+  citations:
+  - Adrian-Crump-Moench (2013)
+  computation_path: macro_pipeline/loaders/acm_termpremium.py
+  deferred_to: null
 - metric_id: buffett_indicator
-  name: "Buffett indicator (mkt cap / GDP)"
+  name: Buffett indicator (mkt cap / GDP)
   subcategory: macro_specific
   subcategory_index: 11
   layer_origin: L1
   unit: ratio
   update_frequency: quarterly
-  description_l1: "Total stock market value divided by economic output."
-  description_l2: "MV_equity / nominal_GDP; Warren Buffett (2001 Fortune interview) referenced as a single-best-indicator of market valuation. Long-run trend rising due to globalised earnings + intangibles."
-  description_l3: "Critiqued: ignores foreign earnings + corporate-tax-rate shifts + interest-rate environment. Best read as a percentile within a regime-conditional band; pairs with CAPE for cross-check."
+  description_l1: Total stock market value divided by economic output.
+  description_l2: MV_equity / nominal_GDP; Warren Buffett (2001 Fortune interview)
+    referenced as a single-best-indicator of market valuation. Long-run trend rising
+    due to globalised earnings + intangibles.
+  description_l3: 'Critiqued: ignores foreign earnings + corporate-tax-rate shifts
+    + interest-rate environment. Best read as a percentile within a regime-conditional
+    band; pairs with CAPE for cross-check.'
   range_min: 0.0
-  typical_range: [0.5, 2.5]
+  range_max: null
+  typical_range:
+  - 0.5
+  - 2.5
   invert_for_signal: true
-  citations: ["Buffett (2001 Fortune)"]
-
+  citations:
+  - Buffett (2001 Fortune)
+  computation_path: macro_pipeline/loaders/fred_loader.py
+  deferred_to: null
 - metric_id: cape_percentile
-  name: "CAPE percentile (Shiller)"
+  name: CAPE percentile (Shiller)
   subcategory: macro_specific
   subcategory_index: 11
   layer_origin: L1
   unit: percentile
   update_frequency: monthly
-  description_l1: "Where today's price-to-earnings ratio falls compared to history."
-  description_l2: "Cyclically-adjusted P/E percentile within the 1881-present Shiller dataset; high percentiles historically associated with lower forward 10Y real returns."
-  description_l3: "Campbell-Shiller (1988); R^2 for forward 10Y log returns approx 0.4 in-sample. Critiqued for structural margin shifts (Damodaran 2023) + accounting changes; loaded via shiller loader."
+  description_l1: Where today's price-to-earnings ratio falls compared to history.
+  description_l2: Cyclically-adjusted P/E percentile within the 1881-present Shiller
+    dataset; high percentiles historically associated with lower forward 10Y real
+    returns.
+  description_l3: Campbell-Shiller (1988); R^2 for forward 10Y log returns approx
+    0.4 in-sample. Critiqued for structural margin shifts (Damodaran 2023) + accounting
+    changes; loaded via shiller loader.
   range_min: 0.0
   range_max: 100.0
-  typical_range: [0.0, 100.0]
+  typical_range:
+  - 0.0
+  - 100.0
   invert_for_signal: true
-  citations: ["Campbell-Shiller (1988)", "Shiller (2000)"]
-
+  citations:
+  - Campbell-Shiller (1988)
+  - Shiller (2000)
+  computation_path: macro_pipeline/loaders/shiller.py
+  deferred_to: null
 - metric_id: ccc_bb_credit_spread
-  name: "CCC-BB credit spread (distress proxy)"
+  name: CCC-BB credit spread (distress proxy)
   subcategory: macro_specific
   subcategory_index: 11
   layer_origin: L1
   unit: bps
   update_frequency: daily
-  description_l1: "The extra yield on speculative-grade debt compared to better-rated debt."
-  description_l2: "Spread between CCC and BB option-adjusted yields; wider spread signals credit-cycle stress + recession risk."
-  description_l3: "Gilchrist-Zakrajsek (2012) excess bond premium decomposition; CCC-BB cut focuses on lower-quality tail. Pairs with VIX + LEI for regime classification."
+  description_l1: The extra yield on speculative-grade debt compared to better-rated
+    debt.
+  description_l2: Spread between CCC and BB option-adjusted yields; wider spread signals
+    credit-cycle stress + recession risk.
+  description_l3: Gilchrist-Zakrajsek (2012) excess bond premium decomposition; CCC-BB
+    cut focuses on lower-quality tail. Pairs with VIX + LEI for regime classification.
   range_min: 0.0
-  typical_range: [200.0, 1500.0]
+  range_max: null
+  typical_range:
+  - 200.0
+  - 1500.0
   invert_for_signal: true
-  citations: ["Gilchrist-Zakrajsek (2012)"]
-
+  citations:
+  - Gilchrist-Zakrajsek (2012)
+  computation_path: macro_pipeline/loaders/ebp.py
+  deferred_to: null
 - metric_id: equity_risk_premium
-  name: "Equity risk premium (implied + ex-post)"
+  name: Equity risk premium (implied + ex-post)
   subcategory: macro_specific
   subcategory_index: 11
   layer_origin: L1
   unit: percent
   update_frequency: monthly
-  description_l1: "How much more investors expect from stocks compared to safe bonds."
-  description_l2: "ERP_implied via Damodaran (2024) dividend-discount inversion; ERP_ex_post = realised stock minus bond returns. Both reported per Vision §3."
-  description_l3: "Damodaran (2024) implied ERP runs 4-6% in normal regimes; ex-post ERP shows substantial volatility + autocorrelation. Loaded via damodaran_erp + computed from market-cap weighted equity series."
-  typical_range: [2.0, 8.0]
+  description_l1: How much more investors expect from stocks compared to safe bonds.
+  description_l2: "ERP_implied via Damodaran (2024) dividend-discount inversion; ERP_ex_post\
+    \ = realised stock minus bond returns. Both reported per Vision \xA73."
+  description_l3: Damodaran (2024) implied ERP runs 4-6% in normal regimes; ex-post
+    ERP shows substantial volatility + autocorrelation. Loaded via damodaran_erp +
+    computed from market-cap weighted equity series.
+  range_min: null
+  range_max: null
+  typical_range:
+  - 2.0
+  - 8.0
   invert_for_signal: false
-  citations: ["Damodaran (2024)"]
-
+  citations:
+  - Damodaran (2024)
+  computation_path: macro_pipeline/loaders/damodaran_erp.py
+  deferred_to: null
 - metric_id: hussman_mape
-  name: "Hussman margin-adjusted P/E (MAPE)"
+  name: Hussman margin-adjusted P/E (MAPE)
   subcategory: macro_specific
   subcategory_index: 11
   layer_origin: L1
   unit: ratio
   update_frequency: monthly
-  description_l1: "A valuation ratio that normalises corporate profit margins."
-  description_l2: "P / (revenue * mean_margin); flattens earnings cycle by replacing actual margin with long-run mean. John Hussman's primary valuation measure (Hussman Investment Research)."
-  description_l3: "Critiqued for assuming mean-reverting margins despite structural margin shifts (post-2000 software + post-2010 oligopolisation). Pairs with CAPE percentile for cross-validation."
+  description_l1: A valuation ratio that normalises corporate profit margins.
+  description_l2: P / (revenue * mean_margin); flattens earnings cycle by replacing
+    actual margin with long-run mean. John Hussman's primary valuation measure (Hussman
+    Investment Research).
+  description_l3: Critiqued for assuming mean-reverting margins despite structural
+    margin shifts (post-2000 software + post-2010 oligopolisation). Pairs with CAPE
+    percentile for cross-validation.
   range_min: 0.0
+  range_max: null
+  typical_range: null
   invert_for_signal: true
-  citations: ["Hussman Investment Research weekly market comment"]
-
+  citations:
+  - Hussman Investment Research weekly market comment
+  computation_path: null
+  deferred_to: L7
 - metric_id: real_rate_vs_rstar
-  name: "Real rate vs R-star"
+  name: Real rate vs R-star
   subcategory: macro_specific
   subcategory_index: 11
   layer_origin: L1
   unit: bps
   update_frequency: quarterly
-  description_l1: "How much the real Fed rate is above or below the long-run neutral rate."
-  description_l2: "(real_FFR) minus (Holston-Laubach-Williams real R-star); positive values indicate tight monetary policy stance; negative indicates accommodative."
-  description_l3: "Holston-Laubach-Williams (2017) state-space estimate of natural rate of interest; NY Fed publishes vintage-stamped quarterly. Real-time R-star differs from later vintages; loaded via hlw_rstar + hlw_rstar_vintage loaders."
+  description_l1: How much the real Fed rate is above or below the long-run neutral
+    rate.
+  description_l2: (real_FFR) minus (Holston-Laubach-Williams real R-star); positive
+    values indicate tight monetary policy stance; negative indicates accommodative.
+  description_l3: Holston-Laubach-Williams (2017) state-space estimate of natural
+    rate of interest; NY Fed publishes vintage-stamped quarterly. Real-time R-star
+    differs from later vintages; loaded via hlw_rstar + hlw_rstar_vintage loaders.
+  range_min: null
+  range_max: null
+  typical_range: null
   invert_for_signal: false
-  citations: ["Holston-Laubach-Williams (2017)"]
-
+  citations:
+  - Holston-Laubach-Williams (2017)
+  computation_path: macro_pipeline/loaders/hlw_rstar.py
+  deferred_to: null
 - metric_id: tobin_q
-  name: "Tobin's Q"
+  name: Tobin's Q
   subcategory: macro_specific
   subcategory_index: 11
   layer_origin: L1
   unit: ratio
   update_frequency: quarterly
-  description_l1: "Total market value of a company compared to the cost to rebuild its assets."
-  description_l2: "Q = MV_assets / replacement_cost_assets; James Tobin (1969). Q > 1 incentivises investment; Q < 1 incentivises buybacks."
-  description_l3: "Aggregate Q via Federal Reserve Z.1 financial accounts; Q rose persistently post-2000 reflecting intangible-asset accounting limitations. Pairs with CAPE + Buffett Indicator for valuation cross-check."
+  description_l1: Total market value of a company compared to the cost to rebuild
+    its assets.
+  description_l2: Q = MV_assets / replacement_cost_assets; James Tobin (1969). Q >
+    1 incentivises investment; Q < 1 incentivises buybacks.
+  description_l3: Aggregate Q via Federal Reserve Z.1 financial accounts; Q rose persistently
+    post-2000 reflecting intangible-asset accounting limitations. Pairs with CAPE
+    + Buffett Indicator for valuation cross-check.
   range_min: 0.0
-  typical_range: [0.5, 2.5]
+  range_max: null
+  typical_range:
+  - 0.5
+  - 2.5
   invert_for_signal: true
-  citations: ["Tobin (1969)"]
-
-# ============================================================================
-# §3.12 — Regime-conditional (9)
-# ============================================================================
-
+  citations:
+  - Tobin (1969)
+  computation_path: macro_pipeline/loaders/fred_vintage_panel.py
+  deferred_to: null
 - metric_id: expansion_window_brier_improvement
-  name: "Expansion-window Brier improvement"
+  name: Expansion-window Brier improvement
   subcategory: regime_conditional
   subcategory_index: 12
   layer_origin: L5b
   unit: ratio
   update_frequency: on_request
-  description_l1: "How much better the model does than climatology during expansions."
-  description_l2: "Brier improvement vs climatology computed on the NBER-expansion sub-sample only; complement to recession_window_brier_improvement. L5b-D regime-conditional validation."
-  description_l3: "Decision Lock 3.5C-D1 pre-1978 handling fails closed; recession + expansion subsets restricted to post-1978. Regime sensitivity flag fires when |recession_BI - expansion_BI| > 0.5."
-  typical_range: [-0.2, 0.5]
+  description_l1: How much better the model does than climatology during expansions.
+  description_l2: Brier improvement vs climatology computed on the NBER-expansion
+    sub-sample only; complement to recession_window_brier_improvement. L5b-D regime-conditional
+    validation.
+  description_l3: Decision Lock 3.5C-D1 pre-1978 handling fails closed; recession
+    + expansion subsets restricted to post-1978. Regime sensitivity flag fires when
+    |recession_BI - expansion_BI| > 0.5.
+  range_min: null
+  range_max: null
+  typical_range:
+  - -0.2
+  - 0.5
   invert_for_signal: false
-  citations: ["LAYER_5_BUILD_SPEC.md §5.D"]
-
+  citations:
+  - "LAYER_5_BUILD_SPEC.md \xA75.D"
+  computation_path: macro_pipeline/analysis/regime_conditional_validation.py:RegimeConditionalDiagnostics
+  deferred_to: null
 - metric_id: ism_mfg_new_orders_threshold
-  name: "ISM Mfg New Orders threshold trigger"
+  name: ISM Mfg New Orders threshold trigger
   subcategory: regime_conditional
   subcategory_index: 12
   layer_origin: L1
   unit: status
   update_frequency: monthly
-  description_l1: "Whether the ISM new-orders index has crossed a recession-warning level."
-  description_l2: "Binary signal: ISM Mfg New Orders < 50 for 3 consecutive months. Leading-indicator characterisation of manufacturing demand contraction."
-  description_l3: "Component of LEI 3D rule + standalone signal in some practitioner frameworks. Lead time approx 3-6 months ahead of NBER recession declaration; false-positive rate higher in 1980s than recent decades."
+  description_l1: Whether the ISM new-orders index has crossed a recession-warning
+    level.
+  description_l2: 'Binary signal: ISM Mfg New Orders < 50 for 3 consecutive months.
+    Leading-indicator characterisation of manufacturing demand contraction.'
+  description_l3: Component of LEI 3D rule + standalone signal in some practitioner
+    frameworks. Lead time approx 3-6 months ahead of NBER recession declaration; false-positive
+    rate higher in 1980s than recent decades.
+  range_min: null
+  range_max: null
+  typical_range: null
   invert_for_signal: true
-  citations: ["Conference Board LEI methodology"]
-
+  citations:
+  - Conference Board LEI methodology
+  computation_path: macro_pipeline/loaders/fred_loader.py
+  deferred_to: null
 - metric_id: lei_3d_rule_trigger
-  name: "LEI 3D rule trigger"
+  name: LEI 3D rule trigger
   subcategory: regime_conditional
   subcategory_index: 12
   layer_origin: L1
   unit: status
   update_frequency: monthly
-  description_l1: "Whether the Leading Economic Index has fallen for three consecutive months by at least one percent."
-  description_l2: "Boolean recession-warning rule: LEI 6-month annualised growth less than -3.5% per Conference Board methodology. Coincident with the 3D (depth-duration-diffusion) screen."
-  description_l3: "Conference Board LEI; the 6-month change crossing -3.5% has high historical hit rate for forthcoming NBER recession declaration; component of multi-signal recession-probability composite."
+  description_l1: Whether the Leading Economic Index has fallen for three consecutive
+    months by at least one percent.
+  description_l2: 'Boolean recession-warning rule: LEI 6-month annualised growth less
+    than -3.5% per Conference Board methodology. Coincident with the 3D (depth-duration-diffusion)
+    screen.'
+  description_l3: Conference Board LEI; the 6-month change crossing -3.5% has high
+    historical hit rate for forthcoming NBER recession declaration; component of multi-signal
+    recession-probability composite.
+  range_min: null
+  range_max: null
+  typical_range: null
   invert_for_signal: true
-  citations: ["Conference Board LEI methodology"]
-
+  citations:
+  - Conference Board LEI methodology
+  computation_path: macro_pipeline/loaders/fred_loader.py
+  deferred_to: null
 - metric_id: nber_pre1978_handling
-  name: "NBER pre-1978 handling (tri-state)"
+  name: NBER pre-1978 handling (tri-state)
   subcategory: regime_conditional
   subcategory_index: 12
   layer_origin: L3
   unit: status
   update_frequency: on_request
-  description_l1: "How the model treats macro data from before 1978 when NBER calendar reliability is lower."
-  description_l2: "Tri-state per L5b-D Strategic disposition: exclude / include / diagnostic_only. Decision Lock 3.5C-D1 fail-closed at real-time; training-only mode supported."
-  description_l3: "L3.5C decision lock; pre-1978 NBER dates revised after the fact + not real-time reliable. Tri-state handling supports academic flexibility while preserving production fail-closed semantics."
+  description_l1: How the model treats macro data from before 1978 when NBER calendar
+    reliability is lower.
+  description_l2: 'Tri-state per L5b-D Strategic disposition: exclude / include /
+    diagnostic_only. Decision Lock 3.5C-D1 fail-closed at real-time; training-only
+    mode supported.'
+  description_l3: L3.5C decision lock; pre-1978 NBER dates revised after the fact
+    + not real-time reliable. Tri-state handling supports academic flexibility while
+    preserving production fail-closed semantics.
+  range_min: null
+  range_max: null
+  typical_range: null
   invert_for_signal: false
-  citations: ["LAYER_3_5_3.5C_VERIFICATION.md"]
-
+  citations:
+  - LAYER_3_5_3.5C_VERIFICATION.md
+  computation_path: macro_pipeline/regime/nber_extract.py
+  deferred_to: null
 - metric_id: ny_fed_recession_probit
-  name: "NY Fed recession probit"
+  name: NY Fed recession probit
   subcategory: regime_conditional
   subcategory_index: 12
   layer_origin: L1
   unit: probability
   update_frequency: monthly
-  description_l1: "Twelve-month-ahead recession probability from the New York Fed's yield-curve model."
-  description_l2: "Probit regression of NBER recession indicator on 10y-3m Treasury slope; updated monthly by NY Fed. Long-running benchmark recession predictor."
-  description_l3: "Estrella-Mishkin (1998); current implementation uses 1959-present monthly fit. Loaded via nyfed_recprob loader; component of multi-signal recession-probability composite."
+  description_l1: Twelve-month-ahead recession probability from the New York Fed's
+    yield-curve model.
+  description_l2: Probit regression of NBER recession indicator on 10y-3m Treasury
+    slope; updated monthly by NY Fed. Long-running benchmark recession predictor.
+  description_l3: Estrella-Mishkin (1998); current implementation uses 1959-present
+    monthly fit. Loaded via nyfed_recprob loader; component of multi-signal recession-probability
+    composite.
   range_min: 0.0
   range_max: 1.0
-  typical_range: [0.0, 1.0]
+  typical_range:
+  - 0.0
+  - 1.0
   invert_for_signal: false
-  citations: ["Estrella-Mishkin (1998)"]
-
+  citations:
+  - Estrella-Mishkin (1998)
+  computation_path: macro_pipeline/loaders/nyfed_recprob.py
+  deferred_to: null
 - metric_id: recession_window_brier_improvement
-  name: "Recession-window Brier improvement"
+  name: Recession-window Brier improvement
   subcategory: regime_conditional
   subcategory_index: 12
   layer_origin: L5b
   unit: ratio
   update_frequency: on_request
-  description_l1: "How much better the model does than climatology during recessions."
-  description_l2: "Brier improvement vs climatology computed on the NBER-recession sub-sample only; complement to expansion_window_brier_improvement. L5b-D regime-conditional validation."
-  description_l3: "Vision Pillar 1 institutional rigor: model must work in both regimes; recession sub-sample is the smaller harder-to-fit subset. Decision Lock 3.5C-D1 post-1978 restriction applies."
-  typical_range: [-0.2, 0.5]
+  description_l1: How much better the model does than climatology during recessions.
+  description_l2: Brier improvement vs climatology computed on the NBER-recession
+    sub-sample only; complement to expansion_window_brier_improvement. L5b-D regime-conditional
+    validation.
+  description_l3: 'Vision Pillar 1 institutional rigor: model must work in both regimes;
+    recession sub-sample is the smaller harder-to-fit subset. Decision Lock 3.5C-D1
+    post-1978 restriction applies.'
+  range_min: null
+  range_max: null
+  typical_range:
+  - -0.2
+  - 0.5
   invert_for_signal: false
-  citations: ["LAYER_5_BUILD_SPEC.md §5.D"]
-
+  citations:
+  - "LAYER_5_BUILD_SPEC.md \xA75.D"
+  computation_path: macro_pipeline/analysis/regime_conditional_validation.py:RegimeConditionalDiagnostics
+  deferred_to: null
 - metric_id: regime_sensitivity_flag
-  name: "Regime sensitivity flag"
+  name: Regime sensitivity flag
   subcategory: regime_conditional
   subcategory_index: 12
   layer_origin: L5b
   unit: status
   update_frequency: on_request
-  description_l1: "A warning that the model's quality differs a lot between recessions and expansions."
-  description_l2: "Boolean flag: |recession_BI - expansion_BI| > 0.5 per LAYER_5_BUILD_SPEC §5.D. Surfaces when the model's recession-conditional skill diverges materially from expansion-conditional skill."
-  description_l3: "L5b-D 14-field RegimeConditionalDiagnostics dataclass; invariant 4 enforces 50% threshold consistency between recession_BI minus expansion_BI and the boolean flag."
+  description_l1: A warning that the model's quality differs a lot between recessions
+    and expansions.
+  description_l2: "Boolean flag: |recession_BI - expansion_BI| > 0.5 per LAYER_5_BUILD_SPEC\
+    \ \xA75.D. Surfaces when the model's recession-conditional skill diverges materially\
+    \ from expansion-conditional skill."
+  description_l3: L5b-D 14-field RegimeConditionalDiagnostics dataclass; invariant
+    4 enforces 50% threshold consistency between recession_BI minus expansion_BI and
+    the boolean flag.
+  range_min: null
+  range_max: null
+  typical_range: null
   invert_for_signal: true
-  citations: ["LAYER_5_BUILD_SPEC.md §5.D"]
-
+  citations:
+  - "LAYER_5_BUILD_SPEC.md \xA75.D"
+  computation_path: macro_pipeline/analysis/regime_conditional_validation.py:RegimeConditionalDiagnostics
+  deferred_to: null
 - metric_id: regime_transition_probability
-  name: "Regime transition probability"
+  name: Regime transition probability
   subcategory: regime_conditional
   subcategory_index: 12
   layer_origin: L3
   unit: probability
   update_frequency: monthly
-  description_l1: "How likely the economy is to switch between recession and expansion."
-  description_l2: "P(regime_{t+1} | regime_t); estimated from NBER chronology + hidden Markov model (L3.5A). Provides regime-shift forecast horizon."
-  description_l3: "L3.5A hmmlearn three-state Gaussian HMM; cached at data/cache/hmm/regime_3state_v1.pkl with PIT-safe vintage discipline (L3.5B). Pairs with Sahm + NY Fed probit signals."
+  description_l1: How likely the economy is to switch between recession and expansion.
+  description_l2: P(regime_{t+1} | regime_t); estimated from NBER chronology + hidden
+    Markov model (L3.5A). Provides regime-shift forecast horizon.
+  description_l3: L3.5A hmmlearn three-state Gaussian HMM; cached at data/cache/hmm/regime_3state_v1.pkl
+    with PIT-safe vintage discipline (L3.5B). Pairs with Sahm + NY Fed probit signals.
   range_min: 0.0
   range_max: 1.0
-  typical_range: [0.0, 1.0]
+  typical_range:
+  - 0.0
+  - 1.0
   invert_for_signal: false
-  citations: ["LAYER_3_5_3.5A_VERIFICATION.md"]
-
+  citations:
+  - LAYER_3_5_3.5A_VERIFICATION.md
+  computation_path: macro_pipeline/regime/nber_extract.py:NberStateResult
+  deferred_to: null
 - metric_id: sahm_rule_reading
-  name: "Sahm Rule recession indicator"
+  name: Sahm Rule recession indicator
   subcategory: regime_conditional
   subcategory_index: 12
   layer_origin: L1
   unit: percent
   update_frequency: monthly
-  description_l1: "How much the unemployment rate has risen from recent lows, a recession warning if above half a percent."
-  description_l2: "Sahm Rule = 3-month-avg unemployment minus 12-month-min unemployment; triggers at >= 0.50 historically coincident with NBER recession onset."
-  description_l3: "Sahm (2019) real-time recession indicator; designed for automatic stabiliser triggering. Component of recession-probability composite; lead time approximately 0-3 months."
+  description_l1: How much the unemployment rate has risen from recent lows, a recession
+    warning if above half a percent.
+  description_l2: Sahm Rule = 3-month-avg unemployment minus 12-month-min unemployment;
+    triggers at >= 0.50 historically coincident with NBER recession onset.
+  description_l3: Sahm (2019) real-time recession indicator; designed for automatic
+    stabiliser triggering. Component of recession-probability composite; lead time
+    approximately 0-3 months.
   range_min: 0.0
-  typical_range: [-0.5, 2.0]
+  range_max: null
+  typical_range:
+  - -0.5
+  - 2.0
   invert_for_signal: false
-  citations: ["Sahm (2019)"]
+  citations:
+  - Sahm (2019)
+  computation_path: macro_pipeline/loaders/fred_loader.py
+  deferred_to: null

@@ -175,6 +175,17 @@ def _make_manual_inputs_with_recession_override(
 
 def _make_reference_class() -> ReferenceClass:
     """Build a minimal valid ReferenceClass with one neighbor."""
+    return _make_reference_class_with_similarity(0.85)
+
+
+def _make_reference_class_with_similarity(mean_similarity: float) -> ReferenceClass:
+    """Build a ReferenceClass with a controllable mean_similarity.
+
+    Helper used by L6-G test refactor (Strategic PD18) — Bayesian cap
+    firing requires high-similarity reference_class to push confidence
+    past the horizon cap (default similarity 0.5 yields max confidence
+    of approximately 0.69 with the formula 0.5 + 0.4 * sim).
+    """
     query = MacroStateVector(
         cape_z=0.5,
         yield_curve_z=-0.2,
@@ -187,9 +198,9 @@ def _make_reference_class() -> ReferenceClass:
     )
     ts = pd.Timestamp("2000-01-01")
     return ReferenceClass(
-        neighbors=((ts, 0.85),),
+        neighbors=((ts, mean_similarity),),
         n_neighbors=1,
-        mean_similarity=0.85,
+        mean_similarity=mean_similarity,
         query_state=query,
     )
 
@@ -354,8 +365,19 @@ def test_aggregate_regime_stratified_10y_cap_055() -> None:
 
 
 def test_aggregate_non_stratified_10y_cap_070() -> None:
-    """POS-inv: regime_stratified=False; confidence at 10Y <= 0.70."""
-    inputs = _make_forecast_inputs(n_eff={1: 100, 3: 30, 5: 18, 10: 200})
+    """POS-inv: regime_stratified=False; confidence at 10Y <= 0.70.
+
+    L6-G refactor (Strategic PD18): pass a high-similarity reference_class
+    so the Bayesian confidence formula (0.5 + 0.4 * evidence_weight)
+    exceeds the 0.70 non-stratified cap and triggers cap firing. With
+    default similarity 0.5 the Bayesian confidence maxes at ~0.69, so a
+    reference_class with high mean_similarity is needed to push past 0.70.
+    """
+    ref = _make_reference_class_with_similarity(0.95)
+    inputs = _make_forecast_inputs(
+        n_eff={1: 100, 3: 30, 5: 18, 10: 200},
+        reference_class=ref,
+    )
     result = aggregate_ensemble(inputs, regime_stratified=False)
     h10 = result.horizons[10]
     assert h10.triple_decomposition.confidence <= CONFIDENCE_CAP_10Y_NON_STRATIFIED
@@ -370,9 +392,20 @@ def test_aggregate_non_stratified_10y_cap_070() -> None:
 
 
 def test_aggregate_short_horizon_cap_085() -> None:
-    """POS-inv: confidence at 1Y/3Y/5Y <= 0.85 per Vision §10."""
-    # Force very large n_eff to push heuristic above 0.85
-    inputs = _make_forecast_inputs(n_eff={1: 500, 3: 500, 5: 500, 10: 9})
+    """POS-inv: confidence at 1Y/3Y/5Y <= 0.85 per Vision §10.
+
+    L6-G refactor (Strategic PD18): with the Bayesian formula confidence
+    is capped at 0.5 + 0.4 * similarity_quality at the large-n_eff
+    asymptote (~ 0.5 + 0.4 = 0.9 max). A reference_class with
+    mean_similarity = 0.95 produces confidence approaching 0.88 at
+    n_eff = 500, which exceeds the 0.85 short-horizon cap and triggers
+    cap firing.
+    """
+    ref = _make_reference_class_with_similarity(0.95)
+    inputs = _make_forecast_inputs(
+        n_eff={1: 500, 3: 500, 5: 500, 10: 9},
+        reference_class=ref,
+    )
     result = aggregate_ensemble(inputs)
     for h in (1, 3, 5):
         confidence = result.horizons[h].triple_decomposition.confidence

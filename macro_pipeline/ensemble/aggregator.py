@@ -1,9 +1,25 @@
-"""Ensemble aggregator — end-to-end forecast pipeline (L6-F).
+"""Ensemble aggregator — end-to-end forecast pipeline (L6-F + L6-G).
 
-Per Strategic L6-F inline pre-flight 2026-05-15 + Pipeline Guide v2.0 §7
-+ Vision v2.0 §4 (Triple Probability Decomposition) + §5 (Triple sigma
-Reporting) + §6 (Reference Class Forecasting) + §7 (OOD Reserve) +
+Per Strategic L6-F + L6-G inline pre-flights 2026-05-15 + Pipeline Guide
+v2.0 §7 + Vision v2.0 §4 (Triple Probability Decomposition) + §5 (Triple
+sigma Reporting) + §6 (Reference Class Forecasting) + §7 (OOD Reserve) +
 §10 (Sample Size Honesty) + §14 (Replication & Audit).
+
+L6-G refinement (2026-05-15)
+----------------------------
+The L6-F placeholder confidence + conviction heuristic is REPLACED with
+the Bayesian computation from ``bayesian_confidence.py``:
+
+  confidence = compute_bayesian_confidence(...) -> capped by Standing
+               Order #9 + Vision §10 (cap discipline UNCHANGED)
+  conviction = compute_conviction_score(...) -> Vision §4 simplified subset
+
+L6-G also adds ``populate_metric_outputs`` helper that extends the L6-F
+8-key baseline to a richer set per horizon (Reference Class metrics,
+cumulative sigma scaling, plus DMS adjustment when provided). The
+Vision §3 90-measurement registry computation_path field is populated
+in ``data/metrics_registry.yaml`` for the L1-L5b producer-linked
+measures.
 
 The aggregator integrates the L6-A through L6-E primitives with L5b
 producer outputs and L1.7 ManualInputSchedule into a single multi-
@@ -38,22 +54,25 @@ pair being independent surfaces). AP-AUTH-46 gratuitous-codification
 guard: pattern is fully matured by the 3rd instance; AP-AUTH-56
 codification scheduled at L6-H sprint retrospective per Strategic.
 
-Placeholder confidence/conviction logic (L6-F scope; L6-G refines)
+Bayesian confidence + conviction (L6-G replaces L6-F placeholder)
 ------------------------------------------------------------------
-At L6-F the confidence + conviction computations are HEURISTIC
-placeholders:
+At L6-G the confidence + conviction computations are Vision §4 Bayesian
+per ``bayesian_confidence.py``:
 
-  confidence_uncapped = min(0.5 + 0.05 * (n_eff / 30.0), 0.99)
+  confidence_uncapped = compute_bayesian_confidence(
+      point_estimate, n_eff, reference_class, regime_stratified, horizon)
   confidence          = min(confidence_uncapped, horizon_cap)
-  conviction          = 1.0 + confidence * 9.0  # linear [1, 10]
+  conviction          = compute_conviction_score(
+      confidence, reference_class, n_eff)
 
-L6-G will refine the confidence formula to follow Vision §4 BINDING
-(Data Quality + Model Agreement + Regime Stability + Analog Strength
-+ Sample Size minus OOD Penalty) and the conviction formula to include
-the asymmetry / valuation / trend / tail-risk / crowding / policy /
-decay components. The placeholder logic at L6-F is explicitly flagged
-in the aggregator docstring + commit message + R7 invocation for
-ChatGPT 5.5 methodology review.
+The L6-F placeholder heuristic (``min(0.5 + 0.05 * n_eff/30, 0.99)``;
+``1.0 + 9.0 * confidence``) is no longer used. The Bayesian formula
+uses the L6-E ``ReferenceClass.mean_similarity`` as evidence-quality
+weight and combines it with ``n_eff`` via posterior-precision
+weighting. Conviction applies Vision §4 simplified subset (linear
+scaling + sample-size penalty + weak-analog penalty); the full ten-
+component conviction formula is deferred per the R7 ChatGPT review
+question five anticipation.
 
 Confidence cap regime
 ---------------------
@@ -80,11 +99,16 @@ Public API
 """
 from __future__ import annotations
 
+import math
 import subprocess
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Dict, Optional, Tuple
 
+from macro_pipeline.ensemble.bayesian_confidence import (
+    compute_bayesian_confidence,
+    compute_conviction_score,
+)
 from macro_pipeline.ensemble.ood_and_caps import (
     OODConditions,
     compute_ood_reserve,
@@ -234,6 +258,108 @@ def _get_code_sha() -> str:
     return "unknown"
 
 
+def populate_metric_outputs(
+    forecast_inputs: ForecastInputs,
+    horizon: int,
+    point_estimate: float,
+    recession_p: float,
+    confidence: float,
+    conviction: float,
+) -> Dict[str, float]:
+    """Populate ``metric_outputs`` dict for a HorizonResult (L6-G extension).
+
+    Extends the L6-F eight-key baseline (point_estimate_return + recession
+    probability + confidence + conviction + n_eff + the three sigmas)
+    with L6-G additions: cumulative-sigma scaling for each of the three
+    sigmas at the horizon, Reference Class metrics when a reference_class
+    is present, and DMS adjustment when provided. Skips measures
+    unavailable at this horizon (no NaN population per Strategic PD6).
+
+    Track A populates additional measures here as L1-L5b producer outputs
+    surface in the aggregator pipeline; the Vision §3 ninety-measurement
+    registry remains the canonical source of truth for the full
+    measurement inventory + computation_path linkage.
+
+    Parameters
+    ----------
+    forecast_inputs
+        ``ForecastInputs`` wrapping L5b producer outputs + L6-E RCF output.
+    horizon
+        Current horizon in ``SUPPORTED_HORIZONS``.
+    point_estimate
+        Post-Bayesian-shrinkage point estimate at this horizon.
+    recession_p
+        Recession probability at this horizon (post-manual-override).
+    confidence
+        Capped confidence from compute_bayesian_confidence + horizon cap.
+    conviction
+        Conviction from compute_conviction_score.
+
+    Returns
+    -------
+    Dict[str, float]
+        Mapping ``metric_id -> float`` populated with the baseline plus
+        the L6-G additions.
+    """
+    outputs: Dict[str, float] = {
+        # L6-F baseline (eight keys per PD15).
+        "point_estimate_return": point_estimate,
+        "recession_probability": recession_p,
+        "confidence": confidence,
+        "conviction": conviction,
+        "n_eff": float(forecast_inputs.point_estimate_n_eff[horizon]),
+        "return_sigma": forecast_inputs.return_sigmas[horizon],
+        "forecast_error_sigma": forecast_inputs.forecast_sigmas[horizon],
+        "analog_dispersion_sigma": forecast_inputs.analog_dispersions[
+            horizon
+        ],
+    }
+
+    # L6-G additions —————————————————————————————————————————————————————
+
+    # DMS adjustment (carried over from L6-F when provided).
+    if (
+        forecast_inputs.dms_adjustments is not None
+        and horizon in forecast_inputs.dms_adjustments
+    ):
+        outputs["dms_adjustment_bps"] = float(
+            forecast_inputs.dms_adjustments[horizon]
+        )
+
+    # Reference Class metrics (L6-E passthrough when reference_class present).
+    if forecast_inputs.reference_class is not None:
+        outputs["rcf_mean_similarity"] = float(
+            forecast_inputs.reference_class.mean_similarity
+        )
+        outputs["rcf_n_neighbors"] = float(
+            forecast_inputs.reference_class.n_neighbors
+        )
+
+    # Cumulative sigma scaling per Vision §5 (caveats per TripleSigma module
+    # docstring — square-root-of-time approximation may fail in regime
+    # shifts / vol clustering / crises / policy shocks).
+    sqrt_h = math.sqrt(horizon)
+    outputs["cumulative_return_sigma"] = (
+        forecast_inputs.return_sigmas[horizon] * sqrt_h
+    )
+    outputs["cumulative_forecast_error_sigma"] = (
+        forecast_inputs.forecast_sigmas[horizon] * sqrt_h
+    )
+    outputs["cumulative_analog_dispersion_sigma"] = (
+        forecast_inputs.analog_dispersions[horizon] * sqrt_h
+    )
+
+    # Posterior-precision indicator (Bayesian evidence weight at this
+    # horizon; useful diagnostic for the Vision §10 sample-size honesty
+    # surface).
+    from macro_pipeline.ensemble.bayesian_confidence import KAPPA_EVIDENCE
+    outputs["posterior_precision"] = float(
+        forecast_inputs.point_estimate_n_eff[horizon] + KAPPA_EVIDENCE
+    )
+
+    return outputs
+
+
 def aggregate_ensemble(
     forecast_inputs: ForecastInputs,
     manual_inputs: Optional[ManualInputSchedule] = None,
@@ -335,10 +461,19 @@ def aggregate_ensemble(
             bayesian_applied = True
             shrinkage_n_eff = n_eff
 
-        # Step 2d — confidence placeholder (L6-G refines per Vision §4)
-        confidence_uncapped = min(0.5 + 0.05 * (n_eff / 30.0), 0.99)
+        # Step 2d — Bayesian confidence (L6-G replaces L6-F placeholder)
+        # Per Vision §4 + L6-E ReferenceClass.mean_similarity evidence.
+        confidence_uncapped = compute_bayesian_confidence(
+            point_estimate=point,
+            n_eff=n_eff,
+            reference_class=forecast_inputs.reference_class,
+            regime_stratified=regime_stratified,
+            horizon=horizon,
+        )
 
         # Step 2e — horizon-conditional cap (Standing Order #9 + Vision §10)
+        # Cap discipline UNCHANGED from L6-F; only the input (confidence_uncapped)
+        # is now Bayesian-computed rather than heuristic.
         if horizon == 10:
             cap = 0.55 if regime_stratified else 0.70
             confidence = min(confidence_uncapped, cap)
@@ -347,8 +482,12 @@ def aggregate_ensemble(
                 confidence_uncapped, SHORT_HORIZON_CONFIDENCE_CAP
             )
 
-        # Step 2f — conviction placeholder (L6-G refines per Vision §4)
-        conviction = 1.0 + confidence * 9.0
+        # Step 2f — Vision §4 simplified-subset conviction (L6-G)
+        conviction = compute_conviction_score(
+            confidence=confidence,
+            reference_class=forecast_inputs.reference_class,
+            n_eff=n_eff,
+        )
 
         # Step 2g — TripleDecomposition (defense-in-depth 1st layer)
         triple_decomp = TripleDecomposition(
@@ -372,28 +511,15 @@ def aggregate_ensemble(
             horizon=horizon,
         )
 
-        # Step 2j — metric_outputs (8+ keys; PD15)
-        metric_outputs: Dict[str, float] = {
-            "point_estimate_return": point,
-            "recession_probability": recession_p,
-            "confidence": confidence,
-            "conviction": conviction,
-            "n_eff": float(n_eff),
-            "return_sigma": forecast_inputs.return_sigmas[horizon],
-            "forecast_error_sigma": forecast_inputs.forecast_sigmas[
-                horizon
-            ],
-            "analog_dispersion_sigma": forecast_inputs.analog_dispersions[
-                horizon
-            ],
-        }
-        if (
-            forecast_inputs.dms_adjustments is not None
-            and horizon in forecast_inputs.dms_adjustments
-        ):
-            metric_outputs["dms_adjustment_bps"] = float(
-                forecast_inputs.dms_adjustments[horizon]
-            )
+        # Step 2j — metric_outputs (extended at L6-G via populate_metric_outputs)
+        metric_outputs = populate_metric_outputs(
+            forecast_inputs=forecast_inputs,
+            horizon=horizon,
+            point_estimate=point,
+            recession_p=recession_p,
+            confidence=confidence,
+            conviction=conviction,
+        )
 
         horizon_results[horizon] = HorizonResult(
             horizon=horizon,

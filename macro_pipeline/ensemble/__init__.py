@@ -13,7 +13,8 @@ L6-B     TripleDecomposition + cap __post_init__  (COMPLETE — l6-b-accept @ b3
 L6-C     TripleSigma + cumulative scaling caveats  (COMPLETE — l6-c-accept @ fae2b16)
 L6-D     OOD reserve + confidence cap helpers  (COMPLETE — l6-d-accept @ 4fdcf64)
 L6-E     Reference Class Forecasting module  (COMPLETE — l6-e-accept @ 2ddbaa4)
-L6-F     Ensemble aggregator  (THIS SUB-PHASE)
+L6-F     Ensemble aggregator  (COMPLETE — l6-f-accept @ f2c963b)
+L6-G     90+ measurement coverage + Bayesian refinement  (THIS SUB-PHASE)
 L6-G     Measurement coverage pass
 L6-H     Gate 30 + retrospective + sprint closure
 
@@ -82,6 +83,12 @@ from macro_pipeline.ensemble.aggregator import (
     ForecastInputs,
     HorizonResult,
     aggregate_ensemble,
+    populate_metric_outputs,
+)
+from macro_pipeline.ensemble.bayesian_confidence import (
+    KAPPA_EVIDENCE,
+    compute_bayesian_confidence,
+    compute_conviction_score,
 )
 
 __all__ = [
@@ -128,4 +135,9 @@ __all__ = [
     "ForecastInputs",
     "HorizonResult",
     "aggregate_ensemble",
+    # L6-G measurement coverage + Bayesian refinement
+    "KAPPA_EVIDENCE",
+    "compute_bayesian_confidence",
+    "compute_conviction_score",
+    "populate_metric_outputs",
 ]
