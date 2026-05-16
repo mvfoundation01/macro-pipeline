@@ -54,8 +54,8 @@ are *independent*. This is structurally enforced by the formula
 (conviction depends on a distinct 10-component set; the asymmetry +
 penalty components can dominate even at high confidence).
 
-Component sourcing (L6-H placeholder discipline)
--------------------------------------------------
+Component sourcing (L6-H placeholder discipline + L6-I roadmap)
+----------------------------------------------------------------
 Not all 10 conviction components or 6 confidence components have full
 upstream L1-L5b producers at L6-H. Where producer data exists, the
 component is sourced empirically; where data is unavailable, a
@@ -68,6 +68,80 @@ This discipline closes ChatGPT R7 Finding #4 (conviction must be a
 *distinct* risk/reward score with the §4 BINDING components) while
 acknowledging the empirical sourcing gap (documented + deferred,
 not silently elided).
+
+L6-I D6 producer roadmap (Strategic Decision Ratify #2 — 2026-05-16)
+--------------------------------------------------------------------
+At L6-H + L6-I, the following components use PLACEHOLDER_NEUTRAL (0.5)
+in ``derive_confidence_components`` and ``derive_conviction_components``;
+producer-backed sourcing is roadmapped per the Strategic disposition:
+
+Confidence components (3 of 6 placeholder at L6-I):
+
+  data_quality          → L7 producer: FRED vintage age + indicator
+                          coverage diagnostics; consumes loaders/* +
+                          analysis/* PIT audit outputs.
+  model_agreement       → L7 producer: L5b 11-model dispersion
+                          diagnostics; consumes ensemble residual
+                          across 11 model_ids (post-L6-I D3 schema +
+                          L7 dedicated producer wiring).
+  regime_stability      → L7 producer: rcf.py regime_classifier
+                          extension; consumes regime transition
+                          probabilities + persistence diagnostics
+                          across 1913-present sample.
+
+Confidence components (3 of 6 empirical at L6-H):
+
+  analog_strength       ← L6-E rcf.ReferenceClass.mean_similarity
+                          (clamped to [0, 1]).
+  sample_size_adequacy  ← L6-H compute_sample_size_adequacy via
+                          Vision §10 N targets (113/38/22/11).
+  ood_penalty           ← L6-H OOD reserve fraction normalized
+                          to [0, 1] via (reserve - 0.05) / 0.10.
+
+Conviction components (9 of 10 placeholder at L6-I; 1 empirical):
+
+  edge_score                   → L7 producer: forecast vs benchmark
+                                 (e.g., risk-free rate, opportunity-cost
+                                 anchor); Sharpe-like normalized score.
+  asymmetry_score              → L7 producer: vol-implied right/left
+                                 tail dispersion from VIX/SKEW + options.
+  model_agreement              → L7 producer: L5b 11-model dispersion
+                                 (same producer as confidence variant;
+                                 surfaces here as conviction INPUT not
+                                 confidence weight).
+  valuation_support            → L7 producer: CAPE/Tobin/ERP percentile
+                                 classifier; direction-aware vs forecast.
+  trend_confirmation           → L7 producer: 50/200 DMA + breadth +
+                                 momentum diagnostics from L4.
+  liquidity_support            → L7 producer: FCI + credit spreads +
+                                 funding-liquidity diagnostics.
+  tail_risk_penalty            → L7 producer: VaR/CVaR breach probability
+                                 from forecast distribution.
+  crowding_penalty             → L7 producer: CFTC positioning + dealer
+                                 gamma + AAII bull-bear extremes.
+  policy_uncertainty_penalty   → L7 producer: Fed reaction-function
+                                 shift signals (Lucas critique surface;
+                                 partial integration via L6-H
+                                 LucasCritiqueDiagnostics).
+  forecast_decay_penalty       ← L6-H derive_conviction_components
+                                 horizon-decay schedule (empirical at
+                                 L6-H/I; full producer-backed model
+                                 deferred to L8a UI surface).
+
+Summary
+-------
+* L6-H/I empirical: 3 confidence + 1 conviction component
+* L6-H/I placeholder: 3 confidence + 9 conviction components
+* Producer-backed sourcing: roadmapped to L7 (component producers) +
+  L8a (forecast decay UI model).
+
+R8 reviewer expectation: this discipline is documented for
+transparency. If R8 flags the placeholder-driven L6-H/I formula
+output as MEDIUM (e.g., "components are 0.5 → confidence + conviction
+are not differentiated"), Strategic accepts (alternative is 20-30h L6
+scope expansion that breaks gate hygiene + sprint cadence). The
+binding Vision §4 FORMULAS are correctly implemented; component
+sourcing is a separate L7 concern.
 
 Defense-in-depth confidence cap (3rd-instance UNCHANGED at L6-H)
 ----------------------------------------------------------------

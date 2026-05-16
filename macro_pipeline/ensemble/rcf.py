@@ -199,6 +199,14 @@ class ReferenceClass:
             raise ValueError(
                 f"n_neighbors must be >= 1; got {self.n_neighbors}"
             )
+        # L6-I D1 — explicit finite check (NaN bypasses range comparison
+        # already raises via `<=` False-fall-through, but explicit check
+        # produces a clearer error for NaN/inf inputs).
+        if not math.isfinite(self.mean_similarity):
+            raise ValueError(
+                f"mean_similarity must be finite; got "
+                f"{self.mean_similarity!r}"
+            )
         if not (-1.0 <= self.mean_similarity <= 1.0):
             raise ValueError(
                 f"mean_similarity {self.mean_similarity} outside [-1, 1]"

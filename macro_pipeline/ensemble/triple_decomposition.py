@@ -35,6 +35,7 @@ not in code-level field names.
 """
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import Optional
 
@@ -110,6 +111,19 @@ class TripleDecomposition:
     binding_constraint: Optional[str] = None
 
     def __post_init__(self) -> None:
+        # L6-I D1 — finite checks BEFORE range checks (explicit NaN/inf
+        # rejection with clear error messages; NaN bypasses range via
+        # `NaN <= x` always False, so range check would still raise but
+        # with a misleading "outside [0.0, 1.0]" message).
+        for field_name, value in (
+            ("probability", self.probability),
+            ("confidence", self.confidence),
+            ("conviction", self.conviction),
+        ):
+            if not math.isfinite(value):
+                raise ValueError(
+                    f"{field_name} must be finite; got {value!r}"
+                )
         # Invariant 1 — probability bounds.
         if not (PROBABILITY_MIN <= self.probability <= PROBABILITY_MAX):
             raise ValueError(

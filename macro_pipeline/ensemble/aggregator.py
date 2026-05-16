@@ -68,8 +68,10 @@ from __future__ import annotations
 
 import math
 import subprocess
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from types import MappingProxyType
 from typing import Dict, Optional, Tuple
 
 from macro_pipeline.ensemble.bayesian_confidence import (
@@ -85,6 +87,10 @@ from macro_pipeline.ensemble.dms_and_lucas import (
     apply_dms_bps_to_return,
     compute_lucas_diagnostics,
     select_dms_adjustment_bps,
+)
+from macro_pipeline.ensemble.model_signals import (
+    detect_layer_disagreement,
+    wrap_point_estimates_as_model_signals,
 )
 from macro_pipeline.ensemble.ood_and_caps import (
     OODConditions,
@@ -165,6 +171,68 @@ class ForecastInputs:
                     f"ForecastInputs.{field_name} missing horizons: "
                     f"{missing}"
                 )
+        # L6-I D1 — finite invariants on all numeric dict values
+        # (Codex Finding #2; NaN/inf inputs would corrupt downstream
+        # confidence + conviction + cap-cascade computations silently).
+        float_field_names = (
+            "point_estimates",
+            "forecast_sigmas",
+            "analog_dispersions",
+            "return_sigmas",
+            "recession_probabilities",
+        )
+        for fname in float_field_names:
+            fdict = getattr(self, fname)
+            for h, v in fdict.items():
+                if not math.isfinite(v):
+                    raise ValueError(
+                        f"ForecastInputs.{fname}[{h}] must be finite; "
+                        f"got {v!r}"
+                    )
+        # n_eff: non-negative integer check.
+        for h, n in self.point_estimate_n_eff.items():
+            if not isinstance(n, int) or isinstance(n, bool):
+                raise TypeError(
+                    f"ForecastInputs.point_estimate_n_eff[{h}] must be "
+                    f"int; got {type(n).__name__}"
+                )
+            if n < 0:
+                raise ValueError(
+                    f"ForecastInputs.point_estimate_n_eff[{h}] must be "
+                    f"non-negative; got {n}"
+                )
+        # Optional dms_adjustments finite check.
+        if self.dms_adjustments is not None:
+            for h, v in self.dms_adjustments.items():
+                if not math.isfinite(v):
+                    raise ValueError(
+                        f"ForecastInputs.dms_adjustments[{h}] must be "
+                        f"finite; got {v!r}"
+                    )
+        # L6-I D2 — deep-immutability via MappingProxyType wrapping for
+        # all dict fields (Codex Finding #1; frozen dataclass prevents
+        # field-rebind but mutable dicts can still be mutated post-init).
+        for fname in (
+            "point_estimates",
+            "point_estimate_n_eff",
+            "forecast_sigmas",
+            "analog_dispersions",
+            "return_sigmas",
+            "recession_probabilities",
+        ):
+            current = getattr(self, fname)
+            if not isinstance(current, MappingProxyType):
+                object.__setattr__(
+                    self, fname, MappingProxyType(dict(current))
+                )
+        if self.dms_adjustments is not None and not isinstance(
+            self.dms_adjustments, MappingProxyType
+        ):
+            object.__setattr__(
+                self,
+                "dms_adjustments",
+                MappingProxyType(dict(self.dms_adjustments)),
+            )
 
 
 @dataclass(frozen=True)
@@ -213,6 +281,34 @@ class HorizonResult:
             flag=False, reason_codes=(), structural_break_evidence={}
         )
     )
+    # L6-I additions (D5 — layer-disagreement signal):
+    layer_disagreement_flag: bool = False
+    layer_disagreement_label: str = "consensus"
+
+    def __post_init__(self) -> None:
+        # L6-I D1 — finite checks on numeric float fields.
+        for fname in (
+            "dms_raw_point_estimate",
+            "dms_adjusted_point_estimate",
+            "dms_adjustment_bps",
+        ):
+            val = getattr(self, fname)
+            if not math.isfinite(val):
+                raise ValueError(
+                    f"HorizonResult.{fname} must be finite; got {val!r}"
+                )
+        # L6-I D1 — finite checks on metric_outputs values.
+        for k, v in self.metric_outputs.items():
+            if not math.isfinite(v):
+                raise ValueError(
+                    f"HorizonResult.metric_outputs[{k!r}] must be finite; "
+                    f"got {v!r}"
+                )
+        # L6-I D2 — deep-immutability on metric_outputs dict.
+        if not isinstance(self.metric_outputs, MappingProxyType):
+            object.__setattr__(
+                self, "metric_outputs", MappingProxyType(dict(self.metric_outputs))
+            )
 
 
 @dataclass(frozen=True)
@@ -244,10 +340,27 @@ class EnsembleResult:
                 f"{sorted(self.horizons.keys())} != supported "
                 f"{sorted(SUPPORTED_HORIZONS)}"
             )
+        # L6-I D1 — finite check before range comparison.
+        if not math.isfinite(self.ood_reserve_fraction):
+            raise ValueError(
+                f"ood_reserve_fraction must be finite; got "
+                f"{self.ood_reserve_fraction!r}"
+            )
         if not (0.05 <= self.ood_reserve_fraction <= 0.15):
             raise ValueError(
                 f"ood_reserve_fraction {self.ood_reserve_fraction} "
                 f"out of [0.05, 0.15] per Vision §7"
+            )
+        # L6-I D2 — deep-immutability on horizons + replication_kit_metadata.
+        if not isinstance(self.horizons, MappingProxyType):
+            object.__setattr__(
+                self, "horizons", MappingProxyType(dict(self.horizons))
+            )
+        if not isinstance(self.replication_kit_metadata, MappingProxyType):
+            object.__setattr__(
+                self,
+                "replication_kit_metadata",
+                MappingProxyType(dict(self.replication_kit_metadata)),
             )
 
 
@@ -611,7 +724,21 @@ def aggregate_ensemble(
             lucas_flag=lucas_diag.flag,
         )
 
-        # Step 3l — HorizonResult (L6-H expanded)
+        # L6-I D3+D5 — wrap point_estimates as 11-model placeholder signals
+        # + detect layer disagreement. Placeholder signals all share the
+        # same point_estimate; "consensus" is the L6-I default. Full
+        # pattern detection (valuation_bear_trend_bull et al.) deferred
+        # to L7 per V Decision #2 Option B.
+        model_signals = wrap_point_estimates_as_model_signals(
+            point_estimates={h: point if h == horizon else 0.0
+                             for h in SUPPORTED_HORIZONS},
+            horizon=horizon,
+        )
+        disagree_flag, disagree_label = detect_layer_disagreement(
+            model_signals
+        )
+
+        # Step 3l — HorizonResult (L6-H expanded + L6-I D5 layer fields)
         horizon_results[horizon] = HorizonResult(
             horizon=horizon,
             triple_decomposition=triple_decomp,
@@ -624,6 +751,8 @@ def aggregate_ensemble(
             dms_adjustment_bps=dms_bps,
             dms_selection_reason=dms_reason,
             lucas_diagnostics=lucas_diag,
+            layer_disagreement_flag=disagree_flag,
+            layer_disagreement_label=disagree_label,
         )
 
     # Step 4 — replication-kit metadata (Vision §14)

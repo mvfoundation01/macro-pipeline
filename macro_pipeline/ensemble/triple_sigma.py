@@ -89,7 +89,19 @@ class TripleSigma:
     horizon: int
 
     def __post_init__(self) -> None:
-        # Invariant 1 — sigma range checks (per-field).
+        # Invariant 1 (L6-I D1) — finite checks BEFORE range checks.
+        # NaN/inf bypass range comparisons (NaN < x is always False);
+        # explicit finite check rejects them with a clear error.
+        for field_name, value in (
+            ("return_sigma", self.return_sigma),
+            ("forecast_error_sigma", self.forecast_error_sigma),
+            ("analog_dispersion_sigma", self.analog_dispersion_sigma),
+        ):
+            if not math.isfinite(value):
+                raise ValueError(
+                    f"{field_name} must be finite; got {value!r}"
+                )
+        # Invariant 2 — sigma range checks (per-field).
         for field_name, value in (
             ("return_sigma", self.return_sigma),
             ("forecast_error_sigma", self.forecast_error_sigma),
@@ -105,7 +117,7 @@ class TripleSigma:
                     f"{SIGMA_MAX_REASONABLE}; verify units (annualized "
                     f"fraction, not percent)"
                 )
-        # Invariant 2 — horizon membership.
+        # Invariant 3 — horizon membership.
         if self.horizon not in SUPPORTED_HORIZONS:
             raise ValueError(
                 f"horizon {self.horizon} not in "

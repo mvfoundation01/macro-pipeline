@@ -119,6 +119,18 @@ from macro_pipeline.ensemble.dms_and_lucas import (
     compute_lucas_diagnostics,
     select_dms_adjustment_bps,
 )
+from macro_pipeline.ensemble.model_signals import (
+    LAYER_DISAGREEMENT_LABELS,
+    MODEL_IDS,
+    MODEL_IDS_VALID,
+    MODEL_WEIGHTS_BY_HORIZON,
+    MODEL_WEIGHTS_BY_HORIZON_FROZEN,
+    WEIGHT_SUM_TOLERANCE,
+    ModelSignal,
+    aggregate_model_signals,
+    detect_layer_disagreement,
+    wrap_point_estimates_as_model_signals,
+)
 
 __all__ = [
     # L6-A schema + registry
@@ -179,4 +191,15 @@ __all__ = [
     "apply_dms_bps_to_return",
     "compute_lucas_diagnostics",
     "select_dms_adjustment_bps",
+    # L6-I D3/D4/D5 ModelSignal + 11-model schema + layer disagreement
+    "LAYER_DISAGREEMENT_LABELS",
+    "MODEL_IDS",
+    "MODEL_IDS_VALID",
+    "MODEL_WEIGHTS_BY_HORIZON",
+    "MODEL_WEIGHTS_BY_HORIZON_FROZEN",
+    "WEIGHT_SUM_TOLERANCE",
+    "ModelSignal",
+    "aggregate_model_signals",
+    "detect_layer_disagreement",
+    "wrap_point_estimates_as_model_signals",
 ]

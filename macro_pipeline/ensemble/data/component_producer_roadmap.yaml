@@ -1,0 +1,212 @@
+# L6-I D6 — Bayesian confidence + conviction component producer roadmap.
+#
+# Per Strategic L6-I R7 closure pre-flight 2026-05-16 + Strategic
+# Decision Ratify #2 (post-L6-H autonomous disposition).
+#
+# This document is the authoritative roadmap for replacing L6-H/I
+# placeholder neutrals (0.5) in the Vision §4 BINDING confidence +
+# conviction component vectors with producer-backed values. The
+# Vision §4 FORMULAS are correctly implemented at L6-H; this file
+# tracks the *component sourcing* deferred-to-L7-or-L8a backlog.
+#
+# Sub-phase scope (deferred):
+#   L7  Component producers (3 confidence + 8 conviction)
+#   L8a Forecast decay UI model (1 conviction component)
+#
+# Reading: each entry maps a Vision §4 BINDING component slot in
+# either ConfidenceComponents (6 slots) or ConvictionComponents (10
+# slots) to its planned producer + consumer pair.
+
+roadmap_version: 1
+authored_at: "2026-05-16"
+authored_by: "Strategic Track B + Track A L6-I execution"
+ratifies: ["Strategic Decision Ratify #2", "V Decision #2 Option B"]
+
+# -----------------------------------------------------------------------
+# Confidence components (Vision §4 BINDING 6-slot vector)
+# 3 empirical at L6-H/I + 3 placeholder deferred to L7
+# -----------------------------------------------------------------------
+
+confidence_components:
+
+- component_slot: data_quality
+  l6h_l6i_status: placeholder
+  placeholder_value: 0.5
+  deferred_to: L7
+  producer_plan: |
+    Extend loaders/ + analysis/ PIT-audit outputs with a
+    composite quality score: FRED vintage age + indicator
+    coverage completeness + outlier-flag count + missing-data
+    rate. Normalize to [0, 1] via per-indicator quality bands.
+  consumer: "bayesian_confidence.ConfidenceComponents.data_quality"
+  weight_in_vision_4_formula: 0.25
+
+- component_slot: model_agreement
+  l6h_l6i_status: placeholder
+  placeholder_value: 0.5
+  deferred_to: L7
+  producer_plan: |
+    Compute 11-model ensemble dispersion: (1 - normalized
+    stdev of point_estimate_annualized across the 11
+    ModelSignal instances at this horizon) OR proportion of
+    models within plus/minus 1 sigma of ensemble mean.
+    Producer-source ModelSignals from the L7 dedicated 11-model
+    implementation (post-L6-I D3 schema; L7 wires actual
+    producers per model_id).
+  consumer: "bayesian_confidence.ConfidenceComponents.model_agreement"
+  weight_in_vision_4_formula: 0.25
+
+- component_slot: regime_stability
+  l6h_l6i_status: placeholder
+  placeholder_value: 0.5
+  deferred_to: L7
+  producer_plan: |
+    Extend rcf.py with a regime_classifier producer that surfaces
+    (1) regime-transition probability at the query state and
+    (2) regime persistence depth. Combine to a [0, 1] stability
+    score where higher = more stable.
+  consumer: "bayesian_confidence.ConfidenceComponents.regime_stability"
+  weight_in_vision_4_formula: 0.20
+
+- component_slot: analog_strength
+  l6h_l6i_status: empirical
+  empirical_source: "rcf.ReferenceClass.mean_similarity clamped to [0, 1]"
+  consumer: "bayesian_confidence.ConfidenceComponents.analog_strength"
+  weight_in_vision_4_formula: 0.15
+
+- component_slot: sample_size_adequacy
+  l6h_l6i_status: empirical
+  empirical_source: |
+    bayesian_confidence.compute_sample_size_adequacy(n_eff, horizon)
+    via Vision section 10 N targets {1: 113, 3: 38, 5: 22, 10: 11}
+    with sqrt(min(1, n_eff / N_target)) scaling.
+  consumer: "bayesian_confidence.ConfidenceComponents.sample_size_adequacy"
+  weight_in_vision_4_formula: 0.10
+
+- component_slot: ood_penalty
+  l6h_l6i_status: empirical
+  empirical_source: |
+    L6-H OOD reserve fraction normalized to [0, 1] via
+    (reserve - 0.05) / (0.15 - 0.05).
+  consumer: "bayesian_confidence.ConfidenceComponents.ood_penalty"
+  weight_in_vision_4_formula: -0.05
+
+# -----------------------------------------------------------------------
+# Conviction components (Vision §4 BINDING 10-slot vector)
+# 1 empirical at L6-H/I + 9 placeholder deferred to L7/L8a
+# -----------------------------------------------------------------------
+
+conviction_components:
+
+- component_slot: edge_score
+  l6h_l6i_status: placeholder
+  placeholder_value: 0.5
+  deferred_to: L7
+  producer_plan: |
+    Normalize forecast point_estimate vs benchmark
+    (risk-free rate, opportunity-cost anchor). Output
+    Sharpe-like score in [0, 1] reflecting expected return
+    attractiveness.
+  consumer: "bayesian_confidence.ConvictionComponents.edge_score"
+  weight_in_vision_4_formula: 0.20
+
+- component_slot: asymmetry_score
+  l6h_l6i_status: placeholder
+  placeholder_value: 0.5
+  deferred_to: L7
+  producer_plan: |
+    Derive right-vs-left tail asymmetry from vol-implied
+    options data (VIX, SKEW, put/call ratio, term structure).
+    Output shifted to [0, 1] where 0.5 = symmetric;
+    above 0.5 = right-tail dominance (positive asymmetry).
+  consumer: "bayesian_confidence.ConvictionComponents.asymmetry_score"
+  weight_in_vision_4_formula: 0.20
+
+- component_slot: model_agreement
+  l6h_l6i_status: placeholder
+  placeholder_value: 0.5
+  deferred_to: L7
+  producer_plan: |
+    Same producer as confidence_components.model_agreement
+    (11-model ensemble dispersion). Surfaces as conviction
+    INPUT here, not as confidence weight.
+  consumer: "bayesian_confidence.ConvictionComponents.model_agreement"
+  weight_in_vision_4_formula: 0.15
+
+- component_slot: valuation_support
+  l6h_l6i_status: placeholder
+  placeholder_value: 0.5
+  deferred_to: L7
+  producer_plan: |
+    CAPE / Tobin's Q / ERP percentile classifier, oriented
+    by forecast direction (e.g., long-equity forecast +
+    sub-20th-percentile CAPE = high valuation support).
+  consumer: "bayesian_confidence.ConvictionComponents.valuation_support"
+  weight_in_vision_4_formula: 0.15
+
+- component_slot: trend_confirmation
+  l6h_l6i_status: placeholder
+  placeholder_value: 0.5
+  deferred_to: L7
+  producer_plan: |
+    50/200 DMA + breadth + momentum diagnostics from L4
+    composite layer; output [0, 1] where higher = stronger
+    trend confirmation of the forecast direction.
+  consumer: "bayesian_confidence.ConvictionComponents.trend_confirmation"
+  weight_in_vision_4_formula: 0.10
+
+- component_slot: liquidity_support
+  l6h_l6i_status: placeholder
+  placeholder_value: 0.5
+  deferred_to: L7
+  producer_plan: |
+    FCI + credit spreads + funding-liquidity diagnostics
+    (CCC-BB OAS, IG OAS, repo market stress) combined to
+    [0, 1] liquidity-support score.
+  consumer: "bayesian_confidence.ConvictionComponents.liquidity_support"
+  weight_in_vision_4_formula: 0.10
+
+- component_slot: tail_risk_penalty
+  l6h_l6i_status: placeholder
+  placeholder_value: 0.5
+  deferred_to: L7
+  producer_plan: |
+    VaR/CVaR breach probability from the forecast
+    distribution; SKEW + put/call extremes; VIX term
+    structure inversion. Output [0, 1] where higher =
+    larger penalty (more tail risk).
+  consumer: "bayesian_confidence.ConvictionComponents.tail_risk_penalty"
+  weight_in_vision_4_formula: -0.15
+
+- component_slot: crowding_penalty
+  l6h_l6i_status: placeholder
+  placeholder_value: 0.5
+  deferred_to: L7
+  producer_plan: |
+    CFTC positioning extremes + dealer gamma + AAII
+    bull-bear extreme combined to [0, 1] crowding-penalty
+    score; high crowding = higher penalty.
+  consumer: "bayesian_confidence.ConvictionComponents.crowding_penalty"
+  weight_in_vision_4_formula: -0.10
+
+- component_slot: policy_uncertainty_penalty
+  l6h_l6i_status: placeholder
+  placeholder_value: 0.5
+  deferred_to: L7
+  producer_plan: |
+    Fed reaction-function shift signals + Lucas critique
+    surface integration. Partial integration available at
+    L6-H via LucasCritiqueDiagnostics; full L7 producer
+    surfaces a [0, 1] policy-uncertainty penalty score.
+  consumer: "bayesian_confidence.ConvictionComponents.policy_uncertainty_penalty"
+  weight_in_vision_4_formula: -0.10
+
+- component_slot: forecast_decay_penalty
+  l6h_l6i_status: empirical
+  empirical_source: |
+    L6-H derive_conviction_components horizon-decay default
+    schedule {1: 0.0, 3: 0.10, 5: 0.25, 10: 0.50}. Full
+    producer-backed forecast decay model deferred to L8a
+    UI surface (horizon decay visualization layer).
+  consumer: "bayesian_confidence.ConvictionComponents.forecast_decay_penalty"
+  weight_in_vision_4_formula: -0.10

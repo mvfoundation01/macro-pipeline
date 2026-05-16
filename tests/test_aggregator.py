@@ -773,10 +773,15 @@ def test_forecast_inputs_extra_horizons_in_dict_ok() -> None:
 
 
 def test_aggregate_negative_n_eff_passes_to_shrinkage_raises() -> None:
-    """NEG: n_eff < 0 at 10Y propagates to apply_bayesian_shrinkage ValueError."""
-    inputs = _make_forecast_inputs(n_eff={1: 100, 3: 30, 5: 18, 10: -1})
-    with pytest.raises(ValueError, match="n_eff must be non-negative"):
-        aggregate_ensemble(inputs)
+    """NEG: n_eff < 0 rejected at ForecastInputs construction (L6-I D1 invariant).
+
+    L6-I D1 (Codex Finding #2 closure): negative n_eff now caught at the
+    ForecastInputs __post_init__ rather than propagating through to
+    apply_bayesian_shrinkage. Invariant is detected at the source of the
+    bug (input contract), not at the consumer.
+    """
+    with pytest.raises(ValueError, match="must be non-negative"):
+        _make_forecast_inputs(n_eff={1: 100, 3: 30, 5: 18, 10: -1})
 
 
 # ===========================================================================

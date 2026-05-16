@@ -55,6 +55,7 @@ Public API
 """
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import Literal, Optional, Tuple
 
@@ -223,6 +224,31 @@ class MetricMetadata:
                 f"description_l3 must be non-empty for metric_id="
                 f"{self.metric_id!r}"
             )
+        # L6-I D1 — finite checks (NaN/inf rejected explicitly; Codex
+        # Finding #2 cited line 227: range_min=NaN, range_max=1.0
+        # constructs without raising at L6-H because NaN > 1.0 is False).
+        if self.range_min is not None and not math.isfinite(self.range_min):
+            raise ValueError(
+                f"range_min must be finite; got {self.range_min!r} for "
+                f"metric_id={self.metric_id!r}"
+            )
+        if self.range_max is not None and not math.isfinite(self.range_max):
+            raise ValueError(
+                f"range_max must be finite; got {self.range_max!r} for "
+                f"metric_id={self.metric_id!r}"
+            )
+        if self.typical_range is not None:
+            t_min, t_max = self.typical_range
+            if not math.isfinite(t_min):
+                raise ValueError(
+                    f"typical_range[0] must be finite; got {t_min!r} for "
+                    f"metric_id={self.metric_id!r}"
+                )
+            if not math.isfinite(t_max):
+                raise ValueError(
+                    f"typical_range[1] must be finite; got {t_max!r} for "
+                    f"metric_id={self.metric_id!r}"
+                )
         # Range invariants.
         if self.range_min is not None and self.range_max is not None:
             if self.range_min > self.range_max:
