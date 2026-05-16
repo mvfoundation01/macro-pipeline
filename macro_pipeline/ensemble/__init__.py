@@ -8,8 +8,8 @@ probabilistic forecast distribution with Triple Decomposition + Triple
 Sub-phase ledger
 ----------------
 L6-PREP  authority docs cherry-pick  (COMPLETE — l6-prep-accept @ ca38c0a)
-L6-A     MetricMetadata + registry    (THIS SUB-PHASE)
-L6-B     TripleDecomposition + cap __post_init__
+L6-A     MetricMetadata + registry    (COMPLETE — l6-a-accept @ e47ce15)
+L6-B     TripleDecomposition + cap __post_init__  (THIS SUB-PHASE)
 L6-C     TripleSigma + cumulative scaling caveats
 L6-D     OOD reserve + confidence cap helpers
 L6-E     Reference Class Forecasting module
@@ -46,8 +46,15 @@ from macro_pipeline.ensemble.registry import (
     load_metrics_registry,
     save_metrics_registry,
 )
+from macro_pipeline.ensemble.triple_decomposition import (
+    CONFIDENCE_CAP_10Y_NON_STRATIFIED,
+    CONFIDENCE_CAP_10Y_REGIME_STRATIFIED,
+    SUPPORTED_HORIZONS,
+    TripleDecomposition,
+)
 
 __all__ = [
+    # L6-A schema + registry
     "DEFAULT_REGISTRY_PATH",
     "LAYER_ORIGIN",
     "LAYER_ORIGIN_VALID",
@@ -58,4 +65,9 @@ __all__ = [
     "UPDATE_FREQUENCY_VALID",
     "load_metrics_registry",
     "save_metrics_registry",
+    # L6-B Triple Probability Decomposition
+    "CONFIDENCE_CAP_10Y_NON_STRATIFIED",
+    "CONFIDENCE_CAP_10Y_REGIME_STRATIFIED",
+    "SUPPORTED_HORIZONS",
+    "TripleDecomposition",
 ]
