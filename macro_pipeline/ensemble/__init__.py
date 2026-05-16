@@ -9,8 +9,8 @@ Sub-phase ledger
 ----------------
 L6-PREP  authority docs cherry-pick  (COMPLETE — l6-prep-accept @ ca38c0a)
 L6-A     MetricMetadata + registry    (COMPLETE — l6-a-accept @ e47ce15)
-L6-B     TripleDecomposition + cap __post_init__  (THIS SUB-PHASE)
-L6-C     TripleSigma + cumulative scaling caveats
+L6-B     TripleDecomposition + cap __post_init__  (COMPLETE — l6-b-accept @ b3297a5)
+L6-C     TripleSigma + cumulative scaling caveats  (THIS SUB-PHASE)
 L6-D     OOD reserve + confidence cap helpers
 L6-E     Reference Class Forecasting module
 L6-F     Ensemble aggregator
@@ -52,6 +52,11 @@ from macro_pipeline.ensemble.triple_decomposition import (
     SUPPORTED_HORIZONS,
     TripleDecomposition,
 )
+from macro_pipeline.ensemble.triple_sigma import (
+    SIGMA_MAX_REASONABLE,
+    SIGMA_TYPES,
+    TripleSigma,
+)
 
 __all__ = [
     # L6-A schema + registry
@@ -70,4 +75,8 @@ __all__ = [
     "CONFIDENCE_CAP_10Y_REGIME_STRATIFIED",
     "SUPPORTED_HORIZONS",
     "TripleDecomposition",
+    # L6-C Triple sigma Reporting
+    "SIGMA_MAX_REASONABLE",
+    "SIGMA_TYPES",
+    "TripleSigma",
 ]
