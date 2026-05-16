@@ -9,10 +9,10 @@ auditable).
 
 Sub-phase ledger
 ----------------
-L1.7-A  schema definition           (COMPLETE — l1.7-a-accept @ 296cee5)
-L1.7-B  validation logic            (COMPLETE — l1.7-b-accept @ 92385e9)
-L1.7-C  persistence + versioning    (THIS SUB-PHASE)
-L1.7-D  integration with L2/L3/L5 + Gate 29 NEW
+L1.7-A  schema definition          (COMPLETE — l1.7-a-accept @ 296cee5)
+L1.7-B  validation logic           (COMPLETE — l1.7-b-accept @ 92385e9)
+L1.7-C  persistence + versioning   (COMPLETE — l1.7-c-accept @ 2b000ec)
+L1.7-D  pipeline integration + Gate 29 (THIS SUB-PHASE)
 L1.7-E  edge cases + retrospective
 
 Public API
@@ -42,9 +42,23 @@ Persistence + versioning (L1.7-C):
   ``migrate_manual_inputs``      Version-dispatch migration shim.
   ``ManualInputLoadError``       Load failure (ValueError subclass).
   ``ManualInputMigrationError``  Migration failure (ValueError subclass).
+
+Pipeline integration (L1.7-D):
+  ``apply_scenario_inputs_to_kwargs``     Surface 1 + 2 kwargs override.
+  ``apply_dms_override_for_horizon``      Surface 3 central-bps override.
+  ``apply_recession_p_override_for_horizon`` Surface 5 helper.
+  ``load_classifier_from_manual_inputs``  Surface 4 dynamic-import helper.
+  ``enforce_forecast_time_confidence_cap`` Defense-in-depth cap helper.
 """
 from __future__ import annotations
 
+from macro_pipeline.manual_input.integration import (
+    apply_dms_override_for_horizon,
+    apply_recession_p_override_for_horizon,
+    apply_scenario_inputs_to_kwargs,
+    enforce_forecast_time_confidence_cap,
+    load_classifier_from_manual_inputs,
+)
 from macro_pipeline.manual_input.persistence import (
     LoadResult,
     ManualInputLoadError,
@@ -90,4 +104,10 @@ __all__ = [
     "load_manual_inputs_robust",
     "migrate_manual_inputs",
     "save_manual_inputs_atomic",
+    # L1.7-D pipeline integration
+    "apply_dms_override_for_horizon",
+    "apply_recession_p_override_for_horizon",
+    "apply_scenario_inputs_to_kwargs",
+    "enforce_forecast_time_confidence_cap",
+    "load_classifier_from_manual_inputs",
 ]

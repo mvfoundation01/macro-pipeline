@@ -107,6 +107,10 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from typing import TYPE_CHECKING, Optional
+
+if TYPE_CHECKING:
+    from macro_pipeline.manual_input.schema import ManualInputSchedule
 
 
 # Spec §5.E.1 dataclass default: two-sided 95% standard-normal quantile.
@@ -283,6 +287,7 @@ def derive_forecast_sigma_v2(
     *,
     joint_bootstrap_covariance: float,
     empirical_coverage_95: float,
+    manual_inputs: Optional["ManualInputSchedule"] = None,
 ) -> ForecastSigmaResult:
     """Production-grade forecast σ confidence band — L5b-KICK-2 v2 wrapper.
 
@@ -342,6 +347,33 @@ def derive_forecast_sigma_v2(
         ``|rho| > 1`` (delegated to
         ``_compute_forecast_sigma_with_covariance`` inner-term guard).
     """
+    # L1.7-D Surface 2: apply scenario_inputs manual overrides for the
+    # four σ inputs before any v2-specific validation. Backward-
+    # compatible when manual_inputs is None.
+    if manual_inputs is not None:
+        from macro_pipeline.manual_input.integration import (
+            apply_scenario_inputs_to_kwargs,
+        )
+        _auto = {
+            "historical_return_sigma": historical_return_sigma,
+            "analog_period_dispersion_sigma": analog_period_dispersion_sigma,
+            "joint_bootstrap_covariance": joint_bootstrap_covariance,
+            "empirical_coverage_95": empirical_coverage_95,
+        }
+        _resolved = apply_scenario_inputs_to_kwargs(
+            manual_inputs,
+            keys=tuple(_auto.keys()),
+            auto_kwargs=_auto,
+        )
+        historical_return_sigma = float(_resolved["historical_return_sigma"])
+        analog_period_dispersion_sigma = float(
+            _resolved["analog_period_dispersion_sigma"]
+        )
+        joint_bootstrap_covariance = float(
+            _resolved["joint_bootstrap_covariance"]
+        )
+        empirical_coverage_95 = float(_resolved["empirical_coverage_95"])
+
     # ---- v2-specific input validation (KICK-2 NEG test #15 contract) ----
     if not math.isfinite(joint_bootstrap_covariance):
         raise ValueError(

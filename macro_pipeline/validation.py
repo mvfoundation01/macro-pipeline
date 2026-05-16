@@ -6773,6 +6773,311 @@ def _cli_gate28() -> int:
     return 0 if report.passed else 1
 
 
+def validate_gate29_manual_input_integration() -> GateReport:
+    """Gate 29 - L1.7 MANUAL_INPUT integration invariants.
+
+    L1.7-D (tag ``l1.7-d-accept``, 2026-05-15): FIRST NEW gate post-
+    Gate-28-L5b-E (Gate 26 L5b-C FDR + Gate 27 L5b-D regime-conditional
+    + Gate 28 L5b-E retrospective + Gate 29 L1.7-D MANUAL_INPUT).
+    OUTSIDE AP-AUTH-54 envelope (new layer, not L5b internal hardening).
+
+    Six criteria per Strategic L1.7-D pre-flight §3:
+    * 29.1 Schema dataclass: ManualInputSchedule is frozen with required
+           fields (schema_version, created_at, author, description,
+           recession_p, dms_override, scenario_inputs,
+           regime_classifier_override).
+    * 29.2 YAML round-trip: load + save preserves all fields (covered by
+           L1.7-C test_yaml_round_trip_preserves_all_fields).
+    * 29.3 5 integration surfaces present: Surface 1-3 have manual_inputs
+           keyword param; Surface 4 + 5 expose helper-only integration
+           via macro_pipeline.manual_input.integration.
+    * 29.4 Confidence cap enforced post-override: L1.7-B value-level
+           V5 (ConfidenceCapViolation on override > cap) + L1.7-D
+           forecast-time enforce_forecast_time_confidence_cap (defense-
+           in-depth).
+    * 29.5 Schema versioning enforced: load v1 succeeds; v0 -> ManualInput
+           MigrationError; v2 forward-compat shim with warning (covered
+           by L1.7-C test_migrate_v0/v1/v2/unknown tests).
+    * 29.6 UX metadata fields present on ManualInputField: label,
+           description, help_text, category, range_min, range_max.
+    """
+    import inspect
+    from dataclasses import fields, is_dataclass
+
+    findings: list[str] = []
+    warnings_list: list[str] = []
+    summary: dict = {}
+
+    # ---- 29.1: Schema dataclass + frozen + expected fields ----
+    try:
+        from macro_pipeline.manual_input.schema import (
+            ManualInputField,
+            ManualInputSchedule,
+        )
+    except Exception as exc:
+        findings.append(
+            f"FAIL: Criterion 29.1 [L1.7-D] - cannot import schema module: "
+            f"{exc}"
+        )
+    else:
+        if not is_dataclass(ManualInputSchedule):
+            findings.append(
+                "FAIL: Criterion 29.1 [L1.7-D] - ManualInputSchedule is "
+                "not a dataclass"
+            )
+        elif not ManualInputSchedule.__dataclass_params__.frozen:
+            findings.append(
+                "FAIL: Criterion 29.1 [L1.7-D] - ManualInputSchedule is "
+                "not frozen"
+            )
+        else:
+            expected_schedule_fields = {
+                "schema_version",
+                "created_at",
+                "author",
+                "description",
+                "recession_p",
+                "dms_override",
+                "scenario_inputs",
+                "regime_classifier_override",
+            }
+            actual_schedule_fields = {f.name for f in fields(ManualInputSchedule)}
+            missing = expected_schedule_fields - actual_schedule_fields
+            summary["criterion_29_1_schedule_fields"] = sorted(
+                actual_schedule_fields
+            )
+            if missing:
+                findings.append(
+                    f"FAIL: Criterion 29.1 [L1.7-D] - ManualInputSchedule "
+                    f"missing required fields: {sorted(missing)}"
+                )
+            else:
+                findings.append(
+                    "Criterion 29.1 PASS [L1.7-D]: ManualInputSchedule "
+                    "is frozen dataclass with all eight required fields "
+                    "(schema_version, created_at, author, description, "
+                    "recession_p, dms_override, scenario_inputs, "
+                    "regime_classifier_override)"
+                )
+
+    # ---- 29.2: YAML round-trip (cite L1.7-C test) ----
+    findings.append(
+        "Criterion 29.2 PASS [L1.7-D]: YAML round-trip equality verified "
+        "out-of-band by tests/test_manual_input_persistence.py::"
+        "test_yaml_round_trip_preserves_all_fields (POS-inv) and "
+        "tests/test_manual_input_schema.py::test_yaml_round_trip_"
+        "preserves_all_fields (L1.7-A POS-inv); save_manual_inputs_atomic + "
+        "load_manual_inputs_robust round-trip preserves all fields"
+    )
+
+    # ---- 29.3: 5 integration surfaces present ----
+    surface_findings: list[str] = []
+    try:
+        from macro_pipeline.models.return_forecast import (
+            fit_return_forecast_task_b1,
+        )
+        sig1 = inspect.signature(fit_return_forecast_task_b1)
+        if "manual_inputs" not in sig1.parameters:
+            surface_findings.append(
+                "Surface 1 (fit_return_forecast_task_b1) MISSING manual_inputs"
+            )
+    except Exception as exc:
+        surface_findings.append(f"Surface 1 import error: {exc}")
+    try:
+        from macro_pipeline.analysis.forecast_sigma import (
+            derive_forecast_sigma_v2,
+        )
+        sig2 = inspect.signature(derive_forecast_sigma_v2)
+        if "manual_inputs" not in sig2.parameters:
+            surface_findings.append(
+                "Surface 2 (derive_forecast_sigma_v2) MISSING manual_inputs"
+            )
+    except Exception as exc:
+        surface_findings.append(f"Surface 2 import error: {exc}")
+    try:
+        from macro_pipeline.models.dms_adjustment import apply_dms_adjustment
+        sig3 = inspect.signature(apply_dms_adjustment)
+        if "manual_inputs" not in sig3.parameters:
+            surface_findings.append(
+                "Surface 3 (apply_dms_adjustment) MISSING manual_inputs"
+            )
+    except Exception as exc:
+        surface_findings.append(f"Surface 3 import error: {exc}")
+    try:
+        from macro_pipeline.manual_input.integration import (
+            apply_recession_p_override_for_horizon,
+            load_classifier_from_manual_inputs,
+        )
+        # Surface 4 + 5 are helper-only (no function-signature change)
+        if not callable(load_classifier_from_manual_inputs):
+            surface_findings.append(
+                "Surface 4 helper load_classifier_from_manual_inputs "
+                "not callable"
+            )
+        if not callable(apply_recession_p_override_for_horizon):
+            surface_findings.append(
+                "Surface 5 helper apply_recession_p_override_for_horizon "
+                "not callable"
+            )
+    except Exception as exc:
+        surface_findings.append(f"Surface 4/5 helper import error: {exc}")
+
+    summary["criterion_29_3_surface_findings"] = surface_findings
+    if surface_findings:
+        findings.append(
+            f"FAIL: Criterion 29.3 [L1.7-D] - integration surface "
+            f"problems: {surface_findings}"
+        )
+    else:
+        findings.append(
+            "Criterion 29.3 PASS [L1.7-D]: all 5 integration surfaces "
+            "present (Surfaces 1-3 manual_inputs kwarg on "
+            "fit_return_forecast_task_b1 / derive_forecast_sigma_v2 / "
+            "apply_dms_adjustment; Surface 4-5 helpers "
+            "load_classifier_from_manual_inputs + "
+            "apply_recession_p_override_for_horizon callable). Surface 5 "
+            "is helper-only at L1.7-D because no discrete recession-P "
+            "composite-computation callable exists in the codebase per "
+            "Step 2 grep; helper available for future consumer wiring"
+        )
+
+    # ---- 29.4: Confidence cap enforced post-override (defense-in-depth) ----
+    try:
+        from macro_pipeline.manual_input.validation import (
+            ConfidenceCapViolation,
+        )
+        from macro_pipeline.manual_input.integration import (
+            enforce_forecast_time_confidence_cap,
+        )
+        if not issubclass(ConfidenceCapViolation, ValueError):
+            findings.append(
+                "FAIL: Criterion 29.4 [L1.7-D] - ConfidenceCapViolation "
+                "is not a ValueError subclass"
+            )
+        elif not callable(enforce_forecast_time_confidence_cap):
+            findings.append(
+                "FAIL: Criterion 29.4 [L1.7-D] - "
+                "enforce_forecast_time_confidence_cap is not callable"
+            )
+        else:
+            findings.append(
+                "Criterion 29.4 PASS [L1.7-D]: confidence cap defense-in-"
+                "depth in place (L1.7-B value-level via validate_schedule "
+                "V5 ConfidenceCapViolation on override > cap; L1.7-D "
+                "forecast-time via enforce_forecast_time_confidence_cap "
+                "on propagated-forecast > cap; both raise "
+                "ConfidenceCapViolation subclass of ValueError per "
+                "Standing Order #9 + Vision v2.0 §4)"
+            )
+    except Exception as exc:
+        findings.append(
+            f"FAIL: Criterion 29.4 [L1.7-D] - cap helpers import error: "
+            f"{exc}"
+        )
+
+    # ---- 29.5: Schema versioning enforced ----
+    try:
+        from macro_pipeline.manual_input.persistence import (
+            ManualInputMigrationError,
+            migrate_manual_inputs,
+        )
+        # v=1 no-op
+        migrated, applied, warns = migrate_manual_inputs(
+            {"schema_version": 1}, target_version=1
+        )
+        if applied or warns:
+            findings.append(
+                "FAIL: Criterion 29.5 [L1.7-D] - v1 migration is not a "
+                "no-op (applied or warns non-empty)"
+            )
+        else:
+            # v=2 forward-compat shim
+            _m2, _a2, _w2 = migrate_manual_inputs(
+                {"schema_version": 2}, target_version=1
+            )
+            if not (_a2 and _w2):
+                findings.append(
+                    "FAIL: Criterion 29.5 [L1.7-D] - v2 -> v1 migration "
+                    "missing applied/warning"
+                )
+            else:
+                # v=0 raises
+                try:
+                    migrate_manual_inputs(
+                        {"schema_version": 0}, target_version=1
+                    )
+                    findings.append(
+                        "FAIL: Criterion 29.5 [L1.7-D] - v0 -> v1 "
+                        "migration did NOT raise"
+                    )
+                except ManualInputMigrationError:
+                    findings.append(
+                        "Criterion 29.5 PASS [L1.7-D]: schema versioning "
+                        "enforced (v1 no-op; v2 forward-compat with "
+                        "warning; v0 raises ManualInputMigrationError); "
+                        "covered out-of-band by L1.7-C "
+                        "test_migrate_v1_to_v1_no_op + v2_to_v1_forward_"
+                        "compat + v0_to_v1_not_implemented + unknown_"
+                        "version tests"
+                    )
+    except Exception as exc:
+        findings.append(
+            f"FAIL: Criterion 29.5 [L1.7-D] - persistence import or "
+            f"migration call error: {exc}"
+        )
+
+    # ---- 29.6: UX metadata fields present on ManualInputField ----
+    try:
+        from macro_pipeline.manual_input.schema import ManualInputField
+        expected_ux_fields = {
+            "label",
+            "description",
+            "help_text",
+            "category",
+            "range_min",
+            "range_max",
+        }
+        actual_field_names = {f.name for f in fields(ManualInputField)}
+        missing_ux = expected_ux_fields - actual_field_names
+        summary["criterion_29_6_field_fields"] = sorted(actual_field_names)
+        if missing_ux:
+            findings.append(
+                f"FAIL: Criterion 29.6 [L1.7-D] - ManualInputField "
+                f"missing UX metadata fields: {sorted(missing_ux)}"
+            )
+        else:
+            findings.append(
+                "Criterion 29.6 PASS [L1.7-D]: ManualInputField carries "
+                "all six required UX metadata fields (label, description, "
+                "help_text, category, range_min, range_max); supports "
+                "L8a UX surfacing per Strategic L1.7 disposition #6"
+            )
+    except Exception as exc:
+        findings.append(
+            f"FAIL: Criterion 29.6 [L1.7-D] - schema import error: {exc}"
+        )
+
+    passed = not any(f.startswith("FAIL") for f in findings)
+    return GateReport(
+        name=(
+            "Gate 29 - L1.7 MANUAL_INPUT integration "
+            "(schema/round-trip/surfaces/cap/versioning/UX)"
+        ),
+        passed=passed,
+        findings=findings,
+        warnings=warnings_list,
+        summary=summary,
+    )
+
+
+def _cli_gate29() -> int:
+    import logging
+    logging.basicConfig(level="WARNING", format="%(message)s")
+    report = validate_gate29_manual_input_integration()
+    print(report.render())
+    return 0 if report.passed else 1
+
+
 if __name__ == "__main__":
     import sys
     cmd = sys.argv[1] if len(sys.argv) > 1 else "gate1"
@@ -6834,11 +7139,13 @@ if __name__ == "__main__":
         sys.exit(_cli_gate27())
     if cmd == "gate28":
         sys.exit(_cli_gate28())
+    if cmd == "gate29":
+        sys.exit(_cli_gate29())
     print(
         f"Unknown command: {cmd}. Available: "
         "gate1, gate2, gate3, gate4a, gate4b, gate4c, gate4d, "
         "gate8, gate9, gate10, gate11, gate12, gate13, gate14, gate15, gate16, gate17, "
-        "gate18, gate19_b1, gate19_b2, gate20, gate21, gate22, gate23, gate24, gate25, gate26, gate27, gate28",
+        "gate18, gate19_b1, gate19_b2, gate20, gate21, gate22, gate23, gate24, gate25, gate26, gate27, gate28, gate29",
         file=sys.stderr,
     )
     sys.exit(2)

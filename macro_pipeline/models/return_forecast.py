@@ -402,7 +402,10 @@ from __future__ import annotations
 
 import warnings
 from dataclasses import dataclass, replace
-from typing import Literal, Optional
+from typing import TYPE_CHECKING, Literal, Optional
+
+if TYPE_CHECKING:
+    from macro_pipeline.manual_input.schema import ManualInputSchedule
 
 import numpy as np
 import pandas as pd
@@ -1633,6 +1636,7 @@ def fit_return_forecast_task_b1(
     bootstrap_iterations: int = BOOTSTRAP_ITERATIONS_DEFAULT,
     block_size_sensitivity: tuple[int, ...] | None = None,
     random_seed: int = 42,
+    manual_inputs: Optional["ManualInputSchedule"] = None,
 ) -> tuple[RidgeFitResult, ...]:
     """Task B1 (v3 per S-9): Ridge return-forecast regression with
     nested walk-forward λ selection + HAC SE + block bootstrap.
@@ -1689,6 +1693,26 @@ def fit_return_forecast_task_b1(
         column or CDRS panel has !=20 calibrated columns under strict
         validation).
     """
+    # L1.7-D Surface 1: apply scenario_inputs manual overrides before
+    # any downstream validation/use. Backward-compatible — when
+    # manual_inputs is None (default), behavior is identical to pre-
+    # L1.7-D. Supports two scenario keys mapping to existing kwargs:
+    #   - "ridge_lambda" -> collapses lambda_grid to a 1-tuple
+    #   - "bootstrap_n"  -> overrides bootstrap_iterations
+    if manual_inputs is not None:
+        from macro_pipeline.manual_input.integration import (
+            apply_scenario_inputs_to_kwargs,
+        )
+        _resolved = apply_scenario_inputs_to_kwargs(
+            manual_inputs,
+            keys=("ridge_lambda", "bootstrap_n"),
+            auto_kwargs={"ridge_lambda": None, "bootstrap_n": None},
+        )
+        if _resolved["ridge_lambda"] is not None:
+            lambda_grid = (float(_resolved["ridge_lambda"]),)
+        if _resolved["bootstrap_n"] is not None:
+            bootstrap_iterations = int(_resolved["bootstrap_n"])
+
     _validate_b1_input_schema(
         crps_calibrated_panel,
         cdrs_calibrated_panel,

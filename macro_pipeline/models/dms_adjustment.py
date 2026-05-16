@@ -66,6 +66,11 @@ forbidden substrings per L5-C false-positive lesson).
 """
 from __future__ import annotations
 
+from typing import TYPE_CHECKING, Optional
+
+if TYPE_CHECKING:
+    from macro_pipeline.manual_input.schema import ManualInputSchedule
+
 
 # Spec §5.F.1 Q6-locked horizon-conditional bps central per spec §5.F.4.
 # Negative bps = downward survivorship adjustment. 1Y/3Y receive zero
@@ -93,6 +98,8 @@ _UNADJUSTED_HORIZONS: frozenset[str] = frozenset({"1Y", "3Y"})
 def apply_dms_adjustment(
     raw_forecast_real_annualized_bps: float,
     horizon: str,
+    *,
+    manual_inputs: Optional["ManualInputSchedule"] = None,
 ) -> tuple[float, float, float]:
     """Apply Q6-locked DMS survivorship bps adjustment per spec §5.F.1.
 
@@ -128,6 +135,18 @@ def apply_dms_adjustment(
         )
 
     central_bps = DMS_BPS_CENTRAL[horizon]
+    # L1.7-D Surface 3: apply manual central-bps override per horizon.
+    # Sensitivity band (DMS_BPS_SENSITIVITY) is NOT overridable per L5b-F
+    # F-M4(b) Q6-locked discipline — only the central is exposed.
+    # Backward-compatible when manual_inputs is None.
+    if manual_inputs is not None:
+        from macro_pipeline.manual_input.integration import (
+            apply_dms_override_for_horizon,
+        )
+        horizon_int = int(horizon.lower().rstrip("y"))
+        central_bps = apply_dms_override_for_horizon(
+            manual_inputs, horizon_int, central_bps
+        )
     adjusted_central = raw_forecast_real_annualized_bps + central_bps
 
     if horizon in _UNADJUSTED_HORIZONS:
