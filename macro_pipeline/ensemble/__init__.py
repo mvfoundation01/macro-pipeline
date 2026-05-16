@@ -11,8 +11,8 @@ L6-PREP  authority docs cherry-pick  (COMPLETE — l6-prep-accept @ ca38c0a)
 L6-A     MetricMetadata + registry    (COMPLETE — l6-a-accept @ e47ce15)
 L6-B     TripleDecomposition + cap __post_init__  (COMPLETE — l6-b-accept @ b3297a5)
 L6-C     TripleSigma + cumulative scaling caveats  (COMPLETE — l6-c-accept @ fae2b16)
-L6-D     OOD reserve + confidence cap helpers  (THIS SUB-PHASE)
-L6-E     Reference Class Forecasting module
+L6-D     OOD reserve + confidence cap helpers  (COMPLETE — l6-d-accept @ 4fdcf64)
+L6-E     Reference Class Forecasting module  (THIS SUB-PHASE)
 L6-F     Ensemble aggregator
 L6-G     Measurement coverage pass
 L6-H     Gate 30 + retrospective + sprint closure
@@ -64,6 +64,18 @@ from macro_pipeline.ensemble.ood_and_caps import (
     compute_ood_reserve,
     enforce_confidence_caps,
 )
+from macro_pipeline.ensemble.rcf import (
+    BAYESIAN_PRIOR_10Y_REAL_RETURN,
+    DEFAULT_KAPPA,
+    MACRO_STATE_FIELDS,
+    InsufficientReferenceClassError,
+    MacroStateVector,
+    ReferenceClass,
+    apply_bayesian_shrinkage,
+    cosine_similarity,
+    find_reference_class,
+    standardize_macro_state,
+)
 
 __all__ = [
     # L6-A schema + registry
@@ -92,4 +104,15 @@ __all__ = [
     "OOD_RESERVE_FLOOR",
     "compute_ood_reserve",
     "enforce_confidence_caps",
+    # L6-E Reference Class Forecasting
+    "BAYESIAN_PRIOR_10Y_REAL_RETURN",
+    "DEFAULT_KAPPA",
+    "MACRO_STATE_FIELDS",
+    "InsufficientReferenceClassError",
+    "MacroStateVector",
+    "ReferenceClass",
+    "apply_bayesian_shrinkage",
+    "cosine_similarity",
+    "find_reference_class",
+    "standardize_macro_state",
 ]
