@@ -1,116 +1,94 @@
-"""Ensemble aggregator — end-to-end forecast pipeline (L6-F + L6-G).
+"""Ensemble aggregator — end-to-end forecast pipeline (L6-F + L6-G + L6-H).
 
-Per Strategic L6-F + L6-G inline pre-flights 2026-05-15 + Pipeline Guide
-v2.0 §7 + Vision v2.0 §4 (Triple Probability Decomposition) + §5 (Triple
-sigma Reporting) + §6 (Reference Class Forecasting) + §7 (OOD Reserve) +
-§10 (Sample Size Honesty) + §14 (Replication & Audit).
+Per Strategic L6-F + L6-G + L6-H inline pre-flights (2026-05-15 / 2026-05-16)
++ Pipeline Guide v2.0 §7 + Vision v2.1 §4 (Triple Probability Decomposition)
++ §5 (Triple sigma Reporting) + §6 (Reference Class Forecasting) + §7 (OOD
+Reserve) + §8 (DMS) + §9 (Lucas critique) + §10 (Sample Size Honesty) +
+§14 (Replication & Audit).
 
-L6-G refinement (2026-05-15)
-----------------------------
-The L6-F placeholder confidence + conviction heuristic is REPLACED with
-the Bayesian computation from ``bayesian_confidence.py``:
+L6-H refinement summary (2026-05-16)
+------------------------------------
+Closes 6 ChatGPT R7 methodology HIGH findings (#1, #2, #3, #4, #9 + Op #3):
 
-  confidence = compute_bayesian_confidence(...) -> capped by Standing
-               Order #9 + Vision §10 (cap discipline UNCHANGED)
-  conviction = compute_conviction_score(...) -> Vision §4 simplified subset
+* **D1** — ``compute_ood_reserve`` now uses Vision §7 severity-tier bucket
+  arithmetic with reason codes (replaces L6-D equal-increment heuristic;
+  return type ``tuple[float, tuple[str, ...]]``).
+* **D2** — Cap cascade across ALL horizons via new
+  ``apply_confidence_cap_cascade(...)`` with signal-conflict + OOD-elevated
+  modifiers; the legacy ``enforce_confidence_caps`` (raise-helper, 10Y only)
+  is PRESERVED UNCHANGED per PD20 for Test 12.
+* **D3** — ``compute_bayesian_confidence`` rewritten to Vision §4 6-component
+  additive formula (25% DQ + 25% MA + 20% RS + 15% AS + 10% SS − 5% OOD);
+  components built via ``derive_confidence_components``.
+* **D4** — ``compute_conviction_score`` rewritten to Vision §4 10-component
+  distinct risk/reward score (edge + asymmetry + supports MINUS penalties);
+  components built via ``derive_conviction_components``. Conviction CAN BE
+  LOWER THAN confidence (Vision §4 critical rule preserved by independent
+  component set).
+* **D5** — DMS adjustment now PROPAGATED INTO the point estimate via
+  ``select_dms_adjustment_bps`` + ``apply_dms_bps_to_return``; the L6-G
+  ``dms_adjustment_bps`` metric is retained; new ``HorizonResult`` fields
+  expose ``dms_raw_point_estimate``, ``dms_adjusted_point_estimate``,
+  ``dms_adjustment_bps``, ``dms_selection_reason``, plus
+  ``LucasCritiqueDiagnostics``.
+* **D6** — Vision §4 cap table re-anchored to §10 (3Y/5Y = 80%, not 85%).
+  Aggregator cap cascade now sources caps from §10 via ``ood_and_caps``
+  helpers. ``SHORT_HORIZON_CONFIDENCE_CAP`` legacy constant removed.
 
-L6-G also adds ``populate_metric_outputs`` helper that extends the L6-F
-8-key baseline to a richer set per horizon (Reference Class metrics,
-cumulative sigma scaling, plus DMS adjustment when provided). The
-Vision §3 90-measurement registry computation_path field is populated
-in ``data/metrics_registry.yaml`` for the L1-L5b producer-linked
-measures.
+Defense-in-depth confidence cap (3rd-instance PRESERVED at L6-H)
+-----------------------------------------------------------------
+The 3rd-instance pattern at the aggregator is PRESERVED through L6-H:
 
-The aggregator integrates the L6-A through L6-E primitives with L5b
-producer outputs and L1.7 ManualInputSchedule into a single multi-
-horizon ``EnsembleResult``:
+  1. ``apply_confidence_cap_cascade`` computes the final per-horizon
+     capped confidence (handles 1Y/3Y/5Y/10Y + signal-conflict + OOD
+     elevated modifiers).
+  2. ``TripleDecomposition`` is constructed with the capped value
+     (Layer 1 ``__post_init__`` fires defensively if cap is bypassed).
+  3. ``enforce_confidence_caps`` is called on the capped value
+     (Layer 2 raise-helper; defensive — never raises in normal path
+     because cascade already capped at step 1).
 
-  L6-A  MetricMetadata registry (90 measurements per Vision §3)
-  L6-B  TripleDecomposition (1st defense-in-depth cap layer)
-  L6-C  TripleSigma (Triple sigma Reporting per Vision §5)
-  L6-D  compute_ood_reserve + enforce_confidence_caps (2nd cap layer)
-  L6-E  apply_bayesian_shrinkage (Vision §6; 10Y prior 0.065)
-  L5b   producers wrapped via ``ForecastInputs``
-  L1.7  ManualInputSchedule via macro_pipeline.manual_input.integration
-
-Defense-in-depth confidence cap (3rd INSTANCE of pattern)
-----------------------------------------------------------
-The L6-F aggregator is the 3rd instance of the two-layer cap-enforcement
-pattern in the codebase:
-
-  1st instance  L1.7-B value-level (validate_schedule V5) +
-                L1.7-D forecast-time (enforce_forecast_time_confidence_cap)
-                at the MANUAL_INPUT layer
-  2nd instance  L6-B construction-time (TripleDecomposition __post_init__)
-                + L6-D standalone helper (enforce_confidence_caps) at the
-                ENSEMBLE primitive layer
-  3rd instance  L6-F aggregator (THIS MODULE) — calls TripleDecomposition
-                construction (1st layer) THEN explicit
-                enforce_confidence_caps (2nd layer) per horizon
-
-The 3rd instance differs from the 2nd in CALL CONTEXT (aggregator uses
-both layers as a deliberate pipeline step rather than the two-layer
-pair being independent surfaces). AP-AUTH-46 gratuitous-codification
-guard: pattern is fully matured by the 3rd instance; AP-AUTH-56
-codification scheduled at L6-H sprint retrospective per Strategic.
-
-Bayesian confidence + conviction (L6-G replaces L6-F placeholder)
-------------------------------------------------------------------
-At L6-G the confidence + conviction computations are Vision §4 Bayesian
-per ``bayesian_confidence.py``:
-
-  confidence_uncapped = compute_bayesian_confidence(
-      point_estimate, n_eff, reference_class, regime_stratified, horizon)
-  confidence          = min(confidence_uncapped, horizon_cap)
-  conviction          = compute_conviction_score(
-      confidence, reference_class, n_eff)
-
-The L6-F placeholder heuristic (``min(0.5 + 0.05 * n_eff/30, 0.99)``;
-``1.0 + 9.0 * confidence``) is no longer used. The Bayesian formula
-uses the L6-E ``ReferenceClass.mean_similarity`` as evidence-quality
-weight and combines it with ``n_eff`` via posterior-precision
-weighting. Conviction applies Vision §4 simplified subset (linear
-scaling + sample-size penalty + weak-analog penalty); the full ten-
-component conviction formula is deferred per the R7 ChatGPT review
-question five anticipation.
-
-Confidence cap regime
----------------------
-Standing Order #9 + Vision §10 + L5b-F F-H2:
-
-  horizon  cap (non-stratified)  cap (regime-stratified)
-       1                  0.85                    0.85
-       3                  0.85                    0.85
-       5                  0.85                    0.85
-      10                  0.70                    0.55
-
-The 1Y/3Y/5Y cap of 0.85 reflects Vision §10 Sample Size Honesty
-(roughly 113 / 38 / 22 non-overlapping windows since 1913); the 10Y
-cap of 0.70 / 0.55 reflects the revised-down honest assessment given
-N ~ 11 non-overlapping windows + autocorrelation per Vision §10.
+Test 12 (``test_aggregate_defense_in_depth_both_layers_fire``) verifies
+the pattern: direct ``TripleDecomposition`` construction with confidence
+> cap raises Layer 1; direct ``enforce_confidence_caps`` call with
+confidence > cap raises Layer 2; aggregator pipeline at 10Y stratified
+with high-confidence inputs produces final capped value = 0.55.
 
 Public API
 ----------
 ``ForecastInputs``       Frozen wrapper for L5b producer outputs.
-``HorizonResult``        Frozen per-horizon ensemble result.
+``HorizonResult``        Frozen per-horizon ensemble result (L6-H expanded).
 ``EnsembleResult``       Frozen multi-horizon aggregate.
 ``aggregate_ensemble``   Pure function — end-to-end aggregation.
 ``SUPPORTED_HORIZONS``   ``(1, 3, 5, 10)`` per Vision §1 Pillar 4.
+``populate_metric_outputs``  L6-G helper (extended at L6-H with DMS +
+                             Lucas fields).
 """
 from __future__ import annotations
 
 import math
 import subprocess
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Dict, Optional, Tuple
 
 from macro_pipeline.ensemble.bayesian_confidence import (
+    ConfidenceComponents,
+    ConvictionComponents,
     compute_bayesian_confidence,
     compute_conviction_score,
+    derive_confidence_components,
+    derive_conviction_components,
+)
+from macro_pipeline.ensemble.dms_and_lucas import (
+    LucasCritiqueDiagnostics,
+    apply_dms_bps_to_return,
+    compute_lucas_diagnostics,
+    select_dms_adjustment_bps,
 )
 from macro_pipeline.ensemble.ood_and_caps import (
     OODConditions,
+    apply_confidence_cap_cascade,
     compute_ood_reserve,
     enforce_confidence_caps,
 )
@@ -126,19 +104,26 @@ from macro_pipeline.manual_input.schema import ManualInputSchedule
 # Vision §1 Pillar 4 horizon set; ordered for deterministic iteration.
 SUPPORTED_HORIZONS: Tuple[int, ...] = (1, 3, 5, 10)
 
-# Vision §10 Sample Size Honesty: 1Y/3Y/5Y cap.
-SHORT_HORIZON_CONFIDENCE_CAP = 0.85
-
 # OOD reserve floor when no conditions provided (Vision §7).
 OOD_RESERVE_FLOOR_DEFAULT = 0.05
+
+# OOD elevated threshold for cap cascade (Vision §7 + §4).
+OOD_ELEVATED_RESERVE_THRESHOLD = 0.10
+
+# DEPRECATED at L6-H — retained as L6-F/L6-G compatibility alias.
+# Vision v2.1 §10 now specifies horizon-conditional caps (1Y=85%; 3Y=80%;
+# 5Y=80%; 10Y=70%/55%) sourced from `ood_and_caps.HORIZON_CAPS_*` tables.
+# This constant matches the 1Y cap; 3Y/5Y/10Y use ood_and_caps tables.
+# Use `apply_confidence_cap_cascade` for new code.
+SHORT_HORIZON_CONFIDENCE_CAP = 0.85
 
 
 @dataclass(frozen=True)
 class ForecastInputs:
     """Wraps L5b producer outputs + optional L6-E RCF output for aggregator.
 
-    Per Strategic PD2. All per-horizon dicts must contain every horizon
-    in ``SUPPORTED_HORIZONS``; ``__post_init__`` validates membership.
+    All per-horizon dicts must contain every horizon in
+    ``SUPPORTED_HORIZONS``; ``__post_init__`` validates membership.
 
     Fields
     ------
@@ -149,7 +134,10 @@ class ForecastInputs:
     return_sigmas             horizon -> annualized return sigma (float)
     recession_probabilities   horizon -> P(recession) in [0, 1] (float)
     reference_class           optional L6-E RCF output (passes through)
-    dms_adjustments           optional horizon -> DMS bps (passes through)
+    dms_adjustments           optional horizon -> DMS bps from L5-F
+                              (passes through to metric_outputs; the L6-H
+                              aggregator may override this per
+                              risk-flag-driven selector — see below).
     """
 
     point_estimates: Dict[int, float]
@@ -181,17 +169,32 @@ class ForecastInputs:
 
 @dataclass(frozen=True)
 class HorizonResult:
-    """Per-horizon ensemble result. Per Strategic PD4.
+    """Per-horizon ensemble result (L6-H expanded).
 
     Fields
     ------
     horizon                       1 / 3 / 5 / 10
     triple_decomposition          L6-B TripleDecomposition with cap enforced
     triple_sigma                  L6-C TripleSigma
-    metric_outputs                metric_id -> float (minimum 8 keys per PD15;
-                                  L6-G expands coverage to Vision §3 90 measures)
+    metric_outputs                metric_id -> float (≥15 keys at L6-H)
     bayesian_shrinkage_applied    True at 10Y (Vision §6 prior); False otherwise
     shrinkage_n_eff               n_eff used in shrinkage; None if not applied
+
+    L6-H additions (D5 — DMS + Lucas surfaced as first-class fields):
+
+    dms_raw_point_estimate        Point estimate BEFORE DMS application
+                                  (post-Bayesian-shrinkage at 10Y; equal
+                                  to ForecastInputs.point_estimates[h] at
+                                  1Y/3Y).
+    dms_adjusted_point_estimate   Point estimate AFTER DMS application —
+                                  the binding forecast value at this
+                                  horizon. Equal to dms_raw at 1Y/3Y
+                                  (no adjustment per Vision §8).
+    dms_adjustment_bps            DMS bps applied (0.0 at 1Y/3Y; tier-
+                                  selected at 5Y/10Y).
+    dms_selection_reason          Reason code from select_dms_adjustment_bps.
+    lucas_diagnostics             L6-H LucasCritiqueDiagnostics (default:
+                                  no-evidence diagnostics with flag=False).
     """
 
     horizon: int
@@ -200,18 +203,29 @@ class HorizonResult:
     metric_outputs: Dict[str, float]
     bayesian_shrinkage_applied: bool
     shrinkage_n_eff: Optional[int] = None
+    # L6-H additions (D5):
+    dms_raw_point_estimate: float = 0.0
+    dms_adjusted_point_estimate: float = 0.0
+    dms_adjustment_bps: float = 0.0
+    dms_selection_reason: str = "horizon_not_eligible"
+    lucas_diagnostics: LucasCritiqueDiagnostics = field(
+        default_factory=lambda: LucasCritiqueDiagnostics(
+            flag=False, reason_codes=(), structural_break_evidence={}
+        )
+    )
 
 
 @dataclass(frozen=True)
 class EnsembleResult:
-    """Multi-horizon ensemble forecast. Per Strategic PD5.
+    """Multi-horizon ensemble forecast.
 
     Fields
     ------
     horizons                     dict mapping {1, 3, 5, 10} -> HorizonResult
     ood_reserve_fraction         in [0.05, 0.15] per Vision §7
+    ood_reason_codes             tuple of active OOD condition keys (L6-H D1)
     reference_class              passes through from ForecastInputs (Vision §6)
-    replication_kit_metadata     6 keys per Strategic PD16 (Vision §14)
+    replication_kit_metadata     6 keys (Vision §14)
     aggregation_timestamp_iso    UTC ISO 8601 timestamp
     """
 
@@ -220,6 +234,8 @@ class EnsembleResult:
     reference_class: Optional[ReferenceClass]
     replication_kit_metadata: Dict[str, str]
     aggregation_timestamp_iso: str
+    # L6-H addition (D1):
+    ood_reason_codes: Tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if set(self.horizons.keys()) != set(SUPPORTED_HORIZONS):
@@ -265,44 +281,51 @@ def populate_metric_outputs(
     recession_p: float,
     confidence: float,
     conviction: float,
+    *,
+    # L6-H additions (D5):
+    dms_raw_point_estimate: Optional[float] = None,
+    dms_adjusted_point_estimate: Optional[float] = None,
+    dms_adjustment_bps: Optional[float] = None,
+    lucas_flag: Optional[bool] = None,
 ) -> Dict[str, float]:
-    """Populate ``metric_outputs`` dict for a HorizonResult (L6-G extension).
+    """Populate ``metric_outputs`` dict for a HorizonResult.
 
-    Extends the L6-F eight-key baseline (point_estimate_return + recession
-    probability + confidence + conviction + n_eff + the three sigmas)
-    with L6-G additions: cumulative-sigma scaling for each of the three
-    sigmas at the horizon, Reference Class metrics when a reference_class
-    is present, and DMS adjustment when provided. Skips measures
-    unavailable at this horizon (no NaN population per Strategic PD6).
+    Extends the L6-F eight-key baseline with L6-G (cumulative sigma,
+    posterior precision, RCF metrics) and L6-H (DMS raw + adjusted point
+    estimate, Lucas flag). Skips measures unavailable at this horizon
+    (no NaN population).
 
-    Track A populates additional measures here as L1-L5b producer outputs
-    surface in the aggregator pipeline; the Vision §3 ninety-measurement
-    registry remains the canonical source of truth for the full
-    measurement inventory + computation_path linkage.
+    L6-H D5: when ``dms_*`` keyword overrides are provided, those values
+    are used in the metric outputs (matching the HorizonResult fields
+    populated by the aggregator). Backward-compat: when keywords are
+    None, the L6-G behaviour (``dms_adjustment_bps`` from
+    ``ForecastInputs.dms_adjustments``) is preserved.
 
     Parameters
     ----------
     forecast_inputs
-        ``ForecastInputs`` wrapping L5b producer outputs + L6-E RCF output.
+        ``ForecastInputs`` wrapping L5b producer outputs + L6-E RCF.
     horizon
         Current horizon in ``SUPPORTED_HORIZONS``.
     point_estimate
-        Post-Bayesian-shrinkage point estimate at this horizon.
+        Post-DMS point estimate at this horizon (binding forecast value).
     recession_p
         Recession probability at this horizon (post-manual-override).
     confidence
-        Capped confidence from compute_bayesian_confidence + horizon cap.
+        Capped confidence from cascade + cap helpers.
     conviction
-        Conviction from compute_conviction_score.
+        Conviction from Vision §4 10-component formula.
+    dms_raw_point_estimate, dms_adjusted_point_estimate,
+    dms_adjustment_bps, lucas_flag
+        Optional L6-H D5 overrides for the corresponding metric keys.
 
     Returns
     -------
     Dict[str, float]
-        Mapping ``metric_id -> float`` populated with the baseline plus
-        the L6-G additions.
+        Mapping ``metric_id -> float`` populated with baseline + L6-G + L6-H.
     """
     outputs: Dict[str, float] = {
-        # L6-F baseline (eight keys per PD15).
+        # L6-F baseline (eight keys).
         "point_estimate_return": point_estimate,
         "recession_probability": recession_p,
         "confidence": confidence,
@@ -315,10 +338,12 @@ def populate_metric_outputs(
         ],
     }
 
-    # L6-G additions —————————————————————————————————————————————————————
+    # L6-G additions ————————————————————————————————————————————————————————
 
-    # DMS adjustment (carried over from L6-F when provided).
-    if (
+    # DMS adjustment metric — L6-H D5 override OR L6-G ForecastInputs surface.
+    if dms_adjustment_bps is not None:
+        outputs["dms_adjustment_bps"] = float(dms_adjustment_bps)
+    elif (
         forecast_inputs.dms_adjustments is not None
         and horizon in forecast_inputs.dms_adjustments
     ):
@@ -357,6 +382,17 @@ def populate_metric_outputs(
         forecast_inputs.point_estimate_n_eff[horizon] + KAPPA_EVIDENCE
     )
 
+    # L6-H additions (D5) ——————————————————————————————————————————————————
+
+    if dms_raw_point_estimate is not None:
+        outputs["dms_raw_point_estimate"] = float(dms_raw_point_estimate)
+    if dms_adjusted_point_estimate is not None:
+        outputs["dms_adjusted_point_estimate"] = float(
+            dms_adjusted_point_estimate
+        )
+    if lucas_flag is not None:
+        outputs["lucas_critique_flag"] = 1.0 if lucas_flag else 0.0
+
     return outputs
 
 
@@ -365,32 +401,46 @@ def aggregate_ensemble(
     manual_inputs: Optional[ManualInputSchedule] = None,
     ood_conditions: Optional[OODConditions] = None,
     regime_stratified: bool = False,
+    *,
+    # L6-H additions (D5):
+    valuation_extreme: bool = False,
+    concentration_extreme: bool = False,
+    fiscal_risks_elevated: bool = False,
+    reserve_currency_risk: bool = False,
+    lucas_evidence: Optional[Dict[str, float]] = None,
+    signal_conflict: bool = False,
 ) -> EnsembleResult:
-    """End-to-end ensemble aggregation per Strategic L6-F PD7.
+    """End-to-end ensemble aggregation (L6-F + L6-G + L6-H).
 
     Pipeline
     --------
-    1. Compute OOD reserve from ``ood_conditions`` (or floor 0.05).
-    2. For each horizon in ``SUPPORTED_HORIZONS``:
+    1. Compute OOD reserve + reason codes from ``ood_conditions``
+       (or floor 0.05 with empty reason codes).
+    2. Compute Lucas critique diagnostics from ``lucas_evidence``
+       (or no-evidence default).
+    3. For each horizon in ``SUPPORTED_HORIZONS``:
        a. Read point estimate + n_eff from forecast_inputs.
        b. Apply manual recession_p override via L1.7-D helper if
           ``manual_inputs`` provided.
        c. Apply Bayesian shrinkage at 10Y (prior 0.065 per Vision §6).
-       d. Compute confidence (placeholder; L6-G refines per Vision §4).
-       e. Apply Standing Order #9 cap at 10Y (0.70 / 0.55); apply
-          Vision §10 cap at 1Y/3Y/5Y (0.85).
-       f. Compute conviction (placeholder; L6-G refines).
-       g. Construct ``TripleDecomposition`` (1st defense-in-depth layer;
+       d. Apply L6-H DMS dynamic selector + ``apply_dms_bps_to_return``
+          to point estimate (5Y/10Y only; 1Y/3Y get 0 bps).
+       e. Build ConfidenceComponents via ``derive_confidence_components``
+          + compute raw confidence via Vision §4 additive formula.
+       f. Apply L6-H cap cascade via ``apply_confidence_cap_cascade``
+          (Vision §4 + §7 + §10 modifiers).
+       g. Build ConvictionComponents via ``derive_conviction_components``
+          + compute conviction via Vision §4 10-component formula.
+       h. Construct ``TripleDecomposition`` (1st defense-in-depth layer;
           ``__post_init__`` raises ConfidenceCapViolation if cap
           violated at construction).
-       h. Call ``enforce_confidence_caps`` (2nd defense-in-depth layer;
-          raises same exception class if propagated confidence > cap).
-       i. Construct ``TripleSigma`` per Vision §5.
-       j. Populate ``metric_outputs`` (8+ keys per PD15;
-          ``dms_adjustment_bps`` added when ``dms_adjustments``
-          provided).
-    3. Stamp replication-kit metadata (6 keys per PD16; Vision §14).
-    4. Return ``EnsembleResult``.
+       i. Call ``enforce_confidence_caps`` (2nd defense-in-depth layer;
+          raise-helper; defensive — cascade already capped at step f).
+       j. Construct ``TripleSigma`` per Vision §5.
+       k. Populate ``metric_outputs`` (≥15 keys per L6-H).
+       l. Construct ``HorizonResult`` with DMS + Lucas fields exposed.
+    4. Stamp replication-kit metadata (6 keys; Vision §14).
+    5. Return ``EnsembleResult``.
 
     Parameters
     ----------
@@ -403,41 +453,59 @@ def aggregate_ensemble(
         ``apply_recession_p_override_for_horizon``.
     ood_conditions
         Optional ``OODConditions`` mapping. When None, OOD reserve
-        defaults to the 5% floor per Vision §7.
+        defaults to the 5% floor per Vision §7 + empty reason codes.
     regime_stratified
-        If True, uses the 0.55 regime-stratified 10Y cap; else 0.70.
+        If True, uses the regime-stratified horizon cap table; else
+        non-stratified.
+    valuation_extreme, concentration_extreme, fiscal_risks_elevated,
+    reserve_currency_risk
+        L6-H D5 risk flags fed to ``select_dms_adjustment_bps`` for
+        DMS tier selection at 5Y/10Y. Default False → tier-0
+        (-100 bps "structural_edge_persists") at eligible horizons.
+    lucas_evidence
+        Optional dict mapping Vision §9 reason codes to evidence in
+        [0, 1]. Passed to ``compute_lucas_diagnostics``. When None,
+        no-evidence diagnostics with ``flag=False`` are produced.
+    signal_conflict
+        L6-H D2 cap-cascade modifier. When True, overlays Vision §4
+        signal-conflict cap 0.75 in the cascade. Default False.
 
     Returns
     -------
     EnsembleResult
         Multi-horizon aggregate with per-horizon ``HorizonResult``
-        entries for ``SUPPORTED_HORIZONS`` plus OOD reserve plus
-        reference-class passthrough plus replication-kit metadata.
+        entries plus OOD reserve + reason codes + reference-class
+        passthrough + replication-kit metadata.
 
     Raises
     ------
     ConfidenceCapViolation
-        If any horizon's computed confidence exceeds the applicable
-        cap (defense-in-depth either layer fires).
+        If the defense-in-depth pattern catches a cap violation that
+        the cascade missed (this should be unreachable in normal
+        execution; serves as the institutional discipline surface).
     ValueError
-        Range invariants in ``TripleDecomposition`` /
-        ``TripleSigma`` / ``EnsembleResult``; or invalid n_eff /
-        kappa propagated into ``apply_bayesian_shrinkage``.
+        Range invariants in ``TripleDecomposition`` / ``TripleSigma``
+        / ``EnsembleResult``; or invalid n_eff / kappa propagated into
+        ``apply_bayesian_shrinkage``; or invalid OOD / Lucas inputs.
     """
-    # Step 1 — OOD reserve
+    # Step 1 — OOD reserve + reason codes (L6-H D1)
     if ood_conditions is None:
         ood_reserve = OOD_RESERVE_FLOOR_DEFAULT
+        ood_reason_codes: Tuple[str, ...] = ()
     else:
-        ood_reserve = compute_ood_reserve(ood_conditions)
+        ood_reserve, ood_reason_codes = compute_ood_reserve(ood_conditions)
+
+    # Step 2 — Lucas critique diagnostics (L6-H D5)
+    lucas_diag = compute_lucas_diagnostics(structural_break_evidence=lucas_evidence)
 
     horizon_results: Dict[int, HorizonResult] = {}
 
     for horizon in SUPPORTED_HORIZONS:
-        # Step 2a — point estimate + n_eff
+        # Step 3a — point estimate + n_eff
         point = forecast_inputs.point_estimates[horizon]
         n_eff = forecast_inputs.point_estimate_n_eff[horizon]
 
-        # Step 2b — manual recession_p override (L1.7-D integration)
+        # Step 3b — manual recession_p override (L1.7-D integration)
         recession_p = forecast_inputs.recession_probabilities[horizon]
         if manual_inputs is not None:
             # Lazy import keeps top-of-module import graph minimal +
@@ -449,7 +517,7 @@ def aggregate_ensemble(
                 manual_inputs, horizon, recession_p
             )
 
-        # Step 2c — Bayesian shrinkage at 10Y only (Vision §6)
+        # Step 3c — Bayesian shrinkage at 10Y only (Vision §6)
         bayesian_applied = False
         shrinkage_n_eff: Optional[int] = None
         if horizon == 10:
@@ -461,35 +529,52 @@ def aggregate_ensemble(
             bayesian_applied = True
             shrinkage_n_eff = n_eff
 
-        # Step 2d — Bayesian confidence (L6-G replaces L6-F placeholder)
-        # Per Vision §4 + L6-E ReferenceClass.mean_similarity evidence.
-        confidence_uncapped = compute_bayesian_confidence(
-            point_estimate=point,
+        # Step 3d — DMS adjustment (L6-H D5 propagation into point estimate)
+        dms_raw_pe = point  # post-shrinkage; pre-DMS
+        dms_bps, dms_reason = select_dms_adjustment_bps(
+            horizon=horizon,
+            valuation_extreme=valuation_extreme,
+            concentration_extreme=concentration_extreme,
+            fiscal_risks_elevated=fiscal_risks_elevated,
+            reserve_currency_risk=reserve_currency_risk,
+        )
+        dms_adjusted_pe = apply_dms_bps_to_return(dms_raw_pe, dms_bps)
+        # The "binding" forecast value at this horizon = DMS-adjusted.
+        point = dms_adjusted_pe
+
+        # Step 3e — Vision §4 additive confidence (L6-H D3)
+        confidence_components = derive_confidence_components(
             n_eff=n_eff,
+            horizon=horizon,
             reference_class=forecast_inputs.reference_class,
-            regime_stratified=regime_stratified,
+            ood_reserve_fraction=ood_reserve,
+        )
+        raw_confidence = compute_bayesian_confidence(
+            components=confidence_components,
             horizon=horizon,
         )
 
-        # Step 2e — horizon-conditional cap (Standing Order #9 + Vision §10)
-        # Cap discipline UNCHANGED from L6-F; only the input (confidence_uncapped)
-        # is now Bayesian-computed rather than heuristic.
-        if horizon == 10:
-            cap = 0.55 if regime_stratified else 0.70
-            confidence = min(confidence_uncapped, cap)
-        else:
-            confidence = min(
-                confidence_uncapped, SHORT_HORIZON_CONFIDENCE_CAP
-            )
-
-        # Step 2f — Vision §4 simplified-subset conviction (L6-G)
-        conviction = compute_conviction_score(
-            confidence=confidence,
-            reference_class=forecast_inputs.reference_class,
-            n_eff=n_eff,
+        # Step 3f — Vision §4 + §7 + §10 cap cascade (L6-H D2)
+        confidence = apply_confidence_cap_cascade(
+            confidence=raw_confidence,
+            horizon=horizon,
+            regime_stratified=regime_stratified,
+            signal_conflict=signal_conflict,
+            ood_elevated=(ood_reserve >= OOD_ELEVATED_RESERVE_THRESHOLD),
+            ood_reserve_fraction=ood_reserve,
         )
 
-        # Step 2g — TripleDecomposition (defense-in-depth 1st layer)
+        # Step 3g — Vision §4 10-component conviction (L6-H D4)
+        conviction_components = derive_conviction_components(
+            confidence=confidence,
+            n_eff=n_eff,
+            horizon=horizon,
+            reference_class=forecast_inputs.reference_class,
+            point_estimate=point,
+        )
+        conviction = compute_conviction_score(conviction_components)
+
+        # Step 3h — TripleDecomposition (defense-in-depth 1st layer)
         triple_decomp = TripleDecomposition(
             probability=recession_p,
             confidence=confidence,
@@ -498,10 +583,11 @@ def aggregate_ensemble(
             regime_stratified=regime_stratified,
         )
 
-        # Step 2h — enforce_confidence_caps (defense-in-depth 2nd layer)
+        # Step 3i — enforce_confidence_caps (defense-in-depth 2nd layer)
+        # Defensive — cascade already capped at step 3f. UNCHANGED at L6-H.
         enforce_confidence_caps(confidence, horizon, regime_stratified)
 
-        # Step 2i — TripleSigma (Vision §5)
+        # Step 3j — TripleSigma (Vision §5)
         triple_sigma = TripleSigma(
             return_sigma=forecast_inputs.return_sigmas[horizon],
             forecast_error_sigma=forecast_inputs.forecast_sigmas[horizon],
@@ -511,7 +597,7 @@ def aggregate_ensemble(
             horizon=horizon,
         )
 
-        # Step 2j — metric_outputs (extended at L6-G via populate_metric_outputs)
+        # Step 3k — metric_outputs (L6-G + L6-H)
         metric_outputs = populate_metric_outputs(
             forecast_inputs=forecast_inputs,
             horizon=horizon,
@@ -519,8 +605,13 @@ def aggregate_ensemble(
             recession_p=recession_p,
             confidence=confidence,
             conviction=conviction,
+            dms_raw_point_estimate=dms_raw_pe,
+            dms_adjusted_point_estimate=dms_adjusted_pe,
+            dms_adjustment_bps=dms_bps,
+            lucas_flag=lucas_diag.flag,
         )
 
+        # Step 3l — HorizonResult (L6-H expanded)
         horizon_results[horizon] = HorizonResult(
             horizon=horizon,
             triple_decomposition=triple_decomp,
@@ -528,9 +619,14 @@ def aggregate_ensemble(
             metric_outputs=metric_outputs,
             bayesian_shrinkage_applied=bayesian_applied,
             shrinkage_n_eff=shrinkage_n_eff,
+            dms_raw_point_estimate=dms_raw_pe,
+            dms_adjusted_point_estimate=dms_adjusted_pe,
+            dms_adjustment_bps=dms_bps,
+            dms_selection_reason=dms_reason,
+            lucas_diagnostics=lucas_diag,
         )
 
-    # Step 3 — replication-kit metadata (Vision §14)
+    # Step 4 — replication-kit metadata (Vision §14)
     timestamp = datetime.now(timezone.utc).isoformat()
     replication_kit_metadata: Dict[str, str] = {
         "code_sha": _get_code_sha(),
@@ -541,11 +637,12 @@ def aggregate_ensemble(
         "ood_reserve_fraction": f"{ood_reserve:.4f}",
     }
 
-    # Step 4 — return EnsembleResult
+    # Step 5 — return EnsembleResult
     return EnsembleResult(
         horizons=horizon_results,
         ood_reserve_fraction=ood_reserve,
         reference_class=forecast_inputs.reference_class,
         replication_kit_metadata=replication_kit_metadata,
         aggregation_timestamp_iso=timestamp,
+        ood_reason_codes=ood_reason_codes,
     )

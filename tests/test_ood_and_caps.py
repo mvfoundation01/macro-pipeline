@@ -106,7 +106,7 @@ from macro_pipeline.manual_input.validation import ConfidenceCapViolation
 
 
 def test_ood_reserve_none_true_returns_floor() -> None:
-    """POS: all conditions False returns OOD_RESERVE_FLOOR (5%)."""
+    """POS: all conditions False returns (OOD_RESERVE_FLOOR, ()) per L6-H."""
     conditions = {
         "valuation_extreme": False,
         "policy_regime_unprecedented": False,
@@ -117,9 +117,10 @@ def test_ood_reserve_none_true_returns_floor() -> None:
         "macro_variables_contradictory": False,
         "fiscal_dominance_risk": False,
     }
-    result = compute_ood_reserve(conditions)
-    assert result == pytest.approx(OOD_RESERVE_FLOOR)
-    assert result == pytest.approx(0.05)
+    reserve, reason_codes = compute_ood_reserve(conditions)
+    assert reserve == pytest.approx(OOD_RESERVE_FLOOR)
+    assert reserve == pytest.approx(0.05)
+    assert reason_codes == ()
 
 
 # ===========================================================================
@@ -128,7 +129,11 @@ def test_ood_reserve_none_true_returns_floor() -> None:
 
 
 def test_ood_reserve_all_true_returns_ceiling() -> None:
-    """POS: all 8 conditions True returns OOD_RESERVE_CEILING (15%)."""
+    """POS: all 8 conditions True returns (ceiling 0.15, all reason codes).
+
+    L6-H bucket arithmetic: with all 8 True, the largest bucket
+    (0.12, 0.15) tier wins; ≥2 active → upper = 0.15.
+    """
     conditions = {
         "valuation_extreme": True,
         "policy_regime_unprecedented": True,
@@ -139,9 +144,10 @@ def test_ood_reserve_all_true_returns_ceiling() -> None:
         "macro_variables_contradictory": True,
         "fiscal_dominance_risk": True,
     }
-    result = compute_ood_reserve(conditions)
-    assert result == pytest.approx(OOD_RESERVE_CEILING)
-    assert result == pytest.approx(0.15)
+    reserve, reason_codes = compute_ood_reserve(conditions)
+    assert reserve == pytest.approx(OOD_RESERVE_CEILING)
+    assert reserve == pytest.approx(0.15)
+    assert set(reason_codes) == set(conditions.keys())
 
 
 # ===========================================================================
@@ -150,20 +156,30 @@ def test_ood_reserve_all_true_returns_ceiling() -> None:
 
 
 def test_ood_reserve_four_true_returns_midpoint() -> None:
-    """POS: 4 of 8 conditions True returns ~10% (midpoint)."""
+    """POS: 4 active conditions in mixed buckets → upper of largest bucket.
+
+    L6-H bucket arithmetic: valuation_extreme has bucket (0.08, 0.10);
+    other 3 have bucket (0.10, 0.12); largest bucket high = 0.12;
+    ≥2 active → upper bound = 0.12.
+    """
     conditions = {
-        "valuation_extreme": True,
-        "policy_regime_unprecedented": True,
-        "geopolitical_risk_elevated": True,
-        "volatility_artificially_suppressed": True,
+        "valuation_extreme": True,              # bucket (0.08, 0.10)
+        "policy_regime_unprecedented": True,    # bucket (0.10, 0.12)
+        "geopolitical_risk_elevated": True,     # bucket (0.10, 0.12)
+        "volatility_artificially_suppressed": True,  # bucket (0.10, 0.12)
         "financial_leverage_opaque": False,
         "market_concentration_historical_extreme": False,
         "macro_variables_contradictory": False,
         "fiscal_dominance_risk": False,
     }
-    # 0.05 + 4 * (0.10 / 8) = 0.05 + 0.05 = 0.10
-    result = compute_ood_reserve(conditions)
-    assert result == pytest.approx(0.10)
+    reserve, reason_codes = compute_ood_reserve(conditions)
+    assert reserve == pytest.approx(0.12)
+    assert set(reason_codes) == {
+        "valuation_extreme",
+        "policy_regime_unprecedented",
+        "geopolitical_risk_elevated",
+        "volatility_artificially_suppressed",
+    }
 
 
 # ===========================================================================
@@ -172,9 +188,10 @@ def test_ood_reserve_four_true_returns_midpoint() -> None:
 
 
 def test_ood_reserve_empty_dict_returns_floor() -> None:
-    """POS: empty conditions dict returns floor (5%)."""
-    result = compute_ood_reserve({})
-    assert result == pytest.approx(OOD_RESERVE_FLOOR)
+    """POS: empty conditions dict returns (floor 0.05, () empty reasons)."""
+    reserve, reason_codes = compute_ood_reserve({})
+    assert reserve == pytest.approx(OOD_RESERVE_FLOOR)
+    assert reason_codes == ()
 
 
 # ===========================================================================
@@ -345,3 +362,167 @@ def test_enforce_caps_negative_confidence_raises() -> None:
     # BEFORE cap check; range error wins).
     with pytest.raises(ValueError, match="below"):
         enforce_confidence_caps(-0.05, horizon=10, regime_stratified=True)
+
+
+# ============================================================================
+# L6-H ADDITIONS — apply_confidence_cap_cascade + new compute_ood_reserve
+# ============================================================================
+#
+# Test inventory L6-H additions (D1 + D2):
+#   15. POS-inv    test_cap_cascade_horizon_default_caps_passes_below
+#   16. POS-inv    test_cap_cascade_signal_conflict_caps_at_075
+#   17. POS-inv    test_cap_cascade_ood_elevated_flag_caps_at_070
+#   18. POS-inv    test_cap_cascade_ood_reserve_threshold_triggers_070
+#   19. POS-inv    test_cap_cascade_10y_dominates_when_smaller
+#   20. POS-inv    test_cap_cascade_both_modifiers_min_wins
+#   21. NEG        test_cap_cascade_invalid_horizon_raises
+#   22. NEG        test_cap_cascade_nan_confidence_raises
+#   23. NEG        test_ood_reserve_unknown_key_raises
+#   24. NEG        test_ood_reserve_non_bool_value_raises
+#   25. NEG        test_ood_reserve_nan_value_raises
+#   26. POS-inv    test_ood_reserve_single_condition_returns_low_bound
+#   27. POS-inv    test_ood_reserve_2plus_returns_largest_bucket_upper
+# L6-H tally: 13 tests; 5 NEG (21, 22, 23, 24, 25) / 8 POS-inv = 38% NEG.
+# Cumulative tally (Tests 1-27): 14 (L6-D) + 13 (L6-H) = 27.
+# L6-D NEG count: 7 (per file header). L6-H NEG count: 5. Total NEG: 12.
+# Cumulative NEG floor: 12/27 ≈ 44.4% — Strategic-relaxed per L6-H PD18.
+
+
+def test_cap_cascade_horizon_default_caps_passes_below() -> None:
+    """POS-inv: cap cascade at horizon default; confidence below cap passes through."""
+    from macro_pipeline.ensemble.ood_and_caps import apply_confidence_cap_cascade
+    # 1Y default cap 0.85; confidence 0.60 → returns 0.60.
+    assert apply_confidence_cap_cascade(0.60, horizon=1) == pytest.approx(0.60)
+    # 3Y default cap 0.80; confidence 0.50 → returns 0.50.
+    assert apply_confidence_cap_cascade(0.50, horizon=3) == pytest.approx(0.50)
+    # 5Y default cap 0.80; confidence 0.50 → returns 0.50.
+    assert apply_confidence_cap_cascade(0.50, horizon=5) == pytest.approx(0.50)
+    # 10Y default cap 0.70; confidence 0.60 → returns 0.60.
+    assert apply_confidence_cap_cascade(0.60, horizon=10) == pytest.approx(0.60)
+
+
+def test_cap_cascade_signal_conflict_caps_at_075() -> None:
+    """POS-inv: signal_conflict overlays 0.75 cap at all horizons."""
+    from macro_pipeline.ensemble.ood_and_caps import apply_confidence_cap_cascade
+    # 1Y default cap 0.85; signal_conflict → 0.75; confidence 0.90 → 0.75.
+    assert apply_confidence_cap_cascade(
+        0.90, horizon=1, signal_conflict=True
+    ) == pytest.approx(0.75)
+    # 5Y default cap 0.80; signal_conflict → 0.75; confidence 0.85 → 0.75.
+    assert apply_confidence_cap_cascade(
+        0.85, horizon=5, signal_conflict=True
+    ) == pytest.approx(0.75)
+
+
+def test_cap_cascade_ood_elevated_flag_caps_at_070() -> None:
+    """POS-inv: ood_elevated overlays 0.70 cap at all horizons."""
+    from macro_pipeline.ensemble.ood_and_caps import apply_confidence_cap_cascade
+    # 1Y default cap 0.85; ood_elevated → 0.70; confidence 0.90 → 0.70.
+    assert apply_confidence_cap_cascade(
+        0.90, horizon=1, ood_elevated=True
+    ) == pytest.approx(0.70)
+    # 3Y default cap 0.80; ood_elevated → 0.70.
+    assert apply_confidence_cap_cascade(
+        0.85, horizon=3, ood_elevated=True
+    ) == pytest.approx(0.70)
+
+
+def test_cap_cascade_ood_reserve_threshold_triggers_070() -> None:
+    """POS-inv: ood_reserve_fraction >= 0.10 implies ood_elevated → cap 0.70."""
+    from macro_pipeline.ensemble.ood_and_caps import apply_confidence_cap_cascade
+    # 1Y; reserve=0.10 → ood implied → cap 0.70; confidence 0.90 → 0.70.
+    assert apply_confidence_cap_cascade(
+        0.90, horizon=1, ood_reserve_fraction=0.10
+    ) == pytest.approx(0.70)
+    # Reserve below threshold does NOT trigger.
+    assert apply_confidence_cap_cascade(
+        0.84, horizon=1, ood_reserve_fraction=0.05
+    ) == pytest.approx(0.84)
+
+
+def test_cap_cascade_10y_dominates_when_smaller() -> None:
+    """POS-inv: 10Y stratified cap 0.55 wins over signal_conflict 0.75."""
+    from macro_pipeline.ensemble.ood_and_caps import apply_confidence_cap_cascade
+    # 10Y stratified base cap 0.55; signal_conflict overlays 0.75 (less
+    # restrictive) → effective cap stays 0.55.
+    assert apply_confidence_cap_cascade(
+        0.90, horizon=10, regime_stratified=True, signal_conflict=True
+    ) == pytest.approx(0.55)
+
+
+def test_cap_cascade_both_modifiers_min_wins() -> None:
+    """POS-inv: signal_conflict + ood_elevated → min(0.75, 0.70) = 0.70."""
+    from macro_pipeline.ensemble.ood_and_caps import apply_confidence_cap_cascade
+    # 1Y default 0.85; signal_conflict 0.75; ood_elevated 0.70.
+    # Effective cap = min(0.85, 0.75, 0.70) = 0.70.
+    assert apply_confidence_cap_cascade(
+        0.90, horizon=1, signal_conflict=True, ood_elevated=True
+    ) == pytest.approx(0.70)
+
+
+def test_cap_cascade_invalid_horizon_raises() -> None:
+    """NEG: invalid horizon raises KeyError."""
+    from macro_pipeline.ensemble.ood_and_caps import apply_confidence_cap_cascade
+    with pytest.raises(KeyError):
+        apply_confidence_cap_cascade(0.5, horizon=7)
+
+
+def test_cap_cascade_nan_confidence_raises() -> None:
+    """NEG: NaN confidence raises ValueError."""
+    from macro_pipeline.ensemble.ood_and_caps import apply_confidence_cap_cascade
+    with pytest.raises(ValueError, match="finite"):
+        apply_confidence_cap_cascade(float("nan"), horizon=5)
+
+
+def test_ood_reserve_unknown_key_raises() -> None:
+    """NEG: unknown OOD condition key raises ValueError (Codex #4 closure)."""
+    with pytest.raises(ValueError, match="not in Vision"):
+        compute_ood_reserve({"unknown_condition": True})
+
+
+def test_ood_reserve_non_bool_value_raises() -> None:
+    """NEG: non-bool value raises TypeError (Codex #4 closure)."""
+    with pytest.raises(TypeError, match="must be bool"):
+        compute_ood_reserve({"valuation_extreme": "not_a_bool"})  # type: ignore[dict-item]
+
+
+def test_ood_reserve_nan_value_raises() -> None:
+    """NEG: NaN value rejected with ValueError (Codex #4 closure)."""
+    with pytest.raises(ValueError, match="NaN/inf"):
+        compute_ood_reserve({"valuation_extreme": float("nan")})  # type: ignore[dict-item]
+
+
+def test_ood_reserve_single_condition_returns_low_bound() -> None:
+    """POS-inv: 1 active condition returns LOW bound of that bucket."""
+    # valuation_extreme alone: bucket (0.08, 0.10); low bound = 0.08.
+    reserve, reasons = compute_ood_reserve({"valuation_extreme": True})
+    assert reserve == pytest.approx(0.08)
+    assert reasons == ("valuation_extreme",)
+    # market_concentration alone: bucket (0.12, 0.15); low = 0.12.
+    reserve, reasons = compute_ood_reserve(
+        {"market_concentration_historical_extreme": True}
+    )
+    assert reserve == pytest.approx(0.12)
+    assert reasons == ("market_concentration_historical_extreme",)
+
+
+def test_ood_reserve_2plus_returns_largest_bucket_upper() -> None:
+    """POS-inv: ≥2 active conditions return UPPER bound of largest bucket."""
+    # market_concentration (0.12, 0.15) + macro_contradictory (0.12, 0.15):
+    # largest bucket high = 0.15; ≥2 active → upper = 0.15.
+    reserve, reasons = compute_ood_reserve({
+        "market_concentration_historical_extreme": True,
+        "macro_variables_contradictory": True,
+    })
+    assert reserve == pytest.approx(0.15)
+    assert set(reasons) == {
+        "market_concentration_historical_extreme",
+        "macro_variables_contradictory",
+    }
+    # Mixed buckets: valuation (0.08, 0.10) + concentration (0.12, 0.15);
+    # largest high = 0.15; ≥2 active → upper = 0.15.
+    reserve, reasons = compute_ood_reserve({
+        "valuation_extreme": True,
+        "market_concentration_historical_extreme": True,
+    })
+    assert reserve == pytest.approx(0.15)

@@ -174,13 +174,20 @@ Confidence Score = Data Quality (×25%)
                  - OOD Penalty (×5%)
 ```
 
-**Hard caps**:
-| Horizon | Max Confidence |
-|---|---|
-| 1Y, 3Y, 5Y | 85% |
-| **10Y** | **70%** (revised down from 85% per academic critique; N=11 non-overlapping windows insufficient for >70%) |
-| Any horizon with signal conflict | 75% |
-| Any horizon with OOD vs analogs | 70% |
+**Hard caps** (binding source: §10 Sample Size Honesty table; §4 mirrors §10):
+| Horizon | Max Confidence | Source |
+|---|---|---|
+| **1Y** | **85%** | §10 N≈113 non-overlapping windows |
+| **3Y** | **80%** | §10 N≈38 (tight; revised down from §4 v2.0 initial 85%) |
+| **5Y** | **80%** | §10 N≈22 (tight; revised down from §4 v2.0 initial 85%) |
+| **10Y, non-stratified** | **70%** | §10 N≈11 with autocorrelation insufficient for >70% |
+| **10Y, regime-stratified** | **55%** | Standing Order #9 + §10 (regime stratification halves effective N) |
+| Any horizon with signal conflict | 75% | §4 modifier (overlays horizon cap; applied via `min(...)`) |
+| Any horizon with OOD vs analogs elevated | 70% | §4 + §7 modifier (overlays; applied via `min(...)`) |
+
+**Cap cascade semantics**: caps compose via `min(...)`. Effective cap at any horizon equals `min(horizon_cap, signal_conflict_cap_if_active, ood_cap_if_active)`. The most restrictive cap wins.
+
+**Cross-reference**: §10 is the canonical source-of-truth for horizon caps; this §4 table mirrors §10 verbatim for reader convenience. If §10 changes, update this table to match.
 
 ### Conviction (1-10, position-sizing implication)
 **Formula** (binding):
@@ -513,6 +520,7 @@ In addition to standard anti-patterns from existing guides:
 | Version | Date | Author | Changes |
 |---|---|---|---|
 | 2.0 | 2026-05-14 | Strategic Claude + V | Initial v2.0; consolidates v1.x ecosystem into single source of truth; adds Pillars 3-4 (interpretability + statistical density); L8 phasing; 90+ metric inventory; revised 10Y confidence cap 85→70% |
+| 2.1 | 2026-05-16 | Strategic Claude (Track B) + Track A (L6-H exec) | §4 cap table aligned to §10 binding source: 3Y cap 85→80%; 5Y cap 85→80% (matches §10 sample-size-derived caps); 10Y regime-stratified 55% cap surfaced explicitly; cap cascade semantics (compose via `min(...)`); §4 marked as mirror of canonical §10 source. Resolves ChatGPT R7 methodology review Op #3 (HIGH-DOC). No formula change; aggregator + helper cap implementations re-anchored to this table at L6-H. Authority: Strategic L6-H pre-flight 2026-05-16; ChatGPT 5.5 R7 verdict at `l6-g-accept`. |
 
 Future updates appended here with rationale.
 

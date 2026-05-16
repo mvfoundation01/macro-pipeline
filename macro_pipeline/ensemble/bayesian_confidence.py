@@ -1,220 +1,618 @@
-"""Bayesian confidence + conviction computation (L6-G refinement).
+"""Bayesian confidence + conviction computation (L6-G base + L6-H refinement).
 
-Per Strategic L6-G inline pre-flight 2026-05-15. Replaces the L6-F
-placeholder heuristic for confidence + conviction with a tractable
-Bayesian computation per Vision v2.0 §4 (Triple Probability
-Decomposition) + Vision §10 (Sample Size Honesty) + L6-E
-``ReferenceClass.mean_similarity`` as evidence-quality weight.
+Per Strategic L6-G inline pre-flight 2026-05-15 + L6-H R7 closure pre-flight
+2026-05-16.
 
-L6-G uses tractable Bayesian subset
-------------------------------------
-Confidence formula::
+L6-G shipped a tractable Bayesian subset (single posterior-precision
+heuristic for confidence; linear-from-confidence + 2 penalties for
+conviction). L6-H REPLACES this with the **Vision v2.1 §4 BINDING
+additive formulas** for both confidence and conviction, closing
+ChatGPT R7 methodology Findings #3 (C-3) and #4 (C-4).
 
-    similarity_quality   = max(0, reference_class.mean_similarity)
-                           if reference_class else DEFAULT_SIMILARITY_QUALITY
-    posterior_precision  = n_eff + KAPPA_EVIDENCE
-    evidence_weight      = (similarity_quality * n_eff) / posterior_precision
-    confidence_uncapped  = 0.5 + 0.4 * evidence_weight  # range [0.5, 0.9]
+L6-H formulas
+-------------
 
-Boundary behaviour:
+**Confidence** (Vision v2.1 §4 BINDING; weighted-sum of 6 quality
+components in [0, 1])::
 
-  - ``n_eff == 0``                 → evidence_weight = 0 → confidence = 0.5
-                                     (pure prior; no evidence)
-  - ``n_eff → infinity``           → evidence_weight → similarity_quality
-                                     → confidence → 0.5 + 0.4 * similarity_quality
-  - ``similarity_quality == 1.0`` plus large ``n_eff``
-                                   → confidence → 0.9 (max evidence-driven value)
-  - ``reference_class is None``    → similarity_quality = 0.5 (neutral default)
-  - ``mean_similarity < 0``        → clamped to 0 (evidence_weight floor)
+    raw_confidence = (
+        0.25 * data_quality
+      + 0.25 * model_agreement
+      + 0.20 * regime_stability
+      + 0.15 * analog_strength
+      + 0.10 * sample_size_adequacy
+      - 0.05 * ood_penalty
+    )
+    raw_confidence ∈ [-0.05, 0.95]   (clamped to [0, 1] for output)
 
-Conviction formula (Vision §4 simplified subset)
-------------------------------------------------
-Vision §4 specifies a ten-component conviction formula (expected return
-attractiveness + asymmetry + model agreement + valuation support +
-trend confirmation + liquidity support minus tail-risk penalty minus
-crowding penalty minus policy uncertainty penalty minus forecast decay
-penalty). L6-G adopts a tractable subset suitable for the ensemble
-aggregator's current input scope::
+Caller applies the §4 + §7 + §10 cap cascade externally via
+``apply_confidence_cap_cascade`` from ``ood_and_caps``. This module
+returns the *raw* (clamped to [0, 1]) confidence; cap discipline
+remains the responsibility of the cap helpers + defense-in-depth
+layers per the institutional pattern.
 
-    conviction_base = 1.0 + 9.0 * confidence  # linear [1, 10]
-    if n_eff < SAMPLE_SIZE_PENALTY_THRESHOLD:
-        conviction_base *= SAMPLE_SIZE_PENALTY_FACTOR
-    if (reference_class is not None
-            and reference_class.mean_similarity < WEAK_ANALOG_THRESHOLD):
-        conviction_base *= WEAK_ANALOG_PENALTY_FACTOR
-    clamp to [CONVICTION_MIN, CONVICTION_MAX] = [1.0, 10.0]
+**Conviction** (Vision v2.1 §4 BINDING; 10-component edge-and-risk
+score in [1, 10])::
 
-The full ten-component formula is deferred. R7 ChatGPT 5.5 methodology
-review (dispatched at L6-F ACCEPT) explicitly anticipates this scope
-question (R7 invocation question five); the explicit subset choice +
-deferral path are documented here for reviewer audit.
+    raw_0_1 = (
+        0.20 * edge_score
+      + 0.20 * asymmetry_score
+      + 0.15 * model_agreement
+      + 0.15 * valuation_support
+      + 0.10 * trend_confirmation
+      + 0.10 * liquidity_support
+      - 0.15 * tail_risk_penalty
+      - 0.10 * crowding_penalty
+      - 0.10 * policy_uncertainty_penalty
+      - 0.10 * forecast_decay_penalty
+    )
+    conviction = 1.0 + 9.0 * clamp(raw_0_1, 0, 1)   # map to [1, 10]
 
-Cap discipline (Standing Order #9 + Vision §10) is UNCHANGED
-------------------------------------------------------------
-``compute_bayesian_confidence`` returns an UNCAPPED confidence value;
-the Standing-Order-#9 cap discipline is enforced separately by the
-existing two defense-in-depth layers:
+Vision v2.1 §4 critical rule preserved: **conviction CAN BE LOWER
+THAN confidence** when risk/reward asymmetry is poor — the two scales
+are *independent*. This is structurally enforced by the formula
+(conviction depends on a distinct 10-component set; the asymmetry +
+penalty components can dominate even at high confidence).
 
-  Layer 1  ``TripleDecomposition.__post_init__``  (L6-B; construction-time)
-  Layer 2  ``enforce_confidence_caps``            (L6-D; forecast-time)
+Component sourcing (L6-H placeholder discipline)
+-------------------------------------------------
+Not all 10 conviction components or 6 confidence components have full
+upstream L1-L5b producers at L6-H. Where producer data exists, the
+component is sourced empirically; where data is unavailable, a
+documented placeholder value is used (typically the neutral 0.5).
+Each placeholder is flagged in the component-builder helper
+docstrings + the aggregator integration; future L7/L8a sub-phases
+will replace placeholders with empirical producers.
 
-Both layers continue to fire on cap violations. The aggregator
-(``aggregate_ensemble`` in ``aggregator.py``) applies the horizon-
-conditional cap between the Bayesian compute and the
-``TripleDecomposition`` construction; the L6-F third-instance defense-
-in-depth pattern is preserved.
+This discipline closes ChatGPT R7 Finding #4 (conviction must be a
+*distinct* risk/reward score with the §4 BINDING components) while
+acknowledging the empirical sourcing gap (documented + deferred,
+not silently elided).
+
+Defense-in-depth confidence cap (3rd-instance UNCHANGED at L6-H)
+----------------------------------------------------------------
+The aggregator pipeline still calls both cap-enforcement layers:
+- Layer 1: ``TripleDecomposition.__post_init__`` (construction-time)
+- Layer 2: ``enforce_confidence_caps`` (raise-helper; PRESERVED
+  UNCHANGED at L6-H per PD20 for Test 12 invariant)
+
+The L6-H cap cascade (``apply_confidence_cap_cascade``) is applied
+*before* TripleDecomposition construction; the raise-helper remains
+a defensive check after the cascade has produced the final value.
+Test 12 (``test_aggregate_defense_in_depth_both_layers_fire``)
+remains PASSING unchanged.
 """
 from __future__ import annotations
 
+import math
+from dataclasses import dataclass, fields
 from typing import Optional
 
 from macro_pipeline.ensemble.rcf import ReferenceClass
 
-# Posterior weight scale (per Strategic PD9).
-KAPPA_EVIDENCE = 10
+# =============================================================================
+# Vision §4 BINDING confidence formula weights
+# =============================================================================
 
-# Neutral prior (Vision §4 BINDING starting point pre-evidence).
-CONFIDENCE_PRIOR = 0.5
+CONFIDENCE_WEIGHT_DATA_QUALITY = 0.25
+CONFIDENCE_WEIGHT_MODEL_AGREEMENT = 0.25
+CONFIDENCE_WEIGHT_REGIME_STABILITY = 0.20
+CONFIDENCE_WEIGHT_ANALOG_STRENGTH = 0.15
+CONFIDENCE_WEIGHT_SAMPLE_SIZE = 0.10
+CONFIDENCE_WEIGHT_OOD_PENALTY = -0.05
 
-# Maximum evidence-driven confidence (floor on uncertainty; never absolute).
-MAX_EVIDENCE_CONFIDENCE = 0.99
+# Sum of POSITIVE weights = 0.95; minus OOD = 0.90 net.
+# With all components = 1.0 and ood_penalty = 0: raw = 0.95.
+# With all components = 1.0 and ood_penalty = 1.0: raw = 0.90.
+# With all positive = 0, ood_penalty = 1.0: raw = -0.05 (clamped to 0).
 
-# Default similarity quality when reference_class is None (moderate).
-DEFAULT_SIMILARITY_QUALITY = 0.5
+# =============================================================================
+# Vision §4 BINDING conviction formula weights (10-component)
+# =============================================================================
 
-# Conviction-formula penalty thresholds (Vision §4 simplified subset).
-SAMPLE_SIZE_PENALTY_THRESHOLD = 30
-WEAK_ANALOG_THRESHOLD = 0.3
-SAMPLE_SIZE_PENALTY_FACTOR = 0.8
-WEAK_ANALOG_PENALTY_FACTOR = 0.7
+CONVICTION_WEIGHT_EDGE = 0.20
+CONVICTION_WEIGHT_ASYMMETRY = 0.20
+CONVICTION_WEIGHT_MODEL_AGREEMENT = 0.15
+CONVICTION_WEIGHT_VALUATION = 0.15
+CONVICTION_WEIGHT_TREND = 0.10
+CONVICTION_WEIGHT_LIQUIDITY = 0.10
+CONVICTION_WEIGHT_TAIL_RISK = -0.15
+CONVICTION_WEIGHT_CROWDING = -0.10
+CONVICTION_WEIGHT_POLICY = -0.10
+CONVICTION_WEIGHT_DECAY = -0.10
 
-# Conviction range bounds (Vision §4).
+# Sum positive weights = 0.90; sum negative weights = -0.45.
+# Max possible: all positive = 1, all negative = 0 → 0.90 → conviction 9.1.
+# Min possible: all positive = 0, all negative = 1 → -0.45 (clamped to 0) → conviction 1.0.
+
+# Conviction output range bounds (Vision §4).
 CONVICTION_MIN = 1.0
 CONVICTION_MAX = 10.0
 
-# Supported horizons (mirror aggregator + L6-B).
+# Vision §10 sample-size targets per horizon (N_eff at which
+# sample_size_adequacy = 1.0; sqrt scaling below that).
+SAMPLE_SIZE_TARGETS: dict[int, int] = {
+    1: 113,
+    3: 38,
+    5: 22,
+    10: 11,
+}
+
+# Supported horizons (mirrors aggregator + L6-B + L6-D).
 SUPPORTED_HORIZONS = (1, 3, 5, 10)
+
+# L6-G compat constant (retained for backward export; no functional use at L6-H).
+KAPPA_EVIDENCE = 10
+
+# Neutral placeholder used by component builders when upstream producer
+# data is unavailable (documented per-component in builder docstrings).
+PLACEHOLDER_NEUTRAL = 0.5
+
+
+def _validate_component(value: float, name: str) -> None:
+    """Validate a single Vision §4 component value: finite + in [0, 1]."""
+    if not isinstance(value, (int, float)):
+        raise ValueError(
+            f"{name} must be a real number; got {type(value).__name__}"
+        )
+    if isinstance(value, bool):
+        # bool is int subclass; reject explicitly per type semantics.
+        raise ValueError(
+            f"{name} must be a real number; got bool"
+        )
+    if not math.isfinite(float(value)):
+        raise ValueError(f"{name} must be finite; got {value!r}")
+    if not (0.0 <= float(value) <= 1.0):
+        raise ValueError(f"{name} must be in [0, 1]; got {value}")
+
+
+# =============================================================================
+# D3 — Confidence Vision §4 additive formula
+# =============================================================================
+
+
+@dataclass(frozen=True)
+class ConfidenceComponents:
+    """Six-component additive confidence score per Vision v2.1 §4 BINDING.
+
+    Each component is a quality score in [0, 1] with semantics anchored
+    to Vision v2.1 §4:
+
+      data_quality          Input data freshness + completeness + sanity
+                            (e.g., FRED vintage age, no NaN/extreme outlier
+                            count, indicator-coverage completeness).
+      model_agreement       Agreement across the L5b 11-model ensemble at
+                            this horizon (e.g., 1 - normalized stdev of
+                            model point estimates; or proportion of models
+                            within ±1 σ of ensemble mean).
+      regime_stability      Stability of the current regime relative to
+                            the analog window (e.g., regime-transition
+                            probability below some threshold; or regime
+                            persistence above some threshold).
+      analog_strength       Reference-class L6-E mean_similarity, clamped
+                            to [0, 1].
+      sample_size_adequacy  ``sqrt(min(1, n_eff / N_target))`` where
+                            ``N_target`` is Vision §10 horizon N (113 /
+                            38 / 22 / 11 non-overlapping windows).
+      ood_penalty           OOD reserve-fraction-derived penalty in [0, 1]
+                            (e.g., ``(reserve - 0.05) / (0.15 - 0.05)``).
+                            Penalty: subtracted at 5% weight per Vision §4.
+
+    Invariants (``__post_init__``):
+      - All fields finite + in [0, 1].
+    """
+
+    data_quality: float
+    model_agreement: float
+    regime_stability: float
+    analog_strength: float
+    sample_size_adequacy: float
+    ood_penalty: float
+
+    def __post_init__(self) -> None:
+        for f in fields(self):
+            _validate_component(getattr(self, f.name), f.name)
 
 
 def compute_bayesian_confidence(
-    point_estimate: float,
-    n_eff: int,
-    reference_class: Optional[ReferenceClass],
-    regime_stratified: bool,
+    components: ConfidenceComponents,
     horizon: int,
 ) -> float:
-    """Compute Bayesian confidence per Vision §4 + L6-E reference class.
+    """Compute UNCAPPED Vision §4 additive confidence in [0, 1].
 
-    Returns an UNCAPPED confidence value in [0.0, MAX_EVIDENCE_CONFIDENCE].
-    The Standing Order #9 + Vision §10 caps are applied separately by
-    the aggregator pipeline (TripleDecomposition __post_init__ +
-    enforce_confidence_caps); this function does NOT apply caps.
+    Vision v2.1 §4 BINDING formula::
+
+        raw = (
+            0.25 * data_quality
+          + 0.25 * model_agreement
+          + 0.20 * regime_stability
+          + 0.15 * analog_strength
+          + 0.10 * sample_size_adequacy
+          - 0.05 * ood_penalty
+        )
+        return clamp(raw, 0, 1)
+
+    Returns the *raw* clamped-to-[0, 1] additive score. The Vision §4
+    + §7 + §10 cap cascade is applied separately by the caller (typically
+    ``apply_confidence_cap_cascade`` from ``ood_and_caps``). The 2nd
+    defense-in-depth layer (``enforce_confidence_caps``) and the 1st
+    layer (``TripleDecomposition.__post_init__``) both fire on
+    post-cascade cap violations.
 
     Parameters
     ----------
-    point_estimate
-        Forecast point estimate. NOT used in the L6-G confidence
-        computation directly; reserved for future Bayesian refinement
-        that may use the point-estimate magnitude to weight evidence.
-    n_eff
-        Effective sample size (non-negative integer).
-    reference_class
-        Optional ``ReferenceClass`` from L6-E. When provided,
-        ``mean_similarity`` (clamped to non-negative) is used as the
-        evidence-quality weight. When ``None``,
-        ``DEFAULT_SIMILARITY_QUALITY = 0.5`` is used.
-    regime_stratified
-        Forecast regime-stratification flag. Reserved for future
-        regime-conditional confidence variation; not used in the
-        L6-G formula directly (caps applied externally).
+    components
+        ``ConfidenceComponents`` dataclass with the 6 Vision §4 fields.
     horizon
-        Forecast horizon in years; must be in ``SUPPORTED_HORIZONS``.
+        Forecast horizon; must be in ``SUPPORTED_HORIZONS``. Reserved
+        for future horizon-conditional weight adjustments; the L6-H
+        formula uses uniform weights across horizons (per Vision §4
+        BINDING).
 
     Returns
     -------
     float
-        UNCAPPED confidence in [0.0, MAX_EVIDENCE_CONFIDENCE].
+        Raw additive confidence in [0, 1]. Cap cascade NOT applied
+        here; caller responsibility.
+
+    Raises
+    ------
+    KeyError
+        If ``horizon`` not in ``SUPPORTED_HORIZONS``.
+    """
+    if horizon not in SUPPORTED_HORIZONS:
+        raise KeyError(
+            f"horizon {horizon} not in {sorted(SUPPORTED_HORIZONS)}"
+        )
+
+    raw = (
+        CONFIDENCE_WEIGHT_DATA_QUALITY * components.data_quality
+        + CONFIDENCE_WEIGHT_MODEL_AGREEMENT * components.model_agreement
+        + CONFIDENCE_WEIGHT_REGIME_STABILITY * components.regime_stability
+        + CONFIDENCE_WEIGHT_ANALOG_STRENGTH * components.analog_strength
+        + CONFIDENCE_WEIGHT_SAMPLE_SIZE * components.sample_size_adequacy
+        + CONFIDENCE_WEIGHT_OOD_PENALTY * components.ood_penalty
+    )
+    return max(0.0, min(1.0, raw))
+
+
+def compute_sample_size_adequacy(n_eff: int, horizon: int) -> float:
+    """Vision §10 sample-size adequacy: ``sqrt(min(1, n_eff / N_target))``.
+
+    ``N_target`` is the Vision §10 nominal non-overlapping window count
+    at the horizon (113 / 38 / 22 / 11 for 1Y / 3Y / 5Y / 10Y). When
+    ``n_eff >= N_target`` the adequacy = 1.0 (saturates); below target
+    it scales as sqrt of the ratio (smoother than linear; reflects
+    that uncertainty contracts as sqrt(N) for unbiased estimators).
+
+    Parameters
+    ----------
+    n_eff
+        Effective sample size (non-negative integer).
+    horizon
+        Forecast horizon in ``SUPPORTED_HORIZONS``.
+
+    Returns
+    -------
+    float
+        Sample-size adequacy in [0, 1].
 
     Raises
     ------
     ValueError
-        If ``n_eff < 0`` or ``horizon`` not in supported set.
+        If ``n_eff < 0``.
+    KeyError
+        If ``horizon`` not in ``SAMPLE_SIZE_TARGETS``.
     """
     if n_eff < 0:
         raise ValueError(f"n_eff must be non-negative; got {n_eff}")
-    if horizon not in SUPPORTED_HORIZONS:
-        raise ValueError(
-            f"horizon {horizon} not in {sorted(SUPPORTED_HORIZONS)}"
+    if horizon not in SAMPLE_SIZE_TARGETS:
+        raise KeyError(
+            f"horizon {horizon} not in {sorted(SAMPLE_SIZE_TARGETS.keys())}"
         )
-
-    if reference_class is not None:
-        similarity_quality = max(0.0, reference_class.mean_similarity)
-    else:
-        similarity_quality = DEFAULT_SIMILARITY_QUALITY
-
-    posterior_precision = n_eff + KAPPA_EVIDENCE
-    evidence_weight = (similarity_quality * n_eff) / posterior_precision
-
-    confidence_uncapped = CONFIDENCE_PRIOR + 0.4 * evidence_weight
-
-    # Floor + ceiling (never below 0; never above MAX_EVIDENCE_CONFIDENCE).
-    return min(max(confidence_uncapped, 0.0), MAX_EVIDENCE_CONFIDENCE)
+    target = SAMPLE_SIZE_TARGETS[horizon]
+    ratio = min(1.0, n_eff / target)
+    return math.sqrt(ratio)
 
 
-def compute_conviction_score(
-    confidence: float,
-    reference_class: Optional[ReferenceClass],
+def derive_confidence_components(
     n_eff: int,
-) -> float:
-    """Compute conviction score per Vision §4 simplified subset.
+    horizon: int,
+    reference_class: Optional[ReferenceClass],
+    ood_reserve_fraction: float,
+    data_quality: float = PLACEHOLDER_NEUTRAL,
+    model_agreement: float = PLACEHOLDER_NEUTRAL,
+    regime_stability: float = PLACEHOLDER_NEUTRAL,
+) -> ConfidenceComponents:
+    """Build ``ConfidenceComponents`` from available L5b/L6-E inputs.
 
-    L6-G applies the Vision §4 conviction concept with a tractable
-    subset: linear scaling from confidence plus two penalties (sample
-    size + weak analog). Full ten-component formula deferred (see
-    module docstring for R7 ChatGPT review anticipation).
+    Component sourcing (L6-H):
+
+      data_quality        PLACEHOLDER 0.5 (no L6-H upstream producer;
+                          future L7/L8a will source from FRED vintage
+                          + indicator coverage diagnostics).
+      model_agreement     PLACEHOLDER 0.5 (no L6-H upstream producer;
+                          future L7/L8a will source from L5b 11-model
+                          dispersion diagnostics).
+      regime_stability    PLACEHOLDER 0.5 (no L6-H upstream producer;
+                          future L7/L8a will source from regime-
+                          transition probabilities + persistence
+                          diagnostics).
+      analog_strength     EMPIRICAL from ``reference_class.mean_similarity``
+                          clamped to [0, 1] (Vision §6 BINDING).
+                          When ``reference_class is None``: 0.5 neutral.
+      sample_size_adequacy  EMPIRICAL via ``compute_sample_size_adequacy``
+                          (Vision §10).
+      ood_penalty         EMPIRICAL from ``ood_reserve_fraction``
+                          normalized to [0, 1] via
+                          ``(reserve - 0.05) / (0.15 - 0.05)``.
+
+    Caller MAY override ``data_quality`` / ``model_agreement`` /
+    ``regime_stability`` with explicit values when upstream diagnostics
+    are available; the keyword defaults provide the L6-H placeholder
+    discipline.
+
+    Parameters
+    ----------
+    n_eff
+        Effective sample size at this horizon.
+    horizon
+        Forecast horizon in ``SUPPORTED_HORIZONS``.
+    reference_class
+        Optional L6-E reference class output (provides
+        ``mean_similarity`` for ``analog_strength``).
+    ood_reserve_fraction
+        OOD reserve fraction in [0.05, 0.15] from ``compute_ood_reserve``.
+        Normalized to [0, 1] for the ``ood_penalty`` component.
+    data_quality, model_agreement, regime_stability
+        Optional explicit values when upstream producers are
+        available. Default to ``PLACEHOLDER_NEUTRAL`` (0.5) at L6-H
+        per the documented deferral.
+
+    Returns
+    -------
+    ConfidenceComponents
+        Frozen dataclass; ``__post_init__`` validates each field
+        finite + in [0, 1].
+    """
+    # analog_strength: empirical from reference class when available.
+    if reference_class is not None:
+        analog_strength = max(0.0, min(1.0, reference_class.mean_similarity))
+    else:
+        analog_strength = PLACEHOLDER_NEUTRAL
+
+    # sample_size_adequacy: empirical Vision §10.
+    sample_size_adequacy = compute_sample_size_adequacy(n_eff, horizon)
+
+    # ood_penalty: normalize reserve from [0.05, 0.15] -> [0, 1].
+    ood_penalty_raw = (ood_reserve_fraction - 0.05) / (0.15 - 0.05)
+    ood_penalty = max(0.0, min(1.0, ood_penalty_raw))
+
+    return ConfidenceComponents(
+        data_quality=data_quality,
+        model_agreement=model_agreement,
+        regime_stability=regime_stability,
+        analog_strength=analog_strength,
+        sample_size_adequacy=sample_size_adequacy,
+        ood_penalty=ood_penalty,
+    )
+
+
+# =============================================================================
+# D4 — Conviction Vision §4 10-component formula (distinct from confidence)
+# =============================================================================
+
+
+@dataclass(frozen=True)
+class ConvictionComponents:
+    """Ten-component additive conviction score per Vision v2.1 §4 BINDING.
+
+    Vision §4 critical rule: **conviction CAN BE LOWER THAN confidence**
+    when risk/reward asymmetry is poor. The two scales are independent;
+    conviction depends on edge + asymmetry + supports MINUS tail-risk +
+    crowding + policy uncertainty + forecast decay penalties.
+
+    Each component is a normalized score in [0, 1] with semantics
+    anchored to Vision v2.1 §4:
+
+      edge_score                    Expected return attractiveness vs
+                                    risk-free / opportunity-cost benchmark
+                                    (e.g., normalized Sharpe-like score).
+      asymmetry_score               Right-tail vs left-tail upside skew
+                                    (e.g., (P[r > median + σ] - P[r <
+                                    median - σ]) shifted to [0, 1]).
+      model_agreement               Agreement across L5b 11-model ensemble;
+                                    same surface as the confidence
+                                    component but here it's a conviction
+                                    INPUT not a confidence weight.
+      valuation_support             CAPE / Tobin's Q / ERP support for the
+                                    forecast direction (e.g., when forecast
+                                    is long-equity and CAPE is at <20th
+                                    percentile: high valuation support).
+      trend_confirmation            Trend / breadth / momentum confirmation
+                                    of the forecast direction.
+      liquidity_support             Funding-liquidity + credit-spread support
+                                    for the forecast direction.
+      tail_risk_penalty             Tail-risk magnitude (VaR/CVaR breach
+                                    probability; -15% weight).
+      crowding_penalty              Positioning + flow concentration
+                                    (-10% weight).
+      policy_uncertainty_penalty    Policy + Lucas-critique uncertainty
+                                    (-10% weight).
+      forecast_decay_penalty        Forecast-skill decay over the horizon
+                                    (e.g., decay from R² at 1Y -> R² at
+                                    10Y normalized; -10% weight).
+
+    Invariants (``__post_init__``):
+      - All fields finite + in [0, 1].
+    """
+
+    edge_score: float
+    asymmetry_score: float
+    model_agreement: float
+    valuation_support: float
+    trend_confirmation: float
+    liquidity_support: float
+    tail_risk_penalty: float
+    crowding_penalty: float
+    policy_uncertainty_penalty: float
+    forecast_decay_penalty: float
+
+    def __post_init__(self) -> None:
+        for f in fields(self):
+            _validate_component(getattr(self, f.name), f.name)
+
+
+def compute_conviction_score(components: ConvictionComponents) -> float:
+    """Compute Vision §4 10-component conviction score in [1, 10].
+
+    Vision v2.1 §4 BINDING formula::
+
+        raw_0_1 = clamp(
+            0.20 * edge_score
+          + 0.20 * asymmetry_score
+          + 0.15 * model_agreement
+          + 0.15 * valuation_support
+          + 0.10 * trend_confirmation
+          + 0.10 * liquidity_support
+          - 0.15 * tail_risk_penalty
+          - 0.10 * crowding_penalty
+          - 0.10 * policy_uncertainty_penalty
+          - 0.10 * forecast_decay_penalty,
+            0, 1
+        )
+        return 1.0 + 9.0 * raw_0_1   # map to [1, 10]
+
+    Parameters
+    ----------
+    components
+        ``ConvictionComponents`` dataclass with the 10 Vision §4 fields.
+
+    Returns
+    -------
+    float
+        Conviction in [1, 10] = [CONVICTION_MIN, CONVICTION_MAX].
+    """
+    raw_0_1 = (
+        CONVICTION_WEIGHT_EDGE * components.edge_score
+        + CONVICTION_WEIGHT_ASYMMETRY * components.asymmetry_score
+        + CONVICTION_WEIGHT_MODEL_AGREEMENT * components.model_agreement
+        + CONVICTION_WEIGHT_VALUATION * components.valuation_support
+        + CONVICTION_WEIGHT_TREND * components.trend_confirmation
+        + CONVICTION_WEIGHT_LIQUIDITY * components.liquidity_support
+        + CONVICTION_WEIGHT_TAIL_RISK * components.tail_risk_penalty
+        + CONVICTION_WEIGHT_CROWDING * components.crowding_penalty
+        + CONVICTION_WEIGHT_POLICY * components.policy_uncertainty_penalty
+        + CONVICTION_WEIGHT_DECAY * components.forecast_decay_penalty
+    )
+    raw_0_1 = max(0.0, min(1.0, raw_0_1))
+    return CONVICTION_MIN + (CONVICTION_MAX - CONVICTION_MIN) * raw_0_1
+
+
+def derive_conviction_components(
+    confidence: float,
+    n_eff: int,
+    horizon: int,
+    reference_class: Optional[ReferenceClass],
+    point_estimate: float,
+    edge_score: float = PLACEHOLDER_NEUTRAL,
+    asymmetry_score: float = PLACEHOLDER_NEUTRAL,
+    model_agreement: float = PLACEHOLDER_NEUTRAL,
+    valuation_support: float = PLACEHOLDER_NEUTRAL,
+    trend_confirmation: float = PLACEHOLDER_NEUTRAL,
+    liquidity_support: float = PLACEHOLDER_NEUTRAL,
+    tail_risk_penalty: float = PLACEHOLDER_NEUTRAL,
+    crowding_penalty: float = PLACEHOLDER_NEUTRAL,
+    policy_uncertainty_penalty: float = PLACEHOLDER_NEUTRAL,
+    forecast_decay_penalty: Optional[float] = None,
+) -> ConvictionComponents:
+    """Build ``ConvictionComponents`` from available pipeline inputs.
+
+    Component sourcing (L6-H):
+
+      edge_score                    PLACEHOLDER 0.5 (Sharpe-like score
+                                    requires forecast σ + benchmark;
+                                    future L7).
+      asymmetry_score               PLACEHOLDER 0.5 (requires return
+                                    distribution skew estimate; future
+                                    L7 Kelly-fraction surface).
+      model_agreement               PLACEHOLDER 0.5 (same as confidence;
+                                    future L7 from L5b ensemble
+                                    dispersion).
+      valuation_support             PLACEHOLDER 0.5 (requires CAPE/Tobin
+                                    percentile linked to forecast
+                                    direction; future L7).
+      trend_confirmation            PLACEHOLDER 0.5 (requires breadth/
+                                    momentum diagnostics; future L7).
+      liquidity_support             PLACEHOLDER 0.5 (requires credit
+                                    spread / funding liquidity; future
+                                    L7).
+      tail_risk_penalty             PLACEHOLDER 0.5 (requires VaR/CVaR
+                                    breach probability; future L7).
+      crowding_penalty              PLACEHOLDER 0.5 (requires positioning
+                                    + flow concentration; future L7).
+      policy_uncertainty_penalty    PLACEHOLDER 0.5 (Lucas critique
+                                    surface; L6-H D5 LucasCritiqueDiagnostics
+                                    integration deferred to caller).
+      forecast_decay_penalty        EMPIRICAL when explicit value passed;
+                                    else derived from horizon (longer
+                                    horizon → higher decay penalty:
+                                    0.0 at 1Y, 0.1 at 3Y, 0.25 at 5Y,
+                                    0.5 at 10Y per Strategic L6-H
+                                    horizon-decay default).
+
+    Caller MAY override any component with an explicit value when
+    upstream diagnostics are available.
 
     Parameters
     ----------
     confidence
-        Confidence value in [0.0, 1.0].
-    reference_class
-        Optional ``ReferenceClass``. When provided AND
-        ``mean_similarity < WEAK_ANALOG_THRESHOLD``, the weak-analog
-        penalty applies.
+        Post-cascade confidence value (reserved for future caller-
+        side adjustments; not used in the L6-H derivation directly).
     n_eff
-        Effective sample size. When ``n_eff < SAMPLE_SIZE_PENALTY_THRESHOLD``,
-        the sample-size penalty applies.
+        Effective sample size (reserved; not used directly).
+    horizon
+        Forecast horizon in ``SUPPORTED_HORIZONS``.
+    reference_class
+        Optional L6-E reference class (reserved; not used directly at
+        L6-H — analog_strength surfaces via confidence components,
+        not conviction).
+    point_estimate
+        Forecast point estimate (reserved; not used directly).
+    edge_score, asymmetry_score, ..., crowding_penalty,
+    policy_uncertainty_penalty
+        Optional explicit values; defaults are ``PLACEHOLDER_NEUTRAL``.
+    forecast_decay_penalty
+        Optional explicit value; ``None`` → derive from horizon per
+        Strategic L6-H default schedule.
 
     Returns
     -------
-    float
-        Conviction in [CONVICTION_MIN, CONVICTION_MAX] = [1.0, 10.0].
-
-    Raises
-    ------
-    ValueError
-        If ``confidence`` outside [0, 1] or ``n_eff < 0``.
+    ConvictionComponents
+        Frozen dataclass; ``__post_init__`` validates each field.
     """
-    if not (0.0 <= confidence <= 1.0):
-        raise ValueError(f"confidence {confidence} outside [0, 1]")
-    if n_eff < 0:
-        raise ValueError(f"n_eff must be non-negative; got {n_eff}")
+    # Argument-existence guard for typing tools (not used directly at L6-H;
+    # surfaces explicitly that the values pass through to future refinement).
+    del confidence, n_eff, reference_class, point_estimate
 
-    # Linear scaling [1, 10].
-    conviction_base = 1.0 + 9.0 * confidence
+    # forecast_decay_penalty: empirical from horizon if not overridden.
+    if forecast_decay_penalty is None:
+        decay_default_by_horizon = {1: 0.0, 3: 0.10, 5: 0.25, 10: 0.50}
+        if horizon not in decay_default_by_horizon:
+            raise KeyError(
+                f"horizon {horizon} not in {sorted(decay_default_by_horizon.keys())}"
+            )
+        forecast_decay_penalty = decay_default_by_horizon[horizon]
 
-    # Sample size penalty (Vision §10 N_eff sensitivity).
-    if n_eff < SAMPLE_SIZE_PENALTY_THRESHOLD:
-        conviction_base *= SAMPLE_SIZE_PENALTY_FACTOR
-
-    # Weak analog penalty (Vision §6 reference class quality gate).
-    if (
-        reference_class is not None
-        and reference_class.mean_similarity < WEAK_ANALOG_THRESHOLD
-    ):
-        conviction_base *= WEAK_ANALOG_PENALTY_FACTOR
-
-    # Clamp to Vision §4 conviction range.
-    return float(
-        min(max(conviction_base, CONVICTION_MIN), CONVICTION_MAX)
+    return ConvictionComponents(
+        edge_score=edge_score,
+        asymmetry_score=asymmetry_score,
+        model_agreement=model_agreement,
+        valuation_support=valuation_support,
+        trend_confirmation=trend_confirmation,
+        liquidity_support=liquidity_support,
+        tail_risk_penalty=tail_risk_penalty,
+        crowding_penalty=crowding_penalty,
+        policy_uncertainty_penalty=policy_uncertainty_penalty,
+        forecast_decay_penalty=forecast_decay_penalty,
     )
