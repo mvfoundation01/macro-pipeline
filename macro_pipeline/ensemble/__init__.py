@@ -12,8 +12,8 @@ L6-A     MetricMetadata + registry    (COMPLETE — l6-a-accept @ e47ce15)
 L6-B     TripleDecomposition + cap __post_init__  (COMPLETE — l6-b-accept @ b3297a5)
 L6-C     TripleSigma + cumulative scaling caveats  (COMPLETE — l6-c-accept @ fae2b16)
 L6-D     OOD reserve + confidence cap helpers  (COMPLETE — l6-d-accept @ 4fdcf64)
-L6-E     Reference Class Forecasting module  (THIS SUB-PHASE)
-L6-F     Ensemble aggregator
+L6-E     Reference Class Forecasting module  (COMPLETE — l6-e-accept @ 2ddbaa4)
+L6-F     Ensemble aggregator  (THIS SUB-PHASE)
 L6-G     Measurement coverage pass
 L6-H     Gate 30 + retrospective + sprint closure
 
@@ -76,6 +76,13 @@ from macro_pipeline.ensemble.rcf import (
     find_reference_class,
     standardize_macro_state,
 )
+from macro_pipeline.ensemble.aggregator import (
+    SUPPORTED_HORIZONS,
+    EnsembleResult,
+    ForecastInputs,
+    HorizonResult,
+    aggregate_ensemble,
+)
 
 __all__ = [
     # L6-A schema + registry
@@ -115,4 +122,10 @@ __all__ = [
     "cosine_similarity",
     "find_reference_class",
     "standardize_macro_state",
+    # L6-F Ensemble Aggregator
+    "SUPPORTED_HORIZONS",
+    "EnsembleResult",
+    "ForecastInputs",
+    "HorizonResult",
+    "aggregate_ensemble",
 ]
