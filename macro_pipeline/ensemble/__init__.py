@@ -10,8 +10,8 @@ Sub-phase ledger
 L6-PREP  authority docs cherry-pick  (COMPLETE — l6-prep-accept @ ca38c0a)
 L6-A     MetricMetadata + registry    (COMPLETE — l6-a-accept @ e47ce15)
 L6-B     TripleDecomposition + cap __post_init__  (COMPLETE — l6-b-accept @ b3297a5)
-L6-C     TripleSigma + cumulative scaling caveats  (THIS SUB-PHASE)
-L6-D     OOD reserve + confidence cap helpers
+L6-C     TripleSigma + cumulative scaling caveats  (COMPLETE — l6-c-accept @ fae2b16)
+L6-D     OOD reserve + confidence cap helpers  (THIS SUB-PHASE)
 L6-E     Reference Class Forecasting module
 L6-F     Ensemble aggregator
 L6-G     Measurement coverage pass
@@ -57,6 +57,13 @@ from macro_pipeline.ensemble.triple_sigma import (
     SIGMA_TYPES,
     TripleSigma,
 )
+from macro_pipeline.ensemble.ood_and_caps import (
+    OOD_RESERVE_CEILING,
+    OOD_RESERVE_FLOOR,
+    OODConditions,
+    compute_ood_reserve,
+    enforce_confidence_caps,
+)
 
 __all__ = [
     # L6-A schema + registry
@@ -79,4 +86,10 @@ __all__ = [
     "SIGMA_MAX_REASONABLE",
     "SIGMA_TYPES",
     "TripleSigma",
+    # L6-D OOD reserve + confidence cap helpers
+    "OODConditions",
+    "OOD_RESERVE_CEILING",
+    "OOD_RESERVE_FLOOR",
+    "compute_ood_reserve",
+    "enforce_confidence_caps",
 ]
