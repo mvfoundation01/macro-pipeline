@@ -232,4 +232,26 @@ L5b-E is OUTSIDE this envelope per Strategic disposition 4 at L5b-E ACCEPT — s
 
 ---
 
+## Sync events (informal; no AP-AUTH codification per AP-AUTH-46 guard)
+
+### 2026-05-15 — L6-PREP authority docs sync
+
+Vision v2.0 + Pipeline Guide v2.0 plus three review docs cherry-picked from `main:4984ec9` to `claude/layer-5-build` to close the institutional gap discovered at L6 read-and-plan (Track A Phase 0 grep audit).
+
+Files synced (five total):
+
+- `docs/build-plans/00_VISION_AND_PHILOSOPHY_v2.md`
+- `docs/build-plans/01_CLAUDE_CODE_PIPELINE_GUIDE_v2.md`
+- `docs/build-plans/02_CHATGPT_METHODOLOGY_REVIEW_v2.md`
+- `docs/build-plans/03_CODEX_CODE_REVIEW_v2.md`
+- `docs/build-plans/04_STRATEGIC_PM_INSTRUCTIONS_v2.md`
+
+Rationale: L1.7 plus L5b sprints executed without these binding authority documents on-branch; Track A read them via `git show main:` pattern. L6 work directly implements Vision §3 through §14 plus Pipeline Guide §8 templates; in-branch availability is essential.
+
+Mechanism: Option B copy plus manual commit (mirrors L5b-G AP-AUTH-49 cherry-pick precedent in the reverse direction main into claude/layer-5-build).
+
+This is documented as an informal sync event, NOT a new AP-AUTH codification. The discipline of cross-branch doc availability check at the read-and-plan boundary is captured implicitly via AP-AUTH-50 upstream grep practice; AP-AUTH-46 gratuitous-codification guard precludes promoting a single-instance event into the formal AP-AUTH register.
+
+---
+
 **END — ap_register.md (AP-AUTH-50 + AP-AUTH-51 + AP-AUTH-52 + AP-AUTH-53 + AP-AUTH-54 + AP-AUTH-55 entries; cumulative provenance §0)**
