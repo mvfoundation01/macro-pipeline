@@ -163,6 +163,14 @@ class ForecastUIRenderer:
         self._env.filters["bps"] = _bps_filter
         self._env.filters["num"] = _num_filter
         self._env.filters["signed_class"] = _signed_class_filter
+        # L9 D5 performance: template cache for repeated renders.
+        self._template_cache: dict[str, Any] = {}
+
+    def _get_template_cached(self, template_name: str) -> Any:
+        """L9 D5 — Cached template lookup; avoids repeated FileSystemLoader hits."""
+        if template_name not in self._template_cache:
+            self._template_cache[template_name] = self._env.get_template(template_name)
+        return self._template_cache[template_name]
 
     def render_full_report(self, partition: str) -> Path:
         """Render all 8 pages for a given month partition.
@@ -235,7 +243,7 @@ class ForecastUIRenderer:
             ("educational/index.html", "educational/index.html"),
         ]
         for template_name, output_name in page_template_pairs:
-            tmpl = self._env.get_template(template_name)
+            tmpl = self._get_template_cached(template_name)  # L9 D5 cache
             html = tmpl.render(**common_ctx)
             (output_path / output_name).write_text(html, encoding="utf-8")
 

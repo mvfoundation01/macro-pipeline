@@ -373,4 +373,71 @@ This is documented as an informal sync event, NOT a new AP-AUTH codification. Th
 
 ---
 
-**END — ap_register.md (AP-AUTH-50 + AP-AUTH-51 + AP-AUTH-52 + AP-AUTH-53 + AP-AUTH-54 + AP-AUTH-55 + AP-AUTH-56 + AP-AUTH-57 + AP-AUTH-58 + AP-AUTH-59 entries; cumulative provenance §0)**
+## AP-AUTH-60 (NEW; codified 2026-05-16 at L9) — ACCELERATION PROTOCOL v2.0 pattern stack
+
+**Symptom**: Without a documented institutional acceleration protocol, sub-phase decomposition defaults to a slow conservative pattern (5-12 sub-phases per layer; sequential ACCEPTs; 50-day median delivery). When V's mandate explicitly requests speed plus quality preservation, ad-hoc acceleration introduces risk of dropping safeguards (defense-in-depth, PD18 floor, AP-AUTH discipline). Need a codified pattern stack that compresses wall-clock delivery while preserving every institutional quality safeguard.
+
+**Surfaced**: Pattern emerged organically during L6-K (introducing v1.0 with 5 levers) and matured at L8 + L9 (extending to v2.0 with 10 levers). V's standing delegation 2026-05-16 ("self-decide optimal then deliver optimal prompt to claude code for me") enabled Strategic Track B to compress L7 + L8 + L9 each into single comprehensive sub-phases, ultimately delivering FULL-STACK DELIVERABLE v1 within the same day as L7 ACCEPT and FULL-STACK DELIVERABLE v2 within ~1 hour after L8 ACCEPT. Codification at L9 captures the empirically-validated pattern.
+
+**Mitigation discipline (10 levers, v2.0)**:
+
+1. **Scope merging**: consolidate adjacent sub-phases when deliverables share dependencies (e.g., L6-K consolidated 7 deliverables that would have been L6-K + L6-L under pre-acceleration plan)
+2. **R8 SKIP conditional**: skip reviewer cycle when prior sub-phase closure quality is high (Strategic prior of zero point eight or higher on SKIP); V override available
+3. **Strategic parallel work**: pre-author next pre-flight in current ACCEPT response so V receives it without round-trip
+4. **Single sub-phase per layer when feasible**: L7 + L8 + L9 each shipped as one ACCEPT instead of N-sub-phase decomposition (saves N minus 1 round-trips)
+5. **Densification**: increase deliverables per sub-phase from seven to ten or twelve via better task granularity (NOT scope creep; each deliverable retains explicit acceptance criteria)
+6. **Code scaffolding density**: Strategic provides full module templates in pre-flight (not just signatures); Track A adjusts versus writes from scratch (one point five to two times speedup observed)
+7. **Tightened gates**: twenty or more ACCEPT gates per densified sub-phase (was sixteen); PD18 strict forty percent NEG floor (no relax in v2.0)
+8. **Triple-tag push discipline**: push branch FIRST then create plus push tags separately (L6-J race-condition lesson: chained `git tag` plus `git push` created tag at wrong commit when precommit blocked the in-flight commit)
+9. **Section 0-prime worktree enforcement** (AP-AUTH-59) inherited every sub-phase: path-prefix every git operation via `git -C` or `cd <build-path> && ...`
+10. **Pre-emptive triple-tag at single-sub-phase layer-complete**: when a single sub-phase closes an entire layer, push three tags (sub-phase-accept + layer-complete + optional milestone-deliverable) in one ACCEPT cycle
+
+**Quality safeguards (BINDING; never compromise)**:
+
+1. Sixteen or more ACCEPT gates (twenty or more for densified sub-phases)
+2. PD18 forty percent NEG floor (STRICT in v2.0; no relax permitted)
+3. Defense-in-depth Test 12 PASS (PD20 critical invariant)
+4. Three-field conviction (Xác suất / Tin cậy / Tin chắc plus binding constraint named)
+5. Vision section X binding compliance
+6. Section 0-prime worktree enforcement (AP-AUTH-59)
+7. AP-AUTH register integrity (no gratuitous codifications per AP-AUTH-46)
+8. Atomic commit discipline (single commit per sub-phase)
+9. Path-prefix every cross-worktree operation
+10. Push verification at ACCEPT (AP-AUTH-55)
+
+**Calendar evidence** (empirical T-zero-relative validation):
+
+- Pre-acceleration baseline (Strategic prior): T plus fifty days median to full-stack deliverable
+- ACCELERATION PROTOCOL v1.0 (introduced at L6-K): T plus seventeen days
+- ACCELERATION PROTOCOL v2.0 (introduced at L8): T plus zero days (same day as L7 ACCEPT)
+- L9 (this commit): T plus zero days (single sub-phase polish plus retro plus codification)
+
+**When to apply**:
+
+- Apply when convergence variance is at minus sixty percent rolling mean or better (institutional pattern stable)
+- Apply when V's mandate explicitly requests acceleration with quality preservation
+- Apply when remaining deliverables are cohesive (e.g., L7 scheduling plus alerting plus persistence plus producers are tightly coupled; L8 UI plus academic plus educational share rendering surface)
+
+**Anti-pattern signals (do NOT apply)**:
+
+- Do NOT batch tests post-commit (rejected; violates quality safeguards)
+- Do NOT skip non-critical documentation (rejected; violates institutional discipline + AP-AUTH-50 + AP-AUTH-51 grep evidence requirements)
+- Do NOT combine ALL remaining layers into one sub-phase (rejected; cognitive overload + scope incoherence)
+- Do NOT reduce ACCEPT gate count below sixteen (rejected; quality compromise)
+- Do NOT relax PD18 forty percent NEG floor (rejected; relaxation discontinued at v2.0; integration-heavy sub-phases must add supplemental NEG tests to maintain floor)
+- Do NOT skip AP-AUTH register codifications when patterns reach two-instance threshold (rejected; AP-AUTH-46 second-instance rule still binding under v2.0)
+
+**Cross-reference**:
+
+- L6-K commit `9ab771d` (v1.0 introduction; 5 levers + 16 gates)
+- L7 commit `facd119` (v1.0 lever 4 demonstration: single sub-phase per layer)
+- L8 commit `cc0550a` (v2.0 introduction; 10 levers + 20+ gates + PD18 strict + FULL-STACK DELIVERABLE v1)
+- L9 commit (this commit; v2.0 codification + FULL-STACK DELIVERABLE v2)
+- `docs/build-plans/L1_TO_L8_CUMULATIVE_RETROSPECTIVE.md` (L9 D6 deliverable; full sprint history)
+- AP-AUTH-46 (gratuitous-codification guard; AP-AUTH-60 EXCEPTION authorized this cycle per L9 retrospective scope per Strategic disposition)
+- AP-AUTH-55 (push verification; lever 8 generalizes branch-first-then-tag discipline)
+- AP-AUTH-56 + AP-AUTH-57 + AP-AUTH-58 + AP-AUTH-59 (v1.0/v2.0 institutional precursors)
+
+---
+
+**END — ap_register.md (AP-AUTH-50 + AP-AUTH-51 + AP-AUTH-52 + AP-AUTH-53 + AP-AUTH-54 + AP-AUTH-55 + AP-AUTH-56 + AP-AUTH-57 + AP-AUTH-58 + AP-AUTH-59 + AP-AUTH-60 entries; cumulative provenance §0)**

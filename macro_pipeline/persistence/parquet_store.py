@@ -218,3 +218,51 @@ class ParquetForecastStore:
             partition = name[len(prefix):-len(suffix)]
             partitions.append(partition)
         return sorted(partitions)
+
+    def read_range(self, partitions: List[str]) -> List[ForecastRecord]:
+        """L9 D5 — Read multiple partitions in one pyarrow.dataset scan.
+
+        Faster than calling read() per partition because it leverages pyarrow's
+        multi-file dataset reader instead of opening + parsing each parquet
+        file individually.
+
+        Parameters
+        ----------
+        partitions
+            List of ``YYYY-MM`` partition strings.
+
+        Returns
+        -------
+        list[ForecastRecord]
+            Concatenated records from all existing partitions. Skips
+            partitions whose files don't exist (returns no records for them).
+        """
+        if not partitions:
+            return []
+        for p in partitions:
+            # Validate partition format eagerly so caller gets a clear error.
+            if not p or len(p) != 7 or p[4] != "-":
+                raise ValueError(
+                    f"partition must be 'YYYY-MM' format; got {p!r}"
+                )
+        paths = [self._partition_path(p) for p in partitions]
+        existing = [str(p) for p in paths if p.exists()]
+        if not existing:
+            return []
+        # Lazy import: pyarrow.dataset only loaded when read_range() called.
+        import pyarrow.dataset as ds
+        dataset = ds.dataset(existing, format="parquet")
+        df = dataset.to_table().to_pandas()
+        # Restore timezone-aware datetimes (same logic as read()).
+        records: List[ForecastRecord] = []
+        for row in df.to_dict(orient="records"):
+            ts = row["timestamp_utc"]
+            if isinstance(ts, pd.Timestamp):
+                if ts.tzinfo is None:
+                    ts = ts.tz_localize("UTC")
+                ts = ts.to_pydatetime()
+            elif isinstance(ts, datetime) and ts.tzinfo is None:
+                ts = ts.replace(tzinfo=timezone.utc)
+            row["timestamp_utc"] = ts
+            records.append(ForecastRecord(**row))
+        return records

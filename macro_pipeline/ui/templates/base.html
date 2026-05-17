@@ -7,11 +7,12 @@
 <link rel="stylesheet" href="static/css/terminal.css">
 </head>
 <body>
-<div class="terminal-header">
+<a href="#main-content" class="skip-to-content">Skip to main content</a>
+<header class="terminal-header" role="banner">
     <span>FORECAST TERMINAL &middot; {{ partition }}</span>
     <span>GEN {{ generated_at }}</span>
-</div>
-<nav class="terminal-nav">
+</header>
+<nav class="terminal-nav" role="navigation" aria-label="Main report navigation">
     <a href="index.html">Index</a> &middot;
     <a href="forecast_results.html">Forecasts</a> &middot;
     <a href="macro_snapshot.html">Macro</a> &middot;
@@ -22,12 +23,12 @@
     <a href="academic/index.html">Academic</a> &middot;
     <a href="educational/index.html">Educational</a>
 </nav>
-<main>
+<main id="main-content" role="main">
 {% block content %}{% endblock %}
-<div class="terminal-footer">
+<footer class="terminal-footer" role="contentinfo">
     Macro pipeline forecast terminal &middot; Generated {{ generated_at }} &middot;
     All times UTC &middot; Vision v2.1 binding
-</div>
+</footer>
 </main>
 <script src="static/js/progressive_disclosure.js"></script>
 </body>

@@ -32,8 +32,15 @@ def test_l7_built_producer_slots_count() -> None:
 
 
 def test_l8a_deferred_slots_count() -> None:
-    """POS: 6 L8a-deferred producer slots."""
-    assert len(L8A_DEFERRED_SLOTS) == 6
+    """POS: L8a-deferred producer slot count (L7: 6; post-L9 D1: 1; only
+    forecast_decay_penalty remains UI-deferred).
+
+    L9 D1 closed 6 of the L7-deferred slots with producer-backed values:
+    asymmetry_score, trend_confirmation, liquidity_support,
+    tail_risk_penalty, crowding_penalty, policy_uncertainty_penalty.
+    """
+    assert len(L8A_DEFERRED_SLOTS) == 1
+    assert L8A_DEFERRED_SLOTS == frozenset({"forecast_decay_penalty"})
 
 
 def test_slot_sets_disjoint() -> None:

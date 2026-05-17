@@ -53,6 +53,14 @@ from .conviction_producers import (
     produce_edge_score,
     produce_valuation_support,
 )
+from .l9_producers import (
+    produce_asymmetry_score,
+    produce_crowding_penalty,
+    produce_liquidity_support,
+    produce_policy_uncertainty_penalty,
+    produce_tail_risk_penalty,
+    produce_trend_confirmation,
+)
 
 # Slot-to-producer mapping (used by derive_*_components builders).
 L7_BUILT_PRODUCER_SLOTS = frozenset({
@@ -63,7 +71,8 @@ L7_BUILT_PRODUCER_SLOTS = frozenset({
     "valuation_support",
 })
 
-L8A_DEFERRED_SLOTS = frozenset({
+# L9 D1 — six previously-deferred slots now producer-backed.
+L9_BUILT_PRODUCER_SLOTS = frozenset({
     "asymmetry_score",
     "trend_confirmation",
     "liquidity_support",
@@ -72,12 +81,29 @@ L8A_DEFERRED_SLOTS = frozenset({
     "policy_uncertainty_penalty",
 })
 
+# Combined view: 11 of 12 component slots producer-backed at L9.
+ALL_BUILT_PRODUCER_SLOTS = L7_BUILT_PRODUCER_SLOTS | L9_BUILT_PRODUCER_SLOTS
+
+# L8a-deferred slots after L9: only forecast_decay_penalty remains
+# (UI-driven decay model deferred to optional L10+ UI sprint).
+L8A_DEFERRED_SLOTS = frozenset({
+    "forecast_decay_penalty",
+})
+
 __all__ = [
+    "ALL_BUILT_PRODUCER_SLOTS",
     "L7_BUILT_PRODUCER_SLOTS",
     "L8A_DEFERRED_SLOTS",
+    "L9_BUILT_PRODUCER_SLOTS",
+    "produce_asymmetry_score",
+    "produce_crowding_penalty",
     "produce_data_quality",
     "produce_edge_score",
+    "produce_liquidity_support",
     "produce_model_agreement",
+    "produce_policy_uncertainty_penalty",
     "produce_regime_stability",
+    "produce_tail_risk_penalty",
+    "produce_trend_confirmation",
     "produce_valuation_support",
 ]

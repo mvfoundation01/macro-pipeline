@@ -191,10 +191,11 @@ class ReplicationKitBuilder:
         readme = self._build_readme(records, config)
         (kit_dir / "README.md").write_text(readme, encoding="utf-8")
 
-        # 5. Zip.
+        # 5. Zip. L9 D5 — compresslevel=9 for tighter compression on
+        # JSON/markdown content (negligible CPU cost; smaller download size).
         zip_path = config.output_dir / f"{kit_name}.zip"
         with zipfile.ZipFile(
-            zip_path, "w", zipfile.ZIP_DEFLATED
+            zip_path, "w", zipfile.ZIP_DEFLATED, compresslevel=9
         ) as zf:
             for file in kit_dir.rglob("*"):
                 if file.is_file():

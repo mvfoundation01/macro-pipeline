@@ -144,3 +144,574 @@ explanations:
     L1: "Downloadable package containing everything needed to reproduce this forecast."
     L2: "Includes forecast records JSON, methodology citations, data lineage summary, code SHA, README with reproducibility steps."
     L3: "Vision section 14 BINDING Replication and Audit Discipline. L8 D8 ReplicationKitBuilder generates zip per partition; metadata fields per L6-J D4 MetricLineage."
+
+  # =====================================================================
+  # L9 D2 — Vision §3 ninety-measurement registry coverage (90/90).
+  # Each entry below maps a Vision §3 registry metric_id to its L1/L2/L3
+  # progressive disclosure explanation. Per Strategic L9 single
+  # comprehensive pre-flight 2026-05-16 D2.
+  # =====================================================================
+
+  # §3.1 Probability measures (8)
+
+  - metric_id: cumulative_distribution_function
+    vision_section: "§3.1"
+    L1: "The chance the outcome is at or below a given value."
+    L2: "F(x) = P(X <= x); converts a forecast distribution into single-number tail probabilities."
+    L3: "F: R -> [0, 1], non-decreasing, right-continuous, F(-inf)=0, F(+inf)=1. Empirical F_n converges to F per Glivenko-Cantelli."
+
+  - metric_id: probability_conditional
+    vision_section: "§3.1"
+    L1: "How likely outcome A is given that outcome B already happened."
+    L2: "P(A|B) = P(A and B) / P(B) when P(B) > 0. Core to Bayesian reasoning."
+    L3: "Defined on the probability space (Omega, F, P); satisfies sigma-additivity in A; drives Bayes' theorem."
+
+  - metric_id: probability_joint
+    vision_section: "§3.1"
+    L1: "Chance that two outcomes both happen."
+    L2: "P(A and B); reduces to P(A) times P(B) when independent."
+    L3: "For independent events: P(A intersect B) = P(A) times P(B). General case requires conditional structure."
+
+  - metric_id: probability_outcome
+    vision_section: "§3.1"
+    L1: "How likely a specific outcome is to occur."
+    L2: "P(outcome); the basic probability of an event in the forecast distribution."
+    L3: "P: F -> [0, 1] sigma-additive measure per Kolmogorov axioms."
+
+  - metric_id: probability_union
+    vision_section: "§3.1"
+    L1: "Chance that at least one of two outcomes happens."
+    L2: "P(A or B) = P(A) + P(B) - P(A and B) per inclusion-exclusion principle."
+    L3: "Generalizes to n events via inclusion-exclusion: |union A_i| = sum |A_i| - sum |A_i intersect A_j| + ..."
+
+  - metric_id: quantile_function
+    vision_section: "§3.1"
+    L1: "The value below which a given percentage of outcomes fall."
+    L2: "q_p such that P(X <= q_p) = p; inverse of CDF; defines VaR + percentiles."
+    L3: "Q(p) = inf{x : F(x) >= p}. Empirical quantile estimators include order statistics + spline interpolation."
+
+  - metric_id: survival_function
+    vision_section: "§3.1"
+    L1: "The chance the outcome is greater than a chosen value."
+    L2: "S(x) = 1 - F(x) = P(X > x); used for upside / tail / extreme-value analysis."
+    L3: "Right-tail complement of CDF. Hazard function lambda(x) = f(x) / S(x). Used in survival analysis + extreme value theory."
+
+  - metric_id: tail_probability
+    vision_section: "§3.1"
+    L1: "Probability that outcome exceeds a specific extreme value."
+    L2: "P(X > x) for x in upper tail; key for downside risk + VaR / CVaR / EVT analysis."
+    L3: "Asymptotic tail behavior characterized by extreme value distributions (Frechet / Gumbel / Weibull). Heavy-tail diagnostics via Hill estimator."
+
+  # §3.2 Uncertainty measures (7)
+
+  - metric_id: analog_dispersion_sigma
+    vision_section: "§5"
+    L1: "How widely historical analog periods differed in outcomes."
+    L2: "Standard deviation of historical realized outcomes across reference-class analogs. Captures analog-based uncertainty."
+    L3: "Vision §5 BINDING third sigma of Triple sigma Reporting; computed from L6-E reference_class.neighbors realized returns."
+
+  - metric_id: confidence_interval
+    vision_section: "§3.2"
+    L1: "Range that should contain the true value most of the time."
+    L2: "Frequentist (1-alpha) CI: covers the true parameter with probability (1-alpha) under repeated sampling."
+    L3: "CI = [theta_hat - z_{alpha/2} * se(theta_hat), theta_hat + z_{alpha/2} * se(theta_hat)] for asymptotically normal estimators."
+
+  - metric_id: credible_interval
+    vision_section: "§3.2"
+    L1: "Bayesian range that contains the true value with high probability."
+    L2: "Bayesian (1-alpha) credible interval: posterior probability (1-alpha) that the parameter is in the interval."
+    L3: "[L, U] s.t. integral_L^U p(theta|D) d theta = 1 - alpha. HPD interval is the shortest such interval."
+
+  - metric_id: forecast_error_sigma
+    vision_section: "§5"
+    L1: "How uncertain the model is about its central forecast."
+    L2: "Standard deviation of the model's forecast distribution around the point estimate. Captures model-based uncertainty."
+    L3: "Vision §5 BINDING second sigma of Triple sigma Reporting. Derived from L5b ensemble residual variance + cross-model dispersion."
+
+  - metric_id: highest_posterior_density
+    vision_section: "§3.10"
+    L1: "Densest range containing a specified posterior probability."
+    L2: "HPD interval contains (1-alpha) of posterior mass + is shortest such interval; informative for skewed posteriors."
+    L3: "HPD(alpha) = {theta : p(theta|D) >= k_alpha} where k_alpha chosen s.t. integral equals 1-alpha."
+
+  - metric_id: prediction_interval
+    vision_section: "§3.2"
+    L1: "Range expected to contain the next observed value."
+    L2: "Wider than CI; accounts for both parameter uncertainty + residual variance of future observation."
+    L3: "PI = [y_hat - z_{alpha/2} * sqrt(se(y_hat)^2 + sigma_eps^2), ...]. For OLS: sigma_eps^2 = MSE."
+
+  - metric_id: standard_deviation
+    vision_section: "§3.2"
+    L1: "Average distance from the mean; measures spread."
+    L2: "sigma = sqrt(E[(X - mu)^2]); sample SD uses n-1 denominator (Bessel's correction)."
+    L3: "Vision §5 cumulative scaling: cumulative_sigma ~= ann_sigma * sqrt(t); approximation may fail under regime shifts."
+
+  # §3.3 Confidence + Conviction (6)
+
+  - metric_id: confidence_score_pct
+    vision_section: "§4"
+    L1: "How sure the model is, as a 0-100 percent score."
+    L2: "Confidence percent = 100 * Vision §4 BINDING additive formula output, capped per Vision §10."
+    L3: "Vision §4: Confidence = 100 * (0.25*DQ + 0.25*MA + 0.20*RS + 0.15*AS + 0.10*SS - 0.05*OOD), capped."
+
+  - metric_id: conviction_score
+    vision_section: "§4"
+    L1: "Position-sizing score from 1 (very low) to 10 (highest)."
+    L2: "Vision §4 BINDING 10-component conviction; distinct from confidence; can be lower (poor asymmetry) or higher (asymmetric upside)."
+    L3: "Conviction = 1 + 9 * clamp(sum positive components - sum penalties, 0, 1) per Vision §4 BINDING formula."
+
+  - metric_id: edge
+    vision_section: "§3.3 + §4"
+    L1: "Expected outperformance vs benchmark."
+    L2: "Edge = expected return - risk-free rate or benchmark return; Sharpe-like normalization to [0, 1] in conviction edge_score component."
+    L3: "Conviction edge_score producer at L7 D3: edge = 1/(1+exp(-((point - rfr) / sigma)))."
+
+  - metric_id: fractional_kelly
+    vision_section: "§3.3"
+    L1: "Conservative version of optimal bet size (typically 25-50 percent of full Kelly)."
+    L2: "Fractional Kelly = k * f* where k in [0.25, 0.50] reduces risk of ruin from misestimation."
+    L3: "Optimal under power utility + parameter uncertainty; Kelly f* assumes known distribution; fractional Kelly hedges estimation error."
+
+  - metric_id: kelly_fraction
+    vision_section: "§3.3"
+    L1: "Theoretically-optimal bet size given known win probability + payoffs."
+    L2: "Kelly f* = (p*b - q)/b for binary bet; maximizes log-wealth growth rate."
+    L3: "For continuous: f* = mu/sigma^2 (continuous Kelly); equivalent to mean-variance optimal under log utility."
+
+  - metric_id: probability_numeric
+    vision_section: "§4"
+    L1: "The numeric probability output of a forecast (0 to 1)."
+    L2: "Vision §4 BINDING first leg of Triple Probability Decomposition; Bayesian posterior on outcome."
+    L3: "Derived via base rate * likelihood adjustment * regime adjustment per Vision §4 worked derivation."
+
+  # §3.4 Goodness-of-fit + Calibration (10)
+
+  - metric_id: adjusted_r_squared
+    vision_section: "§3.4"
+    L1: "R-squared adjusted for the number of predictors."
+    L2: "Adj R^2 = 1 - (1-R^2)(n-1)/(n-p-1); penalizes overfitting from adding predictors."
+    L3: "Negative when added predictors don't improve fit beyond chance; preferred over R^2 for model comparison."
+
+  - metric_id: auc_roc
+    vision_section: "§3.4"
+    L1: "How well a classifier separates positive from negative outcomes (0.5 = random, 1.0 = perfect)."
+    L2: "Area Under the Receiver Operating Characteristic Curve; integrates true positive rate vs false positive rate across thresholds."
+    L3: "AUC = P(score(positive) > score(negative)). Equivalent to Mann-Whitney U statistic divided by n_pos * n_neg."
+
+  - metric_id: brier_improvement_vs_climatology
+    vision_section: "§3.4 + §13"
+    L1: "How much better the model is than always predicting the base rate."
+    L2: "Brier skill score = 1 - BS_model / BS_climatology; positive = model adds value over base rate."
+    L3: "Vision §13 calibration accountability: tracked in live performance dashboard. Negative score signals worse than climatology."
+
+  - metric_id: brier_score
+    vision_section: "§3.4"
+    L1: "Average squared error of probability forecasts (lower is better)."
+    L2: "BS = mean((forecast_prob - actual_outcome)^2); 0 = perfect, 0.25 = always 50 percent forecast."
+    L3: "Decomposes into Reliability - Resolution + Uncertainty terms per Murphy decomposition."
+
+  - metric_id: calibration_slope
+    vision_section: "§3.4 + §13"
+    L1: "How well-calibrated probability forecasts are (perfect = 1.0)."
+    L2: "Slope of regression of actual frequency on forecast probability; 1.0 = perfectly calibrated."
+    L3: "Vision §13 BINDING. Slope < 1 = overconfident; slope > 1 = underconfident. Reliability diagram visualizes per-bin."
+
+  - metric_id: reliability_diagram
+    vision_section: "§3.4 + §13"
+    L1: "Chart comparing predicted probabilities to actual outcome frequencies."
+    L2: "Bins forecasts by predicted probability; plots actual frequency per bin. Diagonal = perfect calibration."
+    L3: "Vision §13 BINDING calibration accountability surface; complement of Brier reliability term."
+
+  - metric_id: sharpness
+    vision_section: "§3.4"
+    L1: "How concentrated probability forecasts are (sharper = more decisive)."
+    L2: "Variance of forecast probabilities; sharp forecasts make decisive predictions; flat = always uncertain."
+    L3: "Higher sharpness with good calibration = informative model; sharp + uncalibrated = overconfident."
+
+  - metric_id: crps
+    vision_section: "§3.4"
+    L1: "Generalized error for probabilistic forecasts (lower = better)."
+    L2: "Continuous Ranked Probability Score; integrates squared difference between forecast CDF + step CDF at outcome."
+    L3: "CRPS(F, y) = integral (F(x) - 1{x >= y})^2 dx; reduces to MAE for point forecasts."
+
+  - metric_id: log_loss
+    vision_section: "§3.4"
+    L1: "Penalizes confident wrong forecasts heavily (lower = better)."
+    L2: "Negative log-likelihood: -mean(log p(actual)); diverges for forecast probabilities at 0 of actual outcome."
+    L3: "Equivalent to KL divergence from delta distribution at actual outcome to forecast distribution."
+
+  - metric_id: r_squared
+    vision_section: "§3.4"
+    L1: "Fraction of outcome variance explained by the model (0 to 1)."
+    L2: "R^2 = 1 - SS_res / SS_tot; high R^2 = model captures variation; can be negative for bad fits."
+    L3: "Coefficient of determination; equivalent to squared correlation in simple regression. Adjusted R^2 corrects for predictor count."
+
+  # §3.5 Statistical significance (9)
+
+  - metric_id: degrees_of_freedom
+    vision_section: "§3.5"
+    L1: "Effective sample size for statistical tests."
+    L2: "df = n - k where k is number of estimated parameters; controls distribution of test statistics."
+    L3: "t-distribution: df = n - 1; F-distribution: df1 = numerator, df2 = denominator. Effective df adjusted for autocorrelation in time-series."
+
+  - metric_id: effective_sample_size
+    vision_section: "§10"
+    L1: "Equivalent number of independent observations after accounting for autocorrelation."
+    L2: "N_eff = N / (1 + 2*sum rho(k)); lower than nominal N when serial correlation present."
+    L3: "Vision §10 BINDING. Used in sample_size_adequacy component of Confidence (Vision §4)."
+
+  - metric_id: p_value_hac_adjusted
+    vision_section: "§3.5"
+    L1: "Significance p-value robust to autocorrelation + heteroscedasticity."
+    L2: "Newey-West HAC-adjusted p-value; correct for serial correlation in residuals; preferred for time-series regressions."
+    L3: "HAC standard error: SE_HAC = sqrt(X^T Sigma_hat X) with Sigma_hat = NW kernel estimate of long-run variance."
+
+  - metric_id: p_value_raw
+    vision_section: "§3.5"
+    L1: "Unadjusted significance p-value."
+    L2: "Probability of observing the test statistic (or more extreme) under the null hypothesis."
+    L3: "p = P(T >= t_obs | H_0). Vision §3.5 surface: raw + HAC + BH-adjusted forms reported."
+
+  - metric_id: q_value_bh_fdr
+    vision_section: "§3.5"
+    L1: "Multiple-test-corrected significance value."
+    L2: "Benjamini-Hochberg FDR-adjusted; controls false discovery rate among rejected null hypotheses."
+    L3: "q = min(p_k * m / k) over k>=i for sorted p-values; rejects all p <= q*. Less conservative than Bonferroni."
+
+  - metric_id: statistical_power
+    vision_section: "§3.5"
+    L1: "Probability the test detects a true effect when present."
+    L2: "Power = 1 - beta where beta is Type II error rate; higher power = lower false negative."
+    L3: "Function of effect size, sample size, alpha, and test type. Power analysis used to size studies a priori."
+
+  - metric_id: test_statistic
+    vision_section: "§3.5"
+    L1: "Standardized score used to test a hypothesis."
+    L2: "Function of data + parameters under null hypothesis; common forms: t, F, chi-squared, sup-W."
+    L3: "Choice of statistic determines distribution under H_0. Quandt-Andrews sup-W used for structural break tests."
+
+  - metric_id: type_i_error_alpha
+    vision_section: "§3.5"
+    L1: "False positive rate: chance of detecting an effect that isn't there."
+    L2: "alpha = P(reject H_0 | H_0 true); typically set at 0.05 or 0.01."
+    L3: "Pre-specified before testing; controls test size. Multiple testing inflates effective alpha unless corrected (Bonferroni, BH)."
+
+  - metric_id: type_ii_error_beta
+    vision_section: "§3.5"
+    L1: "False negative rate: chance of missing a real effect."
+    L2: "beta = P(fail to reject H_0 | H_1 true); 1 - beta is power."
+    L3: "Function of effect size + alpha + sample size + variance. Trade-off with alpha: tighter alpha increases beta."
+
+  # §3.6 Bias correction (7)
+
+  - metric_id: bayesian_shrinkage_lambda
+    vision_section: "§6"
+    L1: "Strength of shrinkage toward the prior (higher = more shrinkage)."
+    L2: "Shrinkage weight: w_prior = lambda / (n_eff + lambda); pulls noisy estimates toward stable prior."
+    L3: "Vision §6 + §10 BINDING; L6-J D2 horizon-conditional kappa: kappa_eff = base_kappa(horizon) / max(mean_sim_top_k, 0.10)."
+
+  - metric_id: bonferroni_correction
+    vision_section: "§3.6"
+    L1: "Conservative multiple-testing adjustment: divide significance threshold by number of tests."
+    L2: "alpha_adj = alpha / m where m is number of simultaneous tests; controls family-wise error rate."
+    L3: "FWER bound by Boole's inequality; conservative when tests dependent. BH FDR less stringent + preferred for many tests."
+
+  - metric_id: bootstrap_bias_estimate
+    vision_section: "§3.6"
+    L1: "Estimated bias of an estimator from resampling."
+    L2: "Bias_hat = mean(theta_hat_bootstrap) - theta_hat_full; bootstrap-resample to estimate sampling distribution."
+    L3: "B bootstrap samples; bias correction: theta_corrected = 2 * theta_hat - mean(theta_hat_B). Block bootstrap for time-series dependence."
+
+  - metric_id: dms_survivorship_adjustment
+    vision_section: "§8"
+    L1: "Downward bps adjustment to correct US equity survivorship bias."
+    L2: "Vision §8 BINDING: -100 to -150 bps at 5Y, -150 to -200 bps at 10Y; Dimson-Marsh-Staunton anchor."
+    L3: "L6-H D5: select_dms_adjustment_bps tier(risk_count) maps to (-100, -150, -200). 1Y/3Y not eligible (cyclical noise dominates)."
+
+  - metric_id: look_ahead_bias_check
+    vision_section: "§14"
+    L1: "Verification that no future data leaked into the forecast."
+    L2: "PIT (point-in-time) discipline: only data available at forecast time used; verified via vintage timestamps."
+    L3: "Vision §14 audit discipline; backtested PIT vs final-release performance differential should be small."
+
+  - metric_id: ood_reserve_mass
+    vision_section: "§7"
+    L1: "Probability reserved for outcomes the model isn't designed to predict (5-15 percent)."
+    L2: "Vision §7 BINDING: OOD reserve baseline 5 percent, scales up to 15 percent ceiling with active risk conditions."
+    L3: "L6-H D1: reserve = severity_tier_bucket(active_conditions). 1 condition: low bound; 2+: high bound of largest bucket."
+
+  - metric_id: survivorship_bias_check
+    vision_section: "§8 + §14"
+    L1: "Verification that delisted/failed entities are included in historical sample."
+    L2: "Anti-survivorship: include companies that went bankrupt + indices that vanished; prevents overstated historical returns."
+    L3: "Vision §14 BINDING audit discipline. DMS adjustment (Vision §8) is the survivorship correction at the forecast level."
+
+  # §3.7 Risk measures (9)
+
+  - metric_id: beta
+    vision_section: "§3.7"
+    L1: "Sensitivity of returns to market movements (1.0 = matches market)."
+    L2: "beta = cov(r, r_market) / var(r_market); CAPM-derived market exposure measure."
+    L3: "Time-varying beta estimated via rolling regression or DCC-GARCH; equity beta differs across regimes."
+
+  - metric_id: calmar_ratio
+    vision_section: "§3.7"
+    L1: "Annualized return divided by maximum drawdown."
+    L2: "Calmar = ann_return / |max_drawdown|; preferred for trend-following strategies where drawdown is binding risk."
+    L3: "More stable than Sharpe for skewed return distributions; sensitive to historical drawdown realization."
+
+  - metric_id: conditional_value_at_risk
+    vision_section: "§3.7"
+    L1: "Average loss in the worst alpha percent of cases."
+    L2: "CVaR_alpha = E[X | X <= VaR_alpha]; expected loss conditional on VaR breach; coherent risk measure."
+    L3: "Vision §3.7 BINDING surface. Coherent (Artzner-Delbaen-Eber-Heath axioms); subadditive in portfolio aggregation."
+
+  - metric_id: information_ratio
+    vision_section: "§3.7"
+    L1: "Active return per unit of active risk (skill-adjusted alpha)."
+    L2: "IR = (r_portfolio - r_benchmark) / tracking_error; consistent active outperformance metric."
+    L3: "IR > 0.5 considered good for institutional active managers; >1.0 exceptional."
+
+  - metric_id: maximum_drawdown
+    vision_section: "§3.7"
+    L1: "Largest peak-to-trough decline in the historical or forecast path."
+    L2: "MDD = max_{0 <= s <= t} (X_s - X_t) / X_s; expressed as percentage."
+    L3: "Path-dependent risk measure; backtested drawdowns differ from forward-looking VaR/CVaR."
+
+  - metric_id: sharpe_ratio
+    vision_section: "§3.7"
+    L1: "Excess return per unit of total risk."
+    L2: "SR = (E[r] - rf) / sigma(r); assumes returns are normally distributed (often violated)."
+    L3: "Modified Sharpe for non-normal returns: SR_modified incorporates skewness + kurtosis penalties."
+
+  - metric_id: sortino_ratio
+    vision_section: "§3.7"
+    L1: "Excess return per unit of downside risk only."
+    L2: "Sortino = (E[r] - target) / downside_deviation; penalizes only adverse volatility."
+    L3: "Downside_deviation = sqrt(E[min(0, r - target)^2]); preferred over Sharpe when upside volatility is desirable."
+
+  - metric_id: tail_dependence
+    vision_section: "§3.7"
+    L1: "Tendency of extreme outcomes to occur together across markets."
+    L2: "lambda_lower = lim_{u -> 0} P(X <= F_X^{-1}(u) | Y <= F_Y^{-1}(u)); concordance in tails."
+    L3: "Copula-derived measure; t-copula has non-zero tail dependence; Gaussian has zero. Critical for portfolio crash risk."
+
+  - metric_id: value_at_risk
+    vision_section: "§3.7"
+    L1: "Loss threshold below which only alpha percent of outcomes fall."
+    L2: "VaR_alpha = -inf{x : P(X <= x) > alpha}; alpha typically 1 or 5 percent."
+    L3: "Not coherent (fails subadditivity); supplemented by CVaR for portfolio risk aggregation."
+
+  # §3.8 Time-series quality (6)
+
+  - metric_id: adf_stationarity_test
+    vision_section: "§3.8"
+    L1: "Test whether a time series has a stable mean + variance over time."
+    L2: "Augmented Dickey-Fuller test: H_0 unit root (non-stationary); reject when test stat < critical."
+    L3: "Regression: delta y_t = alpha + beta * y_{t-1} + sum gamma_i * delta y_{t-i} + eps; test H_0 beta = 0."
+
+  - metric_id: autocorrelation_rho
+    vision_section: "§3.8"
+    L1: "Correlation of a series with its own past values."
+    L2: "rho(k) = corr(y_t, y_{t-k}); detects persistence + serial dependence; foundation of N_eff calculation."
+    L3: "Vision §10 BINDING: N_eff = N / (1 + 2*sum rho(k)). Ljung-Box test for joint significance of rho(1)..rho(k)."
+
+  - metric_id: cointegration_test
+    vision_section: "§3.8"
+    L1: "Test whether two non-stationary series share a long-run equilibrium."
+    L2: "Engle-Granger or Johansen test; if cointegrated, error correction model + spreads are stationary."
+    L3: "Stationary linear combination of I(1) series; allows long-horizon spread forecasting + pair-trade design."
+
+  - metric_id: granger_causality
+    vision_section: "§3.8"
+    L1: "Test whether one series helps predict another."
+    L2: "Granger test: does lagged X improve forecast of Y beyond Y's own lags?"
+    L3: "F-test on restricted vs unrestricted VAR; statistical not causal in philosophical sense; lag-length sensitive."
+
+  - metric_id: hurst_exponent
+    vision_section: "§3.8"
+    L1: "Measures whether a series trends (H>0.5), mean-reverts (H<0.5), or is random walk (H=0.5)."
+    L2: "Hurst exponent estimated via R/S analysis or DFA; characterizes long-range dependence."
+    L3: "Self-similarity scaling: var(y_t) ~ t^(2H). H > 0.5 = persistence; H < 0.5 = anti-persistence."
+
+  - metric_id: structural_break_supw
+    vision_section: "§3.8 + §9"
+    L1: "Test whether parameters change at an unknown date."
+    L2: "Quandt-Andrews sup-W test: maximum Wald statistic over candidate break dates; supports Lucas critique detection."
+    L3: "Vision §9 BINDING input. Critical values from Andrews (1993) for unknown break dates. Trimming required for asymptotic validity."
+
+  # §3.9 Information theory (4)
+
+  - metric_id: cross_entropy
+    vision_section: "§3.9"
+    L1: "Distance between two probability distributions (lower = closer)."
+    L2: "H(P, Q) = -sum P(x) log Q(x); equivalent to log loss for classification."
+    L3: "H(P, Q) = H(P) + KL(P || Q); minimized when Q = P (true distribution)."
+
+  - metric_id: kl_divergence
+    vision_section: "§3.9"
+    L1: "Information lost when approximating one distribution with another."
+    L2: "KL(P||Q) = sum P(x) log(P(x)/Q(x)); asymmetric; 0 iff P = Q."
+    L3: "Convex + non-negative (Gibbs' inequality). Used in variational inference + model selection (information criteria)."
+
+  - metric_id: mutual_information
+    vision_section: "§3.9"
+    L1: "Information that two variables share."
+    L2: "I(X;Y) = KL(P(X,Y) || P(X)P(Y)); 0 iff independent; nonparametric measure of dependence."
+    L3: "I(X;Y) = H(X) + H(Y) - H(X,Y); decomposes via entropy. Estimation via k-NN or kernel density."
+
+  - metric_id: shannon_entropy
+    vision_section: "§3.9"
+    L1: "Average uncertainty / information content of a random variable."
+    L2: "H(X) = -sum P(x) log P(x); maximized by uniform distribution."
+    L3: "Measured in bits (log2) or nats (ln). Conditional entropy + chain rule: H(X,Y) = H(X) + H(Y|X)."
+
+  # §3.10 Bayesian measures (7)
+
+  - metric_id: bayes_factor
+    vision_section: "§3.10"
+    L1: "Ratio of evidence for one model vs another."
+    L2: "BF_12 = P(D|M_1) / P(D|M_2); >10 strong evidence for M_1, <1/10 strong for M_2."
+    L3: "BF = posterior odds / prior odds. Equivalent to likelihood ratio for nested models. Sensitive to prior specification."
+
+  - metric_id: likelihood_function
+    vision_section: "§3.10"
+    L1: "How likely the observed data are under different parameter values."
+    L2: "L(theta; D) = P(D | theta); function of theta given fixed data; foundation of MLE + Bayesian updating."
+    L3: "Log-likelihood: l(theta) = sum log P(d_i | theta) for i.i.d. data. MLE: theta_hat = argmax L. Fisher information: I(theta) = -E[d^2 l / d theta^2]."
+
+  - metric_id: map_estimate
+    vision_section: "§3.10"
+    L1: "Most likely parameter value given the data + prior."
+    L2: "MAP = argmax_theta p(theta | D) = argmax p(D|theta) * p(theta); regularized MLE."
+    L3: "Equivalent to MLE under flat prior; MAP = MLE + log-prior penalty. Sensitive to parameterization."
+
+  - metric_id: marginal_likelihood
+    vision_section: "§3.10"
+    L1: "Probability of observed data under the model (averaged over parameters)."
+    L2: "P(D|M) = integral P(D|theta, M) * P(theta|M) d theta; used in Bayes factor + model selection."
+    L3: "Also called model evidence. Computed via Laplace approximation, bridge sampling, or annealed importance sampling."
+
+  - metric_id: mcmc_r_hat
+    vision_section: "§3.10"
+    L1: "Diagnostic for MCMC convergence (should be near 1.0)."
+    L2: "Gelman-Rubin R-hat: ratio of between-chain to within-chain variance; > 1.05 suggests non-convergence."
+    L3: "R-hat = sqrt(var_hat(theta) / W) where var_hat combines within (W) + between (B) chain variance. Multi-chain MCMC required."
+
+  - metric_id: posterior_theta
+    vision_section: "§3.10"
+    L1: "Updated probability distribution over parameter after seeing data."
+    L2: "P(theta|D) = P(D|theta) * P(theta) / P(D); combines prior + likelihood per Bayes' rule."
+    L3: "Vision §6 Bayesian shrinkage uses posterior: theta_post = w_emp * theta_emp + w_prior * theta_prior."
+
+  - metric_id: prior_theta
+    vision_section: "§3.10"
+    L1: "Probability distribution over parameter before seeing data."
+    L2: "P(theta); encodes prior belief; non-informative (Jeffreys, uniform) or informative (subject-matter knowledge)."
+    L3: "Vision §6: long-run real return prior = 0.065 at 10Y horizon (DMS-anchored). Conjugate priors enable analytic posteriors."
+
+  # §3.11 Macro-specific measures (8)
+
+  - metric_id: acm_term_premium
+    vision_section: "§3.11"
+    L1: "Compensation investors demand for holding long-term over short-term bonds."
+    L2: "Adrian-Crump-Moench decomposition of long-rate into expected short-rate path + term premium."
+    L3: "ACM term premium published by NY Fed; affine term-structure model; negative term premium signals risk-aversion regime."
+
+  - metric_id: buffett_indicator
+    vision_section: "§3.11 + §7"
+    L1: "Market cap divided by GDP (US equity valuation gauge)."
+    L2: "Total US equity market cap / nominal GDP; Buffett's preferred valuation metric; >150 percent = high."
+    L3: "Vision §7 Layer 1 Valuation. Wilshire 5000 / GDP. Trend-adjusted variants exist (account for globalization)."
+
+  - metric_id: cape_percentile
+    vision_section: "§3.11 + §7"
+    L1: "CAPE rank vs full Shiller history (0-100 percentile)."
+    L2: "Percentile rank of current CAPE vs 1881-present sample; >95th percentile triggers OOD valuation flag."
+    L3: "Vision §7 Layer 1 Valuation BINDING input. >97th percentile + behavioral confirmation = bubble-like regime."
+
+  - metric_id: ccc_bb_credit_spread
+    vision_section: "§3.11"
+    L1: "Credit spread between low-rated (CCC) and higher-rated (BB) corporate bonds."
+    L2: "Distress proxy: widening CCC-BB spread signals credit deterioration in lowest-rated tier."
+    L3: "Vision §X Layer 3 Liquidity/Credit input. Used in HY OAS composite alongside IG OAS + investment grade signals."
+
+  - metric_id: equity_risk_premium
+    vision_section: "§3.11"
+    L1: "Expected excess return of stocks over bonds."
+    L2: "ERP = E[r_equity] - r_bond; ex-ante (implied from valuations) + ex-post (realized) variants reported."
+    L3: "Damodaran (2024) anchor methodology; reduces to dividend yield + growth - bond yield for simple model."
+
+  - metric_id: hussman_mape
+    vision_section: "§3.11 + §7"
+    L1: "Composite stock-market overvaluation index from John Hussman."
+    L2: "Margin-adjusted P/E composite; emphasizes mean-reverting profit margins; CAPE + tobin variants."
+    L3: "Vision §7 Layer 1 BINDING input alongside CAPE + Buffett indicator. Long-term horizon forecasting orientation."
+
+  - metric_id: real_rate_vs_rstar
+    vision_section: "§3.11"
+    L1: "Current real rate compared to estimated neutral real rate."
+    L2: "Real_rate - R* = stance of monetary policy; positive = restrictive, negative = accommodative."
+    L3: "R* via Holston-Laubach-Williams (HLW) model; time-varying neutral real rate. Vision §X policy regime input."
+
+  - metric_id: tobin_q
+    vision_section: "§3.11 + §7"
+    L1: "Market value of firms divided by replacement cost of their assets."
+    L2: "Q = market_cap / book_value_assets; >1 suggests overvaluation (new firms profitable to start)."
+    L3: "Vision §7 Layer 1 BINDING input. Mean-reverting per arbitrage argument; long-horizon valuation indicator."
+
+  # §3.12 Regime-conditional (9)
+
+  - metric_id: expansion_window_brier_improvement
+    vision_section: "§3.12"
+    L1: "Forecast skill measured separately during economic expansions."
+    L2: "Brier improvement vs climatology computed on expansion-window subset; tests regime-conditional skill."
+    L3: "Vision §X regime-stratified validation; complements recession-window Brier improvement for full-cycle skill assessment."
+
+  - metric_id: ism_mfg_new_orders_threshold
+    vision_section: "§3.12"
+    L1: "Test whether new manufacturing orders are below recession-warning level."
+    L2: "ISM Mfg New Orders < 48 (or other threshold) signals contractionary impulse; recession leading indicator."
+    L3: "Vision §X Layer 2 Macro Regime input. ISM PMI sub-index; statistically meaningful when sustained 3+ months."
+
+  - metric_id: lei_3d_rule_trigger
+    vision_section: "§3.12"
+    L1: "Conference Board LEI 3-month/3-percent rule trigger."
+    L2: "LEI YoY < -3.0 percent for 3 consecutive months signals recession; classic Conference Board rule."
+    L3: "Vision §X Layer 2 BINDING input. Boolean output; combined with NY Fed probit + Sahm rule for ensemble regime classifier."
+
+  - metric_id: nber_pre1978_handling
+    vision_section: "§3.12"
+    L1: "Tri-state flag: pre-1978 NBER recessions treated as semi-known."
+    L2: "Pre-1978 NBER calls less reliable due to data quality; tri-state recession flag (known / probable / unclassified)."
+    L3: "Vision §X regime classifier input; cap reliability at 0.85 for pre-1978 sample per institutional discipline."
+
+  - metric_id: ny_fed_recession_probit
+    vision_section: "§3.12"
+    L1: "NY Fed yield-curve-based recession probability."
+    L2: "Probit model on 10Y - 3M Treasury spread; probability of recession within 12 months."
+    L3: "Vision §X Layer 2 BINDING input. Updated monthly; >36 percent historically precedes recession by 4-6 quarters."
+
+  - metric_id: recession_window_brier_improvement
+    vision_section: "§3.12"
+    L1: "Forecast skill measured separately during economic recessions."
+    L2: "Brier improvement vs climatology on recession-window subset; primary skill metric for crash-risk forecasting."
+    L3: "Vision §X regime-stratified validation; weighted heavily in confidence regime_stability component."
+
+  - metric_id: regime_sensitivity_flag
+    vision_section: "§3.12"
+    L1: "Flag: does this metric's interpretation depend on current regime?"
+    L2: "True when metric's predictive power differs significantly across regimes (e.g., yield curve in zero-lower-bound regimes)."
+    L3: "Vision §9 Lucas critique surface; metric-level flag from regime-conditional validation backtest."
+
+  - metric_id: regime_transition_probability
+    vision_section: "§3.12"
+    L1: "Probability of transitioning between economic regimes."
+    L2: "Markov regime-switching model; P(regime_t+1 | regime_t); HMM-estimated transition matrix."
+    L3: "Vision §X Layer 2 BINDING input. Hamilton (1989) regime-switching; used in regime_stability component (Confidence)."
+
+  - metric_id: sahm_rule_reading
+    vision_section: "§3.12"
+    L1: "Sahm rule recession indicator (3M unemployment vs 12M min)."
+    L2: "Sahm rule: 3-month average unemployment minus 12-month minimum >= 0.5 signals recession start."
+    L3: "Vision §X Layer 2 BINDING input. Real-time recession detection; complements NY Fed probit + LEI rule."
