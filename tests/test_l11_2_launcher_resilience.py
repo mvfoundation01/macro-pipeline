@@ -160,15 +160,26 @@ def test_run_bat_aborts_with_vietnamese_when_no_python() -> None:
 
 def test_run_bat_aborts_when_version_check_rejects() -> None:
     """When PATH python fails check_python_version.py, run.bat must NOT
-    proceed to venv creation — must exit /b 1 first."""
+    proceed to venv creation. L11.3 update: flat-goto structure puts the
+    error labels at the bottom of the file; what matters is that the
+    rejection path GOTOs the ``:wrong_version`` label (NOT through to
+    venv creation) AND that the label terminates with ``exit /b 1``."""
     text = RUN_BAT.read_text(encoding="utf-8")
-    # Search for the version-check failure block ahead of venv creation.
-    check_fail = text.find("Pipeline yeu cau Python 3.12 hoac 3.13")
-    venv_block = text.find("-m venv .venv")
-    assert check_fail != -1, "Vietnamese rejection message missing"
-    assert venv_block != -1, "venv create block missing"
-    # The reject message must come BEFORE venv creation in source order.
-    assert check_fail < venv_block
+    assert "Pipeline yeu cau Python 3.12 hoac 3.13" in text, (
+        "Vietnamese rejection message missing"
+    )
+    # Must have explicit goto into the error label from the version-check site.
+    assert "goto :wrong_version" in text, (
+        "missing `goto :wrong_version` — version check would fall through"
+    )
+    # Error label must end the script (pause + exit /b 1), not fall through to venv.
+    # Use rindex because the FIRST ":wrong_version" is the `goto`; the LAST is
+    # the label itself (which is what we want to inspect for the exit guard).
+    wrong_idx = text.rindex(":wrong_version")
+    after_label = text[wrong_idx : wrong_idx + 400]
+    assert "exit /b 1" in after_label, (
+        "`:wrong_version` block must terminate with `exit /b 1`"
+    )
 
 
 def test_run_sh_aborts_when_no_compatible_python() -> None:

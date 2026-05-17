@@ -1,0 +1,11 @@
+# L11.3 — Force CRLF for Windows batch files regardless of platform / autocrlf.
+# cmd.exe parses .bat files line-by-line and silently mis-reads LF-only files
+# (we saw fragments like 'HON_CMD' get executed instead of `set PYTHON_CMD=...`
+# when run.bat shipped with LF endings). `eol=crlf` makes git materialize
+# CRLF on every checkout, so the behavior matches what V sees regardless of
+# their local core.autocrlf setting.
+*.bat text eol=crlf
+
+# Shell scripts MUST stay LF — bash on macOS/Linux mis-reads CRLF and rejects
+# the shebang ("/usr/bin/env\r: No such file or directory").
+*.sh text eol=lf

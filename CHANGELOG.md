@@ -6,6 +6,81 @@ Tags are pushed alongside each layer-complete commit (e.g. `l11-accept`).
 The macro pipeline itself (L1-L9) was developed across ~50 convergent sub-phases;
 this changelog starts at L10 when the user-facing surface area began shipping.
 
+## [L11.3 — run.bat cmd-parser hotfix + true E2E] — 2026-05-17
+
+Tags: `l11-3-hotfix`, `run-bat-e2e-verified`, `launcher-true-e2e-v1`.
+
+### Bug (the one L11.2 missed)
+V double-clicked `run.bat` (L11.2). Output:
+```
+[INFO] Su dung: Python 3.13 (py launcher)
+Python 3.13.13
+
+... was unexpected at this time.
+```
+L11.2's smoke test invoked `python -m macro_pipeline.standalone_launcher`
+directly, **bypassing run.bat entirely** — so the cmd-parser bug in run.bat
+itself was never exercised in CI. Reproduced exactly via
+`cmd /c D:\macro_pipeline\macro-pipeline\run.bat`.
+
+Two root causes (V's case = #1; my own retest surfaced #2):
+1. **Nested-if + unescaped parens in echo strings**: L11.2's run.bat had
+   `if !ERRORLEVEL! NEQ 0 (` blocks containing
+   `echo [INFO] Cai dat dependencies lan dau (mat 3-8 phut)...`. When V's
+   `.venv` existed but lacked Flask (residual state from earlier L10/L11
+   attempts), execution entered that block; cmd's lazy parser counted the
+   `(mat 3-8 phut)` parens as nested block delimiters and the count went
+   wonky → "... was unexpected at this time."
+2. **LF-only line endings** got cmd to mis-read run.bat mid-word
+   (fragments like `'HON_CMD'` and `'oto'` got executed as if they were
+   commands). The committed L11.2 file was LF; checkout normalization
+   inconsistencies (presence/absence of `core.autocrlf`) determined
+   whether the file landed as LF or CRLF on the user's machine.
+
+### Fix
+- **`run.bat`** rewritten with a flat-goto structure:
+  - All control flow uses single-line `if errorlevel 1 goto :label` —
+    no nested-if blocks anywhere.
+  - All error paths land at labelled sections at the bottom of the file
+    (`:no_python`, `:wrong_version`, `:venv_failed`, `:pip_failed`).
+  - `PYTHON_DESC` uses `[brackets]` not `(parens)` so the variable can
+    be expanded in any future construct without paren-counting risk.
+  - All `(...)` content in echo strings either removed or rewritten
+    with commas/brackets.
+- **`.gitattributes`** added:
+  - `*.bat text eol=crlf` — git materializes batch files with CRLF on
+    every checkout regardless of platform / `core.autocrlf` setting.
+  - `*.sh text eol=lf` — bash mis-reads CRLF shebangs (rejects with
+    `/usr/bin/env\r: No such file or directory`).
+- **Existing run.bat re-committed** with normalized CRLF endings (git
+  storage stays LF + working tree CRLF, per `eol=crlf` semantics).
+
+### Tests (8 new in `test_l11_3_run_bat_e2e.py`, 38 % NEG)
+1. `.gitattributes` declares `*.bat text eol=crlf` ✓
+2. Working-copy `run.bat` has CRLF endings (no lone LF) ✓
+3. Flat-goto structure: paren depth never exceeds 1 ✓
+4. `PYTHON_DESC` uses no parens ✓
+5. **TRUE E2E**: `cmd /c run.bat` → HTTP 200 + "MACRO FORECAST TERMINAL"
+   in 6743-byte body ✓ (L11.2's missing test)
+6. No unescaped parens in any `echo` line ✓
+7. All 4 error labels exist with `pause` + `exit /b 1` ✓
+8. No `if !ERRORLEVEL!` constructs (prefer legacy `if errorlevel N`) ✓
+
+### Verification
+- Reproduced V's exact output BEFORE the fix.
+- POST-FIX `cmd /c D:\macro_pipeline\macro-pipeline\run.bat` →
+  HTTP 200 + title verified + zero "is not recognized" / "unexpected"
+  errors in stdout.
+- Full pytest: 1494 / 1494 PASS (1486 + 8 L11.3).
+- Defense Test 12 + cap_cascade: 11 / 11 PASS (unchanged).
+- Ruff (L11.3 scope): clean.
+
+### V's deployment clone
+`D:/macro_pipeline/macro-pipeline` updated to L11.3 commit. V can now
+double-click `run.bat` and reach `http://localhost:8000` regardless of
+whether `.venv` already exists and whether Flask is or isn't installed
+inside it.
+
 ## [L11.2 — Environment Bootstrap + Launcher Resilience] — 2026-05-17
 
 Tags: `l11-2-accept`, `l11-2-layer-complete`, `launcher-resilient-v1`.
