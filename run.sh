@@ -10,7 +10,16 @@ echo
 
 if ! command -v python3 >/dev/null 2>&1; then
     echo "[ERROR] Python chưa được cài đặt."
-    echo "Hãy cài Python 3.12 từ: https://www.python.org/downloads/"
+    echo "Hãy cài Python 3.12 hoặc 3.13 từ: https://www.python.org/downloads/"
+    exit 1
+fi
+
+# L11.1 — validate version range via standalone Python script (single source
+# of truth shared with run.bat; avoids fragile shell-level version parsing).
+if ! python3 scripts/check_python_version.py; then
+    echo
+    echo "Pipeline yêu cầu Python 3.12 hoặc 3.13. Cài đặt tại:"
+    echo "  https://www.python.org/downloads/"
     exit 1
 fi
 

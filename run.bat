@@ -13,7 +13,7 @@ python --version >nul 2>&1
 if errorlevel 1 (
     echo [ERROR] Python chua duoc cai dat tren may.
     echo.
-    echo Vui long tai Python 3.12 tu:
+    echo Vui long tai Python 3.12 hoac 3.13 tu:
     echo   https://www.python.org/downloads/release/python-3128/
     echo.
     echo Khi cai dat, nho TICH O "Add Python to PATH"!
@@ -25,6 +25,19 @@ if errorlevel 1 (
 REM Step 2: show Python version
 for /f "tokens=2" %%i in ('python --version 2^>^&1') do set PYVER=%%i
 echo [INFO] Python version: !PYVER!
+
+REM Step 2a: validate version range (L11.1 — delegates to standalone Python
+REM script so we never have to parse 3-component versions in batch).
+python scripts\check_python_version.py
+if errorlevel 1 (
+    echo.
+    echo Pipeline yeu cau Python 3.12 hoac 3.13. Cai dat tai:
+    echo   https://www.python.org/downloads/
+    echo Sau khi cai, dong cua so nay va chay lai run.bat.
+    echo.
+    pause
+    exit /b 1
+)
 
 REM Step 3: create venv if missing
 if not exist ".venv\Scripts\python.exe" (
