@@ -711,7 +711,12 @@ def aggregate_ensemble(
     timestamp_utc: Optional[datetime] = None,
     code_sha: Optional[str] = None,
 ) -> EnsembleResult:
-    """End-to-end ensemble aggregation (L6-F + L6-G + L6-H).
+    """End-to-end ensemble aggregation (L6-F base + L6-G/L6-H/L6-I/L6-J refinements).
+
+    L6-K verification (Codex Op #2 closure): the step list below reflects the
+    BINDING Vision §4 additive confidence + 10-component conviction formulas
+    (not the L6-F placeholder heuristics). The placeholder language Codex
+    flagged was removed at L6-G + L6-H + L6-I; no further edits required at L6-K.
 
     Pipeline
     --------

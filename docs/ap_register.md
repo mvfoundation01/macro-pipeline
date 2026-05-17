@@ -254,4 +254,123 @@ This is documented as an informal sync event, NOT a new AP-AUTH codification. Th
 
 ---
 
-**END — ap_register.md (AP-AUTH-50 + AP-AUTH-51 + AP-AUTH-52 + AP-AUTH-53 + AP-AUTH-54 + AP-AUTH-55 entries; cumulative provenance §0)**
+## AP-AUTH-56 (NEW; codified 2026-05-16 at L6-K) — Defense-in-depth confidence cap pattern
+
+**Symptom**: A single cap-enforcement layer (e.g., end-of-pipeline `min(confidence, cap)`) can be silently bypassed by upstream code paths that produce a confidence value above the cap and propagate it without re-checking. Without redundant enforcement at multiple layers, the institutional cap discipline (Standing Order #9 plus Vision section 10) is one-bug-away from being violated.
+
+**Surfaced**: Pattern emerged organically across L1.7-B then L1.7-D then L6-B then L6-D then L6-F then L6-H sub-phases as the codebase progressively added confidence-bearing surfaces. By L6-G eighth-instance threshold trigger reached. Track A L6-G Test 12 (`test_aggregate_defense_in_depth_both_layers_fire`) verifies independent cap firings at multiple layers; PD20 (preserve Test 12) elevated this from informal practice to formal institutional invariant at L6-H + L6-I + L6-J.
+
+**Mitigation discipline**:
+
+1. **Layered cap enforcement**: any new confidence-bearing surface MUST add cap enforcement at construction time (dataclass `__post_init__`) AND at aggregator integration time (forecast-time helper).
+2. **Independent fire-paths**: each cap layer raises `ConfidenceCapViolation` independently when bare-float input exceeds the cap. Bypassing one layer (e.g., constructing TripleDecomposition with capped confidence) MUST still trigger the others (e.g., `enforce_confidence_caps` on the same value would also raise if called directly on the pre-cap input).
+3. **Cascade for compositional caps**: when multiple cap modifiers compose (horizon times stratification times signal-conflict times ood-elevated), use a dedicated cascade function (`apply_confidence_cap_cascade`) that takes the minimum across all active caps; keep the raise-helper layer UNCHANGED for invariant preservation (AP-AUTH-58).
+4. **Test 12 verification**: every sub-phase that touches confidence computation MUST verify Test 12 passes unchanged. The three-part assertion structure (direct Layer 1 raise; direct Layer 2 raise; integrated pipeline cap) is the canonical regression test.
+
+**Instances** (eight documented at codification time):
+1. L1.7-B `manual_input/validation.py` construction-time cap (`ConfidenceCapViolation` introduction)
+2. L1.7-D `enforce_forecast_time_confidence_cap` standalone helper
+3. L6-B `TripleDecomposition.__post_init__` (10Y cap; ensemble layer first instance)
+4. L6-D `enforce_confidence_caps` in `ood_and_caps.py` (ensemble layer second instance)
+5. L6-F aggregator end-of-pipeline cap (third-instance pattern verified)
+6. L6-G Bayesian module preserves cap discipline (fourth-instance reuse)
+7. L6-H `apply_confidence_cap_cascade` with signal_conflict + OOD-elevated modifiers (fifth-instance compositional extension)
+8. L6-I D1 NaN-finite invariants strengthen all upstream layers (sixth-instance cross-cutting fortification)
+
+**Enforcement**: Pre-flight prompt template (L6-H onward) includes PD20 as critical invariant. ACCEPT gate criteria mandate Test 12 PASS verification. Future sub-phases adding confidence surfaces (e.g., L7 component producers) MUST add cap enforcement at construction time AND verify Test 12 still passes.
+
+**Cross-reference**:
+- `tests/test_aggregator.py::test_aggregate_defense_in_depth_both_layers_fire` (canonical regression test)
+- `macro_pipeline/manual_input/validation.py::ConfidenceCapViolation` (single exception class shared across all layers)
+- AP-AUTH-58 (cap function bifurcation; companion pattern for preserving invariants when extending API surface)
+
+---
+
+## AP-AUTH-57 (NEW; codified 2026-05-16 at L6-K) — Cross-branch cherry-pick (Option B copy + manual commit)
+
+**Symptom**: `git cherry-pick` complicates branch history when moving infrastructure or authority documents across long-lived branches (e.g., `main` to `claude/layer-5-build` or reverse). The cherry-picked commit retains its parent reference from the source branch, creating subtle graph entanglement that confuses `git log --graph` audits.
+
+**Surfaced**: Pattern emerged at L5b-G AP-AUTH-49 resolution (precommit infrastructure cherry-pick from `claude/layer-5-build` to `main`) and recurred at L6-PREP (Vision v2.0 + Pipeline Guide v2.0 plus three review docs cherry-pick from `main` to `claude/layer-5-build`). At second occurrence the institutional pattern was clear; codification deferred to L6-K retrospective per AP-AUTH-46 second-instance rule.
+
+**Mitigation discipline**:
+
+1. **File-copy approach**: rather than `git cherry-pick`, use `git show <source-branch>:<path>` redirected to `<path>` (or equivalent file-copy) followed by `git add <path>` plus `git commit` on the target branch.
+2. **Source SHA citation in commit message**: the commit message MUST cite the source-branch SHA plus path explicitly to preserve audit trail. Example: `cherry-pick path/to/file from main:4984ec9`.
+3. **No git cherry-pick command**: explicitly avoid the cherry-pick command for these cross-branch syncs; reserve cherry-pick for intra-branch / short-lived feature-branch surgical commits.
+4. **Document as informal sync event**: cross-branch syncs are documented in `docs/ap_register.md` as informal sync events (not new AP-AUTH codifications per AP-AUTH-46 gratuitous-codification guard); the meta-pattern (cross-branch cherry-pick mechanism) IS codified here as AP-AUTH-57 because it reached two-instance threshold.
+
+**Instances** (two documented at codification time):
+1. L5b-G (2026-05-15): precommit infrastructure to main (AP-AUTH-49 RESOLVED)
+2. L6-PREP (2026-05-15): authority docs (Vision v2.0 + Pipeline Guide v2.0 plus three review docs) to claude/layer-5-build
+
+**Enforcement**: When cross-branch sync is needed, use Option B copy plus manual commit; cite source SHA in commit message; document as informal sync event in `docs/ap_register.md` Sync events section. Future sub-phases that need to move files across long-lived branches (e.g., L8a UI docs from a separate branch into main) follow this mechanism.
+
+**Cross-reference**:
+- L5b-G commit `412235d` (precommit infrastructure cherry-pick to main)
+- L6-PREP commit `ca38c0a` (authority docs cherry-pick to claude/layer-5-build)
+- AP-AUTH-49 RESOLVED note (sibling latent-debt closure pattern)
+- `docs/ap_register.md` Sync events section (informal sync events; this codification documents the meta-pattern)
+
+---
+
+## AP-AUTH-58 (NEW; codified 2026-05-16 at L6-K) — Cap function bifurcation for invariant preservation
+
+**Symptom**: When a new API surface (e.g., cap cascade with multiple cap modifiers) would require modifying an existing function's behavior in a way that breaks PD20 critical invariants (defense-in-depth Test 12), a naive in-place rewrite breaks the institutional invariant test. The mandate writer expected modification; the invariant guardian requires preservation.
+
+**Surfaced**: L6-H pre-flight D2 spec called for replacing `enforce_confidence_caps` (raise-helper) with a cap-cascade function returning the capped value. Track A's analysis: the raise-helper's behavior (raise `ConfidenceCapViolation` on bare-float input) is explicitly tested in Test 12 Part 2; replacing it would fail Test 12 then PD20 invariant violation. Strategic Track B ratified Track A's L6-H bifurcation judgment (keep raise-helper UNCHANGED; add NEW `apply_confidence_cap_cascade` with cascade semantics).
+
+**Mitigation discipline**:
+
+1. **Pre-modification invariant check**: before modifying an existing function's behavior, grep for tests that depend on the current behavior; if invariant tests reference the function, evaluate whether modification breaks the invariant.
+2. **Additive expansion over mutation**: introduce a NEW function with the new semantics; keep the original function UNCHANGED. Both functions can share underlying constants, helpers, or data layer (no DRY violation since they have different contracts).
+3. **Bifurcation naming convention**: the new function should have a name that captures the new semantics (e.g., `apply_*_cascade` vs `enforce_*_caps`); the docstring on each function should cite the other and explain when to use which.
+4. **Test 12 invariant is sacred**: never modify the behavior of any function that Test 12 depends on. PD20 is non-negotiable.
+
+**Instances** (one documented at codification time; precedent-setting):
+1. L6-H: `enforce_confidence_caps` (UNCHANGED; raises `ConfidenceCapViolation` on bare-float input per Test 12 Part 2) plus NEW `apply_confidence_cap_cascade` (mandate D2 cascade semantics; returns capped value with signal_conflict + OOD-elevated modifiers)
+
+**Enforcement**: When a Strategic pre-flight mandate requires modifying an existing function in a way that conflicts with a PD20 invariant test, Track A's CORRECT response is to bifurcate (new function for new semantics) and document the bifurcation in the ACCEPT report. Strategic Track B will ratify the bifurcation post-hoc if PD20 is preserved. AP-AUTH-58 is precedent-setting; future sub-phases (e.g., L7 producer integration adding new shrinkage functions) may need to bifurcate similarly.
+
+**Cross-reference**:
+- L6-H commit `ad4091b` (L6-H ACCEPT with bifurcation)
+- `macro_pipeline/ensemble/ood_and_caps.py::enforce_confidence_caps` (raise-helper; UNCHANGED)
+- `macro_pipeline/ensemble/ood_and_caps.py::apply_confidence_cap_cascade` (NEW; cascade semantics)
+- AP-AUTH-56 (defense-in-depth; companion pattern)
+- L6-H ACCEPT report section 4 (Track A bifurcation judgment + Strategic post-hoc ratify)
+
+---
+
+## AP-AUTH-59 (NEW; codified 2026-05-16 at L6-K) — Explicit path-prefix discipline for cross-worktree operations
+
+**Symptom**: When V's Claude Code session shell PWD lives in a session worktree (e.g., `agitated-mclaren-ec5db9`) that is DIFFERENT from the build worktree (e.g., `layer-5-build`), any git operation that relies on implicit cwd-based routing would land on the wrong branch. Without explicit path-prefixing, sub-phase ACCEPTs would commit to the wrong worktree's branch.
+
+**Surfaced**: Track A's worktree audit (`5dd32ee` 2026-05-16) revealed V's session shell PWD was `agitated-mclaren-ec5db9` (a sibling worktree off main, at `412235d`) throughout L6-G + R7-bis + L6-H + L6-I sub-phases. The audit confirmed all eleven sub-phase commits routed correctly to `claude/layer-5-build` because Track A explicitly prefixed every git operation with `git -C <build-path>` or `cd <build-path> && ...`. The pattern was implicit institutional discipline; codification at L6-K elevates it to formal AP-AUTH register entry.
+
+**Mitigation discipline**:
+
+1. **Section 0-prime worktree enforcement section in every pre-flight prompt**: from L6-J onward (when L6-J pre-flight introduced section 0-prime upgrade), every Strategic pre-flight begins with a section 0-prime worktree enforcement block specifying:
+   - Build worktree absolute path
+   - Main worktree absolute path
+   - Branch + expected HEAD verification
+   - Path-prefix mandate for all build-worktree operations
+2. **Read-only operations**: use `git -C <build-path> <subcommand>`. No `cd` needed.
+3. **Write operations needing cwd**: use `cd <build-path> && <command>`. Each Bash tool invocation should chain `cd` + command to ensure cwd-during-command-execution is correct.
+4. **File operations**: use absolute paths (`D:/macro_pipeline/.claude/worktrees/layer-5-build/...`) for Read / Edit / Write tool calls.
+5. **Verification at start AND end of sub-phase**: section 0-prime worktree verification at Phase 0; AP-AUTH-55 push verification at Phase 7. Both verifications must include `git -C "D:/macro_pipeline" rev-parse HEAD` showing main is UNCHANGED at `412235d` (or whatever the institutional baseline is).
+
+**Instances** (eleven retroactively documented + one forward; codification covers entire L6 sprint):
+1-11. All L6 sub-phases (PREP, A, B, C, D, E, F, G, R7-bis, H, I, J) used path-prefix discipline; pre-codification implicit; L6-J pre-flight first formalized as section 0-prime block
+12. L6-K (this sub-phase): first sub-phase to begin with section 0-prime + section 0-double-prime (tag-fix authorization) formal blocks
+
+**Enforcement**: Pre-flight prompt template (L6-J onward + all future sub-phases) MUST begin with section 0-prime worktree enforcement section. Track A's response MUST begin with section 0-prime verification before any functional work. AP-AUTH-55 push verification (codified at L5b-H) PLUS AP-AUTH-59 path-prefix discipline (codified here) together form the cross-worktree institutional discipline pair.
+
+**Cross-reference**:
+- L6-J pre-audit `5dd32ee` (`docs/build-plans/L6_J_PRE_WORKTREE_AUDIT.md` documents the discovery + forensic)
+- L6-J pre-flight introduced section 0-prime block as first formal pre-flight section
+- L6-K pre-flight section 0-prime + section 0-double-prime upgrade (section 0-double-prime = bounded destructive authorization for one-shot fix-up)
+- AP-AUTH-50 upstream grep at sub-phase boundary (companion discipline)
+- AP-AUTH-55 push verification at ACCEPT (companion discipline)
+
+---
+
+**END — ap_register.md (AP-AUTH-50 + AP-AUTH-51 + AP-AUTH-52 + AP-AUTH-53 + AP-AUTH-54 + AP-AUTH-55 + AP-AUTH-56 + AP-AUTH-57 + AP-AUTH-58 + AP-AUTH-59 entries; cumulative provenance §0)**

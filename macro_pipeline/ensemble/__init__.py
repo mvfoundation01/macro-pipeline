@@ -117,7 +117,6 @@ from macro_pipeline.ensemble.rcf import (
     standardize_macro_state,
 )
 from macro_pipeline.ensemble.aggregator import (
-    SUPPORTED_HORIZONS,
     EnsembleResult,
     ForecastInputs,
     HorizonResult,
@@ -125,6 +124,9 @@ from macro_pipeline.ensemble.aggregator import (
     aggregate_horizons_pure,
     populate_metric_outputs,
 )
+# L6-K D2 (Codex Finding #7 closure): `SUPPORTED_HORIZONS` canonical
+# source is `triple_decomposition` (imported above); aggregator
+# re-export removed to silence Ruff F811 + clarify single-source-of-truth.
 from macro_pipeline.ensemble.bayesian_confidence import (
     KAPPA_EVIDENCE,
     ConfidenceComponents,
@@ -242,6 +244,10 @@ __all__ = [
     "METRIC_STATUS_VALID",
     "MetricLineage",
     "validate_registry_counts",
+    # L6-J D5 cache helpers (intentionally exported despite underscore
+    # prefix — pytest fixtures + downstream test tooling consume these).
+    "_clear_registry_cache_for_testing",
+    "_load_default_registry_cached",
     # L6-J D6 aggregator purity
     "aggregate_horizons_pure",
 ]
