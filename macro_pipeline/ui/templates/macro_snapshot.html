@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}Macro Snapshot &middot; {{ partition }}{% endblock %}
+{% block content %}
+<div class="data-block">
+<div class="data-block-title">MACRO STATE SNAPSHOT</div>
+<p class="explanation-block">
+<span class="explanation-l1">Current macro environment summary, including the eight-dimensional state vector
+used for Reference Class Forecasting (Vision &sect;6) and the OOD reserve status (Vision &sect;7).</span>
+<span class="explanation-toggle" data-target="exp-macro-l2">+ More</span>
+<span id="exp-macro-l2" class="explanation-l2">
+The eight Vision &sect;6 dimensions (z-scored vs Fed-era 1913-present): CAPE, yield curve, LEI,
+credit spread, sentiment, breadth, volatility, concentration. OOD reserve fraction in
+[0.05, 0.15] per Vision &sect;7 severity-tier bucket arithmetic.
+<span class="explanation-vision-ref">Vision &sect;6 &middot; &sect;7</span>
+</span>
+</p>
+<table class="terminal-table">
+<thead><tr><th>HORIZON</th><th>OOD RESERVE</th><th>STATE</th></tr></thead>
+<tbody>
+{% for r in records | sort(attribute='horizon') %}
+<tr>
+<td>{{ r.horizon }}Y</td>
+<td class="numeric caution">{{ r.metric_outputs.get('ood_reserve_fraction') | pct }}</td>
+<td>
+{% if r.metric_outputs.get('reference_class_ood') %}
+    <span class="status-badge warning">OOD</span>
+{% elif r.metric_outputs.get('layer_disagreement_flag') %}
+    <span class="status-badge caution">DISAGREEMENT</span>
+{% else %}
+    <span class="status-badge ok">CONSENSUS</span>
+{% endif %}
+</td>
+</tr>
+{% endfor %}
+</tbody>
+</table>
+</div>
+
+<div class="data-block">
+<div class="data-block-title">MACRO LOCK BLOCK (VISION &sect;9 LUCAS CRITIQUE)</div>
+<p class="explanation-block">
+<span class="explanation-l1">Structural-break detection: when historical relationships may NOT hold under
+current policy regime, the Lucas critique flag fires + lists reason codes.</span>
+</p>
+{% for r in records | sort(attribute='horizon') %}
+<p>
+<strong>{{ r.horizon }}Y:</strong>
+{% if r.metric_outputs.get('lucas_critique_flag') %}
+    <span class="status-badge warning">LUCAS FLAG</span>
+    <span style="color: var(--text-secondary); font-size: 11px;">
+    Reason codes: {{ r.metric_outputs.get('lucas_reason_codes', '(unspecified)') }}
+    </span>
+{% else %}
+    <span class="status-badge ok">NO LUCAS BREAK</span>
+{% endif %}
+</p>
+{% endfor %}
+</div>
+{% endblock %}

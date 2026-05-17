@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Scenarios &middot; {{ partition }}{% endblock %}
+{% block content %}
+<div class="data-block">
+<div class="data-block-title">PROBABILITY-WEIGHTED SCENARIOS</div>
+<p class="explanation-block">
+<span class="explanation-l1">Five forecast scenarios across all horizons: Bull (top quartile),
+Base (median), Bear (bottom quartile), Tail (extreme adverse), OOD (out-of-distribution reserve).
+Probabilities sum to one per horizon.</span>
+<span class="explanation-toggle" data-target="exp-scenarios-l2">+ More</span>
+<span id="exp-scenarios-l2" class="explanation-l2">
+Bull / Base / Bear quantile thresholds derived from forecast distribution; Tail
+captures left-tail breach probability; OOD reserve per Vision &sect;7 (5-15% probability
+mass reserved for unmodeled outcomes).
+<span class="explanation-vision-ref">Vision &sect;4 &middot; &sect;7</span>
+</span>
+</p>
+<table class="terminal-table">
+<thead><tr>
+<th>HORIZON</th>
+<th>BULL P</th>
+<th>BASE P</th>
+<th>BEAR P</th>
+<th>TAIL P</th>
+<th>OOD RESERVE</th>
+</tr></thead>
+<tbody>
+{% for r in records | sort(attribute='horizon') %}
+<tr>
+<td>{{ r.horizon }}Y</td>
+<td class="numeric bullish">{{ r.metric_outputs.get('p_bull') | pct }}</td>
+<td class="numeric">{{ r.metric_outputs.get('p_base') | pct }}</td>
+<td class="numeric bearish">{{ r.metric_outputs.get('p_bear') | pct }}</td>
+<td class="numeric bearish">{{ r.metric_outputs.get('p_tail') | pct }}</td>
+<td class="numeric caution">{{ r.metric_outputs.get('ood_reserve_fraction') | pct }}</td>
+</tr>
+{% endfor %}
+</tbody>
+</table>
+</div>
+{% endblock %}

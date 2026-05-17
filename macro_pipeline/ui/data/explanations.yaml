@@ -1,0 +1,146 @@
+# L8 D9 — L1/L2/L3 explanation stack data file.
+#
+# Per Strategic L8 single comprehensive pre-flight 2026-05-16
+# (ACCELERATION PROTOCOL v2.0). Vision §11 BINDING progressive
+# disclosure for the top 22 commonly-referenced metrics. Full 90-metric
+# coverage deferred to post-deployment polish per L8 §11 risk #2.
+#
+# Schema per entry:
+#   metric_id        Registry metric ID
+#   vision_section   Vision section reference (e.g., "§4")
+#   L1               One-sentence plain English
+#   L2               Paragraph with finance terminology
+#   L3               Technical formula + Vision binding reference
+
+explanations:
+  - metric_id: cape_ratio
+    vision_section: "§7 Layer 1 Valuation"
+    L1: "How expensive are stocks compared to history? Higher number = more expensive."
+    L2: "Cyclically-Adjusted P/E ratio (CAPE) divides current price by 10-year-average inflation-adjusted earnings. Above 30 historically signals high valuations."
+    L3: "Shiller CAPE = P_t / (sum E_{t-i} / CPI_{t-i}, i=0 to 9). Vision section 7: CAPE > 97th percentile + behavioral confirmation = bubble-like."
+
+  - metric_id: confidence_score
+    vision_section: "§4 Triple Probability Decomposition"
+    L1: "How sure is the model about its forecast? Higher value means more confident."
+    L2: "Confidence is a 0-100 percent meta-uncertainty around the probability estimate, based on data quality, model agreement, regime stability, and analog strength."
+    L3: "Vision section 4 BINDING formula: Confidence = 0.25 times DQ + 0.25 times MA + 0.20 times RS + 0.15 times AS + 0.10 times SS minus 0.05 times OOD, capped per horizon (1Y: 85 percent, 3Y/5Y: 80 percent, 10Y: 70 or 55 percent stratified)."
+
+  - metric_id: conviction_score
+    vision_section: "§4"
+    L1: "How much would the model bet on this forecast? Higher means more conviction."
+    L2: "Conviction is a 1-10 position-sizing implication based on expected return attractiveness, asymmetry, model agreement, and risk penalties."
+    L3: "Vision section 4 BINDING: conviction = 1 + 9 times sum of weighted components minus penalties. Distinct from confidence: can be lower (poor asymmetry) or higher (asymmetric upside)."
+
+  - metric_id: point_estimate_annualized
+    vision_section: "§4 + §8 DMS"
+    L1: "The central forecast: what the model thinks returns will be on average per year."
+    L2: "Annualized expected return after Bayesian shrinkage at 10Y and DMS survivorship adjustment at 5Y/10Y."
+    L3: "Post-shrinkage: point = w_n times r_hat + w_kappa times r_prior; post-DMS: point + bps_dms/10000 per Vision section 8."
+
+  - metric_id: sigma_annualized
+    vision_section: "§5 Triple sigma"
+    L1: "How uncertain is the forecast? Higher means wider possible range of outcomes."
+    L2: "Annualized forecast standard deviation. Used to size confidence intervals. Cumulative scaling over horizons is approximate (sqrt-t)."
+    L3: "Vision section 5 BINDING three sigmas: return_sigma + forecast_error_sigma + analog_dispersion_sigma. sqrt-t scaling may fail under regime shifts, vol clustering, crises, policy shocks."
+
+  - metric_id: ood_reserve_fraction
+    vision_section: "§7 OOD Reserve"
+    L1: "How much room is reserved for unexpected outcomes (5-15 percent)?"
+    L2: "Probability mass set aside for Out-of-Distribution events; defaults to 5 percent baseline, scales up with active risk conditions per Vision section 7 severity tiers."
+    L3: "Vision section 7 BINDING: reserve = severity_tier_bucket(active_conditions). 1 condition: low bound of bucket; 2 or more conditions: high bound of largest active bucket. Bounds [0.05, 0.15]."
+
+  - metric_id: reference_class_ood
+    vision_section: "§6 + §10"
+    L1: "Flag: is the current macro state too unusual to find good historical analogs?"
+    L2: "True when fewer than 3 historical periods exceed the minimum similarity threshold (default 0.30). Signals analog quality insufficient for reliable Bayesian shrinkage."
+    L3: "Vision section 6: fires when count(top_k_analogs where similarity >= min_threshold) < RCF_OOD_MIN_NEIGHBORS_THRESHOLD (3)."
+
+  - metric_id: rcf_mean_similarity_top_k
+    vision_section: "§6 Reference Class Forecasting"
+    L1: "How similar (0 to 1) is the current environment to the top historical matches?"
+    L2: "Mean cosine similarity across top-3-to-5 analogs in the eight-dimensional standardized macro state space. Higher means current regime closely resembles historical reference class."
+    L3: "Vision section 6 BINDING: cosine(state_t, state_history) on (CAPE_z, curve_z, LEI_z, credit_z, sentiment_z, breadth_z, vol_z, concentration_z) standardized vector."
+
+  - metric_id: lucas_critique_flag
+    vision_section: "§9 Lucas Critique"
+    L1: "Flag: do historical relationships still hold under current policy regime?"
+    L2: "Fires when 2 or more structural-break evidence values exceed threshold; signals that the forecasting model may extrapolate beyond its training regime."
+    L3: "Vision section 9 BINDING: flag = count(reason_codes_breached) >= 2. Reason codes include fed_reaction_shift, fiscal_dominance, balance_sheet_dominance, nbfi_transmission, ai_productivity_shift, inflation_target_credibility, treasury_issuance_structure."
+
+  - metric_id: dms_adjustment_bps
+    vision_section: "§8 DMS Survivorship Adjustment"
+    L1: "Downward adjustment in basis points to correct US-equity survivorship bias."
+    L2: "Applied at 5Y (-100 to -150 bps) and 10Y (-150 to -200 bps) horizons. Magnitude scales with active risk factors (valuation, concentration, fiscal, reserve currency)."
+    L3: "Vision section 8 BINDING + Strategic L6-H D5: tier(risk_count) maps to (-100, -150, -200 bps). 1Y/3Y horizons not eligible (cyclical noise dominates)."
+
+  - metric_id: layer_disagreement_flag
+    vision_section: "§6"
+    L1: "Flag: do different forecast models agree or disagree on direction?"
+    L2: "Fires when signals from different methodological lenses (valuation vs trend vs macro vs credit) diverge in sign or magnitude."
+    L3: "L6-I D5: detect_layer_disagreement(signals) -> consensus / mixed_signal_undefined / etc. Future L7+ producer-backed pattern detection (valuation_bear_trend_bull, credit_widening_equity_bull, etc.)."
+
+  - metric_id: sqrt_t_scaling_warning
+    vision_section: "§5"
+    L1: "Flag: is the cumulative-sigma approximation reliable at this horizon?"
+    L2: "Fires when runtime detectors find conditions that degrade sqrt-t scaling (vol clustering, structural breaks, policy shocks, realized vol breach)."
+    L3: "Vision section 5 caveats + L6-J D3 BINDING: warning = (count(reason_codes) > 0) where codes in {vol_cluster_detected, structural_break_detected, policy_shock_detected, realized_vol_ratio_threshold_breach}."
+
+  - metric_id: bayesian_shrinkage
+    vision_section: "§6 + §10"
+    L1: "How much is the 10Y forecast pulled toward the long-run prior (6.5 percent real)?"
+    L2: "Bayesian shrinkage at 10Y horizon: weighted combination of empirical estimate and the 6.5 percent real return prior. Kappa controls shrinkage strength; scales with horizon and analog similarity at L6-J."
+    L3: "Vision section 6 + 10 BINDING: shrunk = n_eff/(n_eff+kappa_eff) times r_empirical + kappa_eff/(n_eff+kappa_eff) times r_prior. L6-J kappa_eff = base_kappa(horizon) / max(mean_similarity_top_k, 0.10). BAYESIAN_PRIOR_10Y_REAL_RETURN = 0.065."
+
+  - metric_id: model_agreement
+    vision_section: "§4 + §6"
+    L1: "How much do the 11 forecasting models agree on the answer?"
+    L2: "Proportion of model signals within plus/minus one sample-stdev of the weighted-mean point estimate. Higher = tighter agreement = more confidence."
+    L3: "L7 D3 producer: model_agreement = count(s in signals where |s.point - weighted_mean| <= sigma_proxy) / len(signals). Used as both Confidence and Conviction component."
+
+  - metric_id: data_quality
+    vision_section: "§4 Confidence"
+    L1: "How fresh and complete is the input data?"
+    L2: "Composite score across indicator coverage, vintage age, outlier counts, and missing data ratio."
+    L3: "L7 D3 producer: 0.40 times coverage + 0.30 times vintage + 0.20 times outlier + 0.10 times missing. Each sub-signal clamped to [0, 1]."
+
+  - metric_id: regime_stability
+    vision_section: "§4 Confidence + §6 RCF"
+    L1: "How stable is the current macro environment compared to the past?"
+    L2: "Derived from Reference Class top-k similarity; OOD flag pulls score to 0.30 (conservative); sample boundary violation degrades by 0.10."
+    L3: "L7 D3 producer: uses ReferenceClass.mean_similarity_top_k as primary signal; OOD shortcuts to 0.30; pre-1913 analogs subtract 0.10."
+
+  - metric_id: edge_score
+    vision_section: "§4 Conviction"
+    L1: "Is the expected return attractive relative to the risk-free benchmark?"
+    L2: "Sharpe-like edge: (expected return minus risk-free rate) divided by sigma, then sigmoid-transformed to [0, 1]."
+    L3: "L7 D3 producer: edge = 1 / (1 + exp(minus sharpe_proxy)) where sharpe_proxy = (point minus rfr) / sigma. Risk_free_rate default 0.03."
+
+  - metric_id: valuation_support
+    vision_section: "§4 Conviction"
+    L1: "Are current valuations supportive of the forecast direction?"
+    L2: "For long-equity forecast: low CAPE percentile (cheap) gives high support. For short-equity: inverted mapping."
+    L3: "L7 D3 producer: long_equity returns 1 minus cape_percentile; short_equity returns cape_percentile."
+
+  - metric_id: triple_decomposition
+    vision_section: "§4 BINDING everywhere"
+    L1: "Every forecast reports three independent numbers: probability, confidence, conviction."
+    L2: "Probability (0 to 1) of an outcome; Confidence (0 to 1) about that probability estimate; Conviction (1 to 10) for position sizing. Vision section 4 critical rule: never conflate."
+    L3: "Vision section 4 BINDING TripleDecomposition dataclass; six-layer defense-in-depth cap discipline; PD20 invariant test verifies cascade."
+
+  - metric_id: triple_sigma
+    vision_section: "§5 BINDING for all return forecasts"
+    L1: "Every forecast reports three different uncertainty measures."
+    L2: "return_sigma (annualized regime-conditional volatility), forecast_error_sigma (model uncertainty around central estimate), analog_dispersion_sigma (historical dispersion from comparable starts)."
+    L3: "Vision section 5 BINDING TripleSigma dataclass; L6-J D3 adds sqrt_t_scaling_warning + four reason codes for runtime degradation detection."
+
+  - metric_id: horizon_cap
+    vision_section: "§10 + §4"
+    L1: "Maximum confidence allowed per forecast horizon (sample-size honesty)."
+    L2: "Caps prevent overstating certainty: 1Y allows up to 85 percent, 3Y/5Y up to 80 percent, 10Y up to 70 percent (or 55 percent regime-stratified)."
+    L3: "Vision section 10 BINDING HORIZON_CAPS + Standing Order #9. L6-H apply_confidence_cap_cascade: cap = min(horizon_cap, signal_conflict_cap if active, ood_elevated_cap if active)."
+
+  - metric_id: replication_kit
+    vision_section: "§13 + §14"
+    L1: "Downloadable package containing everything needed to reproduce this forecast."
+    L2: "Includes forecast records JSON, methodology citations, data lineage summary, code SHA, README with reproducibility steps."
+    L3: "Vision section 14 BINDING Replication and Audit Discipline. L8 D8 ReplicationKitBuilder generates zip per partition; metadata fields per L6-J D4 MetricLineage."

@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}Forecast Terminal · {{ partition }}{% endblock %}</title>
+<link rel="stylesheet" href="static/css/terminal.css">
+</head>
+<body>
+<div class="terminal-header">
+    <span>FORECAST TERMINAL &middot; {{ partition }}</span>
+    <span>GEN {{ generated_at }}</span>
+</div>
+<nav class="terminal-nav">
+    <a href="index.html">Index</a> &middot;
+    <a href="forecast_results.html">Forecasts</a> &middot;
+    <a href="macro_snapshot.html">Macro</a> &middot;
+    <a href="scenarios.html">Scenarios</a> &middot;
+    <a href="drawdown_risk.html">Drawdown</a> &middot;
+    <a href="analogs.html">Analogs</a> &middot;
+    <a href="sector_factor.html">Sector/Factor</a> &middot;
+    <a href="academic/index.html">Academic</a> &middot;
+    <a href="educational/index.html">Educational</a>
+</nav>
+<main>
+{% block content %}{% endblock %}
+<div class="terminal-footer">
+    Macro pipeline forecast terminal &middot; Generated {{ generated_at }} &middot;
+    All times UTC &middot; Vision v2.1 binding
+</div>
+</main>
+<script src="static/js/progressive_disclosure.js"></script>
+</body>
+</html>

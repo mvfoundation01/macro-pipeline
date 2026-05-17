@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Forecast Results &middot; {{ partition }}{% endblock %}
+{% block content %}
+<div class="data-block">
+<div class="data-block-title">FORECAST RESULTS &mdash; ALL HORIZONS</div>
+<p class="explanation-block">
+<span class="explanation-l1">Point-estimate returns + confidence/conviction across 1Y, 3Y, 5Y, 10Y horizons.
+Confidence capped per Vision &sect;10 sample-size honesty (1Y 85%; 3Y/5Y 80%; 10Y 70% non-stratified, 55% regime-stratified).</span>
+<span class="explanation-toggle" data-target="exp-forecast-l2">+ More</span>
+<span id="exp-forecast-l2" class="explanation-l2">
+Each row shows the post-DMS-adjusted point estimate (binding forecast value at 5Y/10Y per Vision &sect;8),
+forecast sigma (annualized), Vision &sect;4 BINDING additive confidence (six-component weighted sum),
+and Vision &sect;4 BINDING ten-component distinct conviction (can be lower than confidence when risk/reward asymmetry is poor).
+<span class="explanation-vision-ref">Vision &sect;4 &middot; &sect;6 &middot; &sect;8 &middot; &sect;10</span>
+</span>
+</p>
+<table class="terminal-table">
+<thead><tr>
+<th>HORIZON</th>
+<th>POINT EST (ANN)</th>
+<th>SIGMA (ANN)</th>
+<th>CONFIDENCE</th>
+<th>CONVICTION</th>
+<th>CODE SHA</th>
+</tr></thead>
+<tbody>
+{% for r in records | sort(attribute='horizon') %}
+<tr>
+<td>{{ r.horizon }}Y</td>
+<td class="numeric {{ r.point_estimate_annualized | signed_class }}">{{ r.point_estimate_annualized | pct }}</td>
+<td class="numeric">{{ r.sigma_annualized | pct }}</td>
+<td class="numeric">{{ r.confidence | num }}</td>
+<td class="numeric">
+    {{ r.conviction | num }}/10
+    <span class="conviction-bar" style="--conviction-percent: {{ (r.conviction / 10 * 100) | round }}%"></span>
+</td>
+<td class="numeric"><code>{{ r.code_sha[:8] }}</code></td>
+</tr>
+{% endfor %}
+</tbody>
+</table>
+</div>
+
+<div class="data-block">
+<div class="data-block-title">METRIC OUTPUTS DETAIL (PER HORIZON)</div>
+{% for r in records | sort(attribute='horizon') %}
+<h4 style="margin: 12px 0 6px 0; color: var(--text-secondary); font-size: 12px;">{{ r.horizon }}Y Horizon</h4>
+{% if r.metric_outputs %}
+<table class="terminal-table">
+<thead><tr><th>METRIC</th><th>VALUE</th></tr></thead>
+<tbody>
+{% for k, v in r.metric_outputs.items() %}
+<tr><td>{{ k }}</td><td class="numeric">{{ v | num }}</td></tr>
+{% endfor %}
+</tbody>
+</table>
+{% else %}
+<p style="color: var(--text-tertiary); font-size: 11px;">No metric outputs recorded.</p>
+{% endif %}
+{% endfor %}
+</div>
+{% endblock %}

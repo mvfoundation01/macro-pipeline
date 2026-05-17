@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Forecast Terminal &middot; {{ partition }}{% endblock %}
+{% block content %}
+<div class="data-block">
+<div class="data-block-title">FORECAST REPORT INDEX &middot; {{ partition }}</div>
+<p class="explanation-block">
+    <span class="explanation-l1">This terminal renders forecast outputs from the macro pipeline across
+    four horizons (1Y / 3Y / 5Y / 10Y), with Vision &sect;4 BINDING Triple Probability
+    Decomposition (probability / confidence / conviction) and six-layer defense-in-depth
+    cap discipline.</span>
+</p>
+<p>Records in this report: <strong>{{ records | length }}</strong></p>
+<p>Horizons covered:
+{% set horizons = records | map(attribute='horizon') | list | unique | list | sort %}
+{% for h in horizons %}<span class="status-badge info">{{ h }}Y</span> {% endfor %}
+</p>
+</div>
+
+<div class="data-block">
+<div class="data-block-title">NAVIGATION</div>
+<ul style="list-style: none; padding-left: 0;">
+    <li>&rsaquo; <a href="forecast_results.html">Forecast Results</a> &mdash; 4-horizon point estimates + confidence/conviction</li>
+    <li>&rsaquo; <a href="macro_snapshot.html">Macro Snapshot</a> &mdash; macro state vector + OOD reserve</li>
+    <li>&rsaquo; <a href="scenarios.html">Scenarios</a> &mdash; Bull / Base / Bear / Tail / OOD probability-weighted</li>
+    <li>&rsaquo; <a href="drawdown_risk.html">Drawdown Risk</a> &mdash; tail probability tables per horizon</li>
+    <li>&rsaquo; <a href="analogs.html">Historical Analogs</a> &mdash; top 3-5 RCF reference class</li>
+    <li>&rsaquo; <a href="sector_factor.html">Sector / Factor Outlook</a> &mdash; 11 sectors + 13 factors</li>
+    <li>&rsaquo; <a href="academic/index.html">Academic</a> &mdash; replication kit + methodology citations + data lineage</li>
+    <li>&rsaquo; <a href="educational/index.html">Educational</a> &mdash; L1/L2/L3 progressive disclosure explanation stack</li>
+</ul>
+</div>
+{% endblock %}

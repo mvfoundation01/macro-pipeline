@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}Academic Features &middot; {{ partition }}{% endblock %}
+{% block content %}
+<div class="data-block">
+<div class="data-block-title">ACADEMIC PEER-REVIEW SURFACE</div>
+<p class="explanation-block">
+<span class="explanation-l1">Tools for academic peer review: downloadable replication kit, methodology
+citations, and data lineage transparency.</span>
+<span class="explanation-toggle" data-target="exp-academic-l2">+ More</span>
+<span id="exp-academic-l2" class="explanation-l2">
+Per Vision &sect;13 Calibration Public Accountability + &sect;14 Replication &amp; Audit Discipline.
+Every forecast version-stamped with code SHA + methodology version + Vision section
+binding references. Replication kit includes forecast records (JSON), citation bibliography,
+and lineage tracking for all 90 Vision &sect;3 measurements.
+<span class="explanation-vision-ref">Vision &sect;13 &middot; &sect;14 &middot; &sect;18 (#12 open-source)</span>
+</span>
+</p>
+</div>
+
+<div class="data-block">
+<div class="data-block-title">REPLICATION KIT DOWNLOAD</div>
+<p>
+The replication kit is generated programmatically per partition via
+<code>ReplicationKitBuilder.build()</code> from
+<code>macro_pipeline.ui.replication_kit</code>.
+</p>
+<p>
+<span class="download-button">DOWNLOAD REPLICATION KIT (Programmatic)</span>
+</p>
+<p style="color: var(--text-tertiary); font-size: 11px;">
+Note: download endpoint is the API-side responsibility. UI surfaces the
+button; backend wires <code>ReplicationKitBuilder</code> to HTTP response.
+</p>
+</div>
+
+<div class="data-block">
+<div class="data-block-title">METHODOLOGY CITATIONS</div>
+<table class="terminal-table">
+<thead><tr><th>SECTION</th><th>CITATIONS</th></tr></thead>
+<tbody>
+<tr><td>Vision &sect;7 Valuation</td><td style="color: var(--text-secondary);">Shiller (1989, 2015), Hussman (2017), Damodaran (2024)</td></tr>
+<tr><td>Vision &sect;1/&sect;4 Ensemble</td><td style="color: var(--text-secondary);">Asness (2014), Bridgewater All-Weather, Hoeting et al. (1999)</td></tr>
+<tr><td>Vision &sect;6/&sect;10 RCF</td><td style="color: var(--text-secondary);">Tetlock-Gardner (2015), Kahneman (2011), Lovallo-Kahneman (2003)</td></tr>
+<tr><td>Vision &sect;8 DMS</td><td style="color: var(--text-secondary);">Dimson-Marsh-Staunton (2002), Credit Suisse / UBS GIRY (annual)</td></tr>
+<tr><td>Vision &sect;9 Lucas</td><td style="color: var(--text-secondary);">Lucas (1976), Sargent (1987)</td></tr>
+<tr><td>Vision &sect;18 Anti-patterns</td><td style="color: var(--text-secondary);">Minsky (1986), Kindleberger (1978)</td></tr>
+<tr><td>Vision &sect;6/&sect;10 Bayesian shrinkage</td><td style="color: var(--text-secondary);">Stein (1956), Efron-Morris (1973), Gelman et al. (2013)</td></tr>
+<tr><td>Vision &sect;5 Triple sigma</td><td style="color: var(--text-secondary);">Hull (2018), Engle (1982)</td></tr>
+</tbody>
+</table>
+</div>
+
+<div class="data-block">
+<div class="data-block-title">DATA LINEAGE SUMMARY</div>
+<p class="explanation-block">
+<span class="explanation-l1">Lineage tracking for the 90-measurement registry (Vision &sect;3): which raw source,
+loader, transform, and model produces each computed metric; which are deferred to L7/L8a.</span>
+</p>
+<table class="lineage-table">
+<thead><tr><th>STATUS</th><th>COUNT</th><th>DETAIL</th></tr></thead>
+<tbody>
+<tr><td>Computed</td><td class="numeric">40</td><td>Producer-backed per <code>MetricLineage</code> (L6-J D4 schema)</td></tr>
+<tr><td>Deferred to L7</td><td class="numeric">36</td><td>Portfolio-scope; producer integration follow-up</td></tr>
+<tr><td>Deferred to L8a</td><td class="numeric">14</td><td>UI primitives requiring frontend layer</td></tr>
+<tr><td>Total</td><td class="numeric">90</td><td>Vision &sect;3 BINDING 90-measurement inventory</td></tr>
+</tbody>
+</table>
+</div>
+{% endblock %}

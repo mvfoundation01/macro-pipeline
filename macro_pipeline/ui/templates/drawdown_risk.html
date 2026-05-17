@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Drawdown Risk &middot; {{ partition }}{% endblock %}
+{% block content %}
+<div class="data-block">
+<div class="data-block-title">DRAWDOWN RISK PROBABILITIES</div>
+<p class="explanation-block">
+<span class="explanation-l1">Probability of various drawdown magnitudes by horizon. Higher percentages indicate
+elevated tail risk.</span>
+<span class="explanation-toggle" data-target="exp-dd-l2">+ More</span>
+<span id="exp-dd-l2" class="explanation-l2">
+Tail-risk probabilities derived from forecast distribution + historical analog dispersion.
+Values are forward-looking from the forecast date over the stated horizon.
+<span class="explanation-vision-ref">Vision &sect;5 &middot; &sect;7</span>
+</span>
+</p>
+<table class="terminal-table">
+<thead><tr>
+<th>HORIZON</th>
+<th>P(DD &gt; 10%)</th>
+<th>P(DD &gt; 20%)</th>
+<th>P(DD &gt; 35%)</th>
+<th>P(DD &gt; 50%)</th>
+<th>VAR 5%</th>
+</tr></thead>
+<tbody>
+{% for r in records | sort(attribute='horizon') %}
+<tr>
+<td>{{ r.horizon }}Y</td>
+<td class="numeric caution">{{ r.metric_outputs.get('p_drawdown_10') | pct }}</td>
+<td class="numeric caution">{{ r.metric_outputs.get('p_drawdown_20') | pct }}</td>
+<td class="numeric bearish">{{ r.metric_outputs.get('p_drawdown_35') | pct }}</td>
+<td class="numeric bearish">{{ r.metric_outputs.get('p_drawdown_50') | pct }}</td>
+<td class="numeric bearish">{{ r.metric_outputs.get('var_5pct') | pct }}</td>
+</tr>
+{% endfor %}
+</tbody>
+</table>
+</div>
+{% endblock %}

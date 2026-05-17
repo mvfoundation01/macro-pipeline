@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Sector / Factor Outlook &middot; {{ partition }}{% endblock %}
+{% block content %}
+<div class="data-block">
+<div class="data-block-title">SECTOR &amp; FACTOR OUTLOOK</div>
+<p class="explanation-block">
+<span class="explanation-l1">Sector + factor return forecasts conditioned on the current macro regime
+(11 GICS sectors &times; 13 risk factors per Vision &sect;19).</span>
+<span class="explanation-toggle" data-target="exp-sf-l2">+ More</span>
+<span id="exp-sf-l2" class="explanation-l2">
+Sector outlook conditional on macro regime + valuation; factor exposures derived from
+regression of historical factor returns against the eight-dimensional macro state vector.
+Placeholder values at L7/L8 surface where producer integration is deferred to follow-up sprint.
+<span class="explanation-vision-ref">Vision &sect;19</span>
+</span>
+</p>
+<p style="color: var(--text-tertiary); font-size: 11px;">
+Sector / factor producer integration scope: pre-staged surface at L8; full sector models
++ factor regression producers deferred to post-L8 polish sub-phase per Strategic
+ACCELERATION PROTOCOL pragmatic scoping.
+</p>
+{% for r in records | sort(attribute='horizon') %}
+<h4 style="margin: 12px 0 6px 0; color: var(--text-secondary); font-size: 12px;">
+{{ r.horizon }}Y Sector / Factor Surface
+</h4>
+<table class="terminal-table">
+<thead><tr><th>SLICE</th><th>STATUS</th><th>NOTE</th></tr></thead>
+<tbody>
+<tr><td>Sectors (11 GICS)</td><td><span class="status-badge info">PLACEHOLDER</span></td><td>Sector producer registry deferred to follow-up sprint per L8 ACCELERATION scope</td></tr>
+<tr><td>Factors (13 risk)</td><td><span class="status-badge info">PLACEHOLDER</span></td><td>Factor regression producer deferred to follow-up sprint per L8 ACCELERATION scope</td></tr>
+</tbody>
+</table>
+{% endfor %}
+</div>
+{% endblock %}

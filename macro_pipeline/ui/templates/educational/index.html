@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}Educational Features &middot; {{ partition }}{% endblock %}
+{% block content %}
+<div class="data-block">
+<div class="data-block-title">L1 / L2 / L3 PROGRESSIVE DISCLOSURE EXPLANATION STACK</div>
+<p class="explanation-block">
+<span class="explanation-l1">Every metric is explained at three depth levels: L1 (plain English, one sentence),
+L2 (intermediate, finance terminology paragraph), L3 (advanced, technical formula + Vision section reference).</span>
+<span class="explanation-toggle" data-target="exp-edu-l2">+ More</span>
+<span id="exp-edu-l2" class="explanation-l2">
+Vision &sect;11 BINDING for all outputs. Click "+ More" toggles below to expand intermediate and advanced explanations.
+Top 22 commonly-referenced metrics covered at L8; remaining 68 metrics deferred to post-deployment polish per L8 pragmatic scoping.
+<span class="explanation-vision-ref">Vision &sect;11 &middot; &sect;12 UX principles</span>
+</span>
+</p>
+</div>
+
+<div class="data-block">
+<div class="data-block-title">EXPLANATIONS &middot; KEY METRICS</div>
+
+<!-- Sample inline explanation block for the confidence_score metric -->
+<div class="explanation-block">
+<strong>Confidence Score</strong>
+<span class="explanation-l1">How sure is the model about its forecast? Higher value means more confident.</span>
+<span class="explanation-toggle" data-target="exp-conf-l2">+ More</span>
+<span id="exp-conf-l2" class="explanation-l2">
+Confidence is a 0-100 percent meta-uncertainty around the probability estimate, based on data quality, model agreement, regime stability, and analog strength.
+<span class="explanation-toggle" data-target="exp-conf-l3">+ Advanced</span>
+<span id="exp-conf-l3" class="explanation-l3">
+Vision section 4 BINDING formula: Confidence = 0.25 times DQ + 0.25 times MA + 0.20 times RS + 0.15 times AS + 0.10 times SS minus 0.05 times OOD,
+capped per horizon (1Y: 85 percent, 3Y/5Y: 80 percent, 10Y: 70 or 55 percent stratified).
+</span>
+<span class="explanation-vision-ref">Vision &sect;4</span>
+</span>
+</div>
+
+<div class="explanation-block">
+<strong>Conviction Score</strong>
+<span class="explanation-l1">How much would the model bet on this forecast? Higher means more conviction.</span>
+<span class="explanation-toggle" data-target="exp-conv-l2">+ More</span>
+<span id="exp-conv-l2" class="explanation-l2">
+Conviction is a 1-10 position-sizing implication based on expected return attractiveness, asymmetry, model agreement, and risk penalties.
+<span class="explanation-toggle" data-target="exp-conv-l3">+ Advanced</span>
+<span id="exp-conv-l3" class="explanation-l3">
+Vision section 4 BINDING: conviction = 1 + 9 times sum of weighted components minus penalties. Distinct from confidence: can be lower (poor asymmetry) or higher (asymmetric upside).
+</span>
+<span class="explanation-vision-ref">Vision &sect;4</span>
+</span>
+</div>
+
+<div class="explanation-block">
+<strong>Reference Class OOD Flag</strong>
+<span class="explanation-l1">Flag: is the current macro state too unusual to find good historical analogs?</span>
+<span class="explanation-toggle" data-target="exp-ood-l2">+ More</span>
+<span id="exp-ood-l2" class="explanation-l2">
+True when fewer than 3 historical periods exceed the minimum similarity threshold (default 0.30). Signals analog quality insufficient for reliable Bayesian shrinkage.
+<span class="explanation-vision-ref">Vision &sect;6 &middot; &sect;10</span>
+</span>
+</div>
+
+<div class="explanation-block">
+<strong>Lucas Critique Flag</strong>
+<span class="explanation-l1">Flag: do historical relationships still hold under current policy regime?</span>
+<span class="explanation-toggle" data-target="exp-lucas-l2">+ More</span>
+<span id="exp-lucas-l2" class="explanation-l2">
+Fires when 2 or more structural-break evidence values exceed threshold; signals that the forecasting model may extrapolate beyond its training regime.
+<span class="explanation-vision-ref">Vision &sect;9</span>
+</span>
+</div>
+
+<p style="color: var(--text-tertiary); font-size: 11px; margin-top: 16px;">
+&hellip; and 18 more metric explanations loaded from
+<code>macro_pipeline/ui/data/explanations.yaml</code> via the
+<code>ExplanationStack</code> API. Total: 22 metrics covered at L8 (Vision &sect;3
+BINDING 90-metric registry full coverage deferred to post-deployment polish).
+</p>
+</div>
+{% endblock %}

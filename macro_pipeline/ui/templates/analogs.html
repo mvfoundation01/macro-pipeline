@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Historical Analogs &middot; {{ partition }}{% endblock %}
+{% block content %}
+<div class="data-block">
+<div class="data-block-title">REFERENCE CLASS &middot; HISTORICAL ANALOGS (TOP 3-5)</div>
+<p class="explanation-block">
+<span class="explanation-l1">Historical periods most similar to the current macro state. Used for Bayesian
+shrinkage toward analog mean per Vision &sect;6.</span>
+<span class="explanation-toggle" data-target="exp-analogs-l2">+ More</span>
+<span id="exp-analogs-l2" class="explanation-l2">
+Top 3-5 analogs (cosine similarity on the eight-dimensional standardized macro state vector).
+Vision &sect;6 BINDING: minimum similarity threshold default 0.30; below this the reference class is flagged OOD.
+Sample boundary violation flag fires for analogs pre-dating Fed-era start (1913-01-01).
+<span class="explanation-vision-ref">Vision &sect;6 &middot; &sect;10</span>
+</span>
+</p>
+<table class="terminal-table">
+<thead><tr>
+<th>HORIZON</th>
+<th>RCF MEAN SIM (TOP-K)</th>
+<th>N NEIGHBORS</th>
+<th>OOD FLAG</th>
+<th>BOUNDARY VIOL</th>
+</tr></thead>
+<tbody>
+{% for r in records | sort(attribute='horizon') %}
+<tr>
+<td>{{ r.horizon }}Y</td>
+<td class="numeric">{{ r.metric_outputs.get('rcf_mean_similarity_top_k') | num }}</td>
+<td class="numeric">{{ r.metric_outputs.get('rcf_n_neighbors') | num(0) }}</td>
+<td>
+{% if r.metric_outputs.get('reference_class_ood') %}
+    <span class="status-badge warning">OOD</span>
+{% else %}
+    <span class="status-badge ok">IN-SAMPLE</span>
+{% endif %}
+</td>
+<td>
+{% if r.metric_outputs.get('sample_boundary_violation') %}
+    <span class="status-badge caution">PRE-1913</span>
+{% else %}
+    <span class="status-badge ok">FED-ERA</span>
+{% endif %}
+</td>
+</tr>
+{% endfor %}
+</tbody>
+</table>
+</div>
+{% endblock %}
