@@ -6,6 +6,104 @@ Tags are pushed alongside each layer-complete commit (e.g. `l11-accept`).
 The macro pipeline itself (L1-L9) was developed across ~50 convergent sub-phases;
 this changelog starts at L10 when the user-facing surface area began shipping.
 
+## [L12 v2 — Auto-fetch UX: FRED + Yahoo fetchers, 4-manual+4-auto form, exception handling] — 2026-05-17
+
+Tags: `l12-2-accept`, `l12-2-layer-complete`, `auto-fetch-ux-v2`.
+
+Builds on L12 v1 (b5435f49). V tested L12 v1 and surfaced 3 remaining
+friction points:
+
+1. `/forecast/run` crashed with an opaque 500 on certain inputs (no error
+   page; just Flask's default traceback view).
+2. V wanted 4 of the 8 macro fields auto-fetched from FRED / Yahoo
+   instead of typed every time.
+3. V's manual fields had source URLs but no inline guidance on which
+   field came from where.
+
+### 6 new deliverables (additive on top of L12 v1)
+
+**D3 — `/forecast/run` exception handling.** The route body is now
+extracted to `_run_impl()` and the public `run()` wraps it in a
+try/except. `HTTPException` (e.g. `RequestEntityTooLarge` for the L10
+50 MiB upload cap) propagates unchanged so Flask's default handler can
+emit the right 4xx status; any other unhandled exception lands at a new
+`templates/error.html` page with a Vietnamese "QUAY LẠI FORM" button +
+collapsible technical details + 500 status.
+
+**D7 — `webapp/fred_fetcher.py`.** `FREDFetcher` reads `FRED_API_KEY`
+from the env (loaded by `macro_pipeline.config`'s `dotenv.load_dotenv()`),
+constructs a `fredapi.Fred` client lazily, and exposes three fetchers:
+`fetch_unrate()` / `fetch_payrolls_mom()` (latest PAYEMS MoM Δ) /
+`fetch_fed_funds()`. Every failure path returns `FetchResult.empty()` —
+the fetcher NEVER raises. 1-hour per-series TTL cache.
+
+**D8 — `webapp/yfinance_fetcher.py`.** `YahooFetcher` mirrors the FRED
+contract for the SP500 spot close (`^GSPC`). 15-minute cache. Same
+graceful-degradation guarantee — yfinance import + ticker construction
++ history fetch all wrapped.
+
+**D9 — 4-manual + 4-auto form redesign.** `input.html` now splits the
+macro inputs into Section 2A (PMI Mfg / PMI Services / Core CPI YoY /
+CAPE — manual) and Section 2B (SP500 / Unemployment / Payrolls MoM /
+Fed Funds — auto-fetched). Each auto-field shows a green
+"[Auto-fetched · cập nhật YYYY-MM-DD]" badge when the source returned
+a value; a yellow "[FRED không khả dụng · nhập manual]" badge otherwise.
+The auto values pre-populate the input's `value=` attribute so V can
+override by simply editing the input. The route `_fill_auto_fetch_defaults`
+runs at POST time so a blank auto field re-attempts the fetch + falls
+back to validation-error on miss (rather than crashing).
+
+**D11 — Auto-fetch UI states.** Three states per auto field:
+* loaded → green badge with as-of date,
+* failed → yellow "manual fallback" badge,
+* no-FRED-key → top-level blue info callout linking to FRED registration
+  + `.env.example` with the env-var name + setup steps.
+
+**D12 — `.env.example`.** Repo-root template with `FRED_API_KEY=<your-key-here>`
++ commented Yahoo ticker override + free-registration link.
+
+**D13 — `help.html`** new "0a. Auto-fetch architecture (L12 v2)" section
+documenting the field-by-field source + cache TTL table + FRED key setup
+steps + override semantics.
+
+### Tests (22 new in 4 files, 50% NEG strict on fetchers)
+
+| File | Total | NEG | POS | NEG% |
+|---|---|---|---|---|
+| test_l12_2_fred_fetcher.py | 7 | 4 | 3 | 57% (strict — validation-heavy) |
+| test_l12_2_yfinance_fetcher.py | 4 | 2 | 2 | 50% |
+| test_l12_2_exception_handling.py | 5 | 3 | 2 | 60% |
+| test_l12_2_form_auto_fetch_rendering.py | 6 | 2 | 4 | 33% |
+
+22 new tests; aggregate 11 NEG / 11 POS = 50% NEG. The form-rendering
+file is POS-heavy by nature (UI snapshot checks); the fetcher + exception
+files anchor 50–60% strict NEG.
+
+### Verification
+
+* Full pytest: **1537 / 1537 PASS** in 193.69 s (1515 baseline + 22 L12 v2).
+* Defense Test 12 + cap_cascade: **11 / 11 PASS** (unchanged).
+* Ruff (L12 v2 scope): clean.
+* Exception handler tested via `mock.patch` on `ParquetForecastStore.append`
+  — verified the OSError lands at the error.html page with 500 status +
+  HTML content-type + Vietnamese "QUAY LẠI FORM" link.
+* L10 `test_post_forecast_run_oversized_payload_rejected` regression
+  caught + fixed: the outer `except Exception` was swallowing werkzeug's
+  `RequestEntityTooLarge` and re-rendering it as 500. Added an explicit
+  `except HTTPException: raise` shim so all werkzeug HTTP exceptions
+  propagate to Flask's default handler with their proper status codes.
+
+### L10 v1 → v2 migration notes
+
+* The 8 form fields stay POSTable with the same names — existing L10/L11
+  tests that POST all 8 keep passing because `_fill_auto_fetch_defaults`
+  is a no-op when all 8 are populated.
+* The `run()` → `_run_impl()` split is internal; no public API change.
+* `home.py` route now injects three new template contexts
+  (`auto_fetched` dict, `fred_available` bool, plus the existing
+  `detected_files` + `local_categories` + `scan_error`). Templates that
+  don't use them silently ignore.
+
 ## [L12 — UX refinement v1: multi-format CSV ingest + local data manager + source URL annotations + deps catch-up] — 2026-05-17
 
 Tags: `l12-accept`, `l12-layer-complete`, `ux-refinement-v1`.

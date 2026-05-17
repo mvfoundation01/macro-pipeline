@@ -7,7 +7,48 @@
 <h1 style="color: var(--text-primary); font-size: 18px;">HƯỚNG DẪN SỬ DỤNG MACRO FORECAST TERMINAL</h1>
 <p style="color: var(--text-secondary);">Một-cú-click để tạo forecast Macro &amp; Equity Strategy theo phương pháp luận institutional (Vision v2.1).</p>
 
-<h2>0. Workflow với data cục bộ (L12)</h2>
+<h2>0a. Auto-fetch architecture (L12 v2)</h2>
+<p>
+  Form chia làm 2 nhóm chỉ số macro: <strong>4 manual</strong> (sentiment / valuation
+  không có free auto-fetch) + <strong>4 auto-fetch</strong> (giá thị trường + macro số
+  từ FRED/Yahoo).
+</p>
+<table class="terminal-table">
+  <thead><tr><th>Field</th><th>Loại</th><th>Nguồn</th><th>Cache</th></tr></thead>
+  <tbody>
+    <tr><td>PMI Manufacturing</td><td>manual</td><td>ISM (tự nhập)</td><td>—</td></tr>
+    <tr><td>PMI Services</td><td>manual</td><td>ISM Services (tự nhập)</td><td>—</td></tr>
+    <tr><td>Core CPI YoY</td><td>manual</td><td>BLS / FRED CPILFESL (tự nhập)</td><td>—</td></tr>
+    <tr><td>CAPE Ratio</td><td>manual</td><td>multpl.com / Shiller (tự nhập)</td><td>—</td></tr>
+    <tr><td>S&amp;P 500 current</td><td>auto</td><td>Yahoo Finance ^GSPC</td><td>15 phút</td></tr>
+    <tr><td>Unemployment Rate</td><td>auto</td><td>FRED UNRATE</td><td>1 giờ</td></tr>
+    <tr><td>Nonfarm Payrolls MoM</td><td>auto</td><td>FRED PAYEMS Δ</td><td>1 giờ</td></tr>
+    <tr><td>Fed Funds Rate</td><td>auto</td><td>FRED FEDFUNDS</td><td>1 giờ</td></tr>
+  </tbody>
+</table>
+
+<h3>FRED API key setup (cho 3 chỉ số UNRATE/PAYEMS/FEDFUNDS)</h3>
+<ol>
+  <li>Đăng ký miễn phí tại
+      <a href="https://fred.stlouisfed.org/docs/api/api_key.html" target="_blank" rel="noopener">FRED API</a>
+      (~ 1 phút)</li>
+  <li>Mở repo root, tạo file <code>.env</code> (xem <code>.env.example</code>):
+      <code>FRED_API_KEY=&lt;your_key&gt;</code></li>
+  <li>Restart run.bat — 3 ô FRED sẽ tự fill</li>
+</ol>
+<p>
+  Không có key thì web app vẫn chạy: 3 ô FRED hiện ô rỗng + warning vàng, bạn nhập manual
+  từ link gợi ý.
+</p>
+
+<h3>Override auto-fetched values</h3>
+<p>
+  Auto-fetched values pre-fill vào form như giá trị default. Muốn override cho backtest
+  scenario? Chỉ cần sửa giá trị trong ô input — submit sẽ dùng giá trị mới (không lấy
+  auto nữa).
+</p>
+
+<h2>0b. Workflow với data cục bộ (L12)</h2>
 <p>
   Từ L12, pipeline tự quét hai thư mục mỗi lần load form:
 </p>

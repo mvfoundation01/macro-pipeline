@@ -21,6 +21,7 @@ from flask import (
     send_from_directory,
     url_for,
 )
+from werkzeug.exceptions import HTTPException
 from werkzeug.utils import secure_filename
 
 from macro_pipeline.ensemble.aggregator import aggregate_ensemble
@@ -30,7 +31,57 @@ from macro_pipeline.webapp.data_ingestion import (
     ForecastInputsBuilder,
     IngestionResult,
 )
+from macro_pipeline.webapp.fred_fetcher import FREDFetcher
 from macro_pipeline.webapp.local_data_manager import LocalDataManager
+from macro_pipeline.webapp.yfinance_fetcher import YahooFetcher
+
+# L12 v2 D9: which form fields are eligible for auto-fetch fallback when
+# the user leaves them blank. Keeps backward-compat with L10/L11 tests that
+# POST all 8 fields populated.
+_AUTO_FETCH_FIELDS: tuple[str, ...] = (
+    "sp500_current",
+    "unemployment_rate",
+    "payrolls_mom",
+    "fed_funds_rate",
+)
+
+
+def _fill_auto_fetch_defaults(
+    raw_form: dict[str, str | None],
+) -> dict[str, str | None]:
+    """Fill missing/empty L12 v2 auto-fetch fields from FRED + Yahoo.
+
+    Returns a new dict with original keys plus auto-fetched substitutes for
+    any empty value in ``_AUTO_FETCH_FIELDS``. Manual fields untouched.
+    Failure-safe: per-field auto-fetch errors leave the field empty so the
+    standard ``_parse_float`` reports the missing-field error to the user.
+    """
+    out = dict(raw_form)
+    auto: dict[str, float | None] = dict.fromkeys(_AUTO_FETCH_FIELDS)
+    needs_auto = [
+        f for f in _AUTO_FETCH_FIELDS
+        if not (out.get(f) or "").strip()
+    ]
+    if not needs_auto:
+        return out
+    try:
+        fred = FREDFetcher()
+        if fred.available:
+            for field, result in fred.fetch_all_form_fields().items():
+                if field in needs_auto and result.ok:
+                    auto[field] = result.value
+    except Exception:
+        log.exception("FRED auto-fetch fallback failed during /forecast/run")
+    try:
+        for field, result in YahooFetcher().fetch_all_form_fields().items():
+            if field in needs_auto and result.ok:
+                auto[field] = result.value
+    except Exception:
+        log.exception("Yahoo auto-fetch fallback failed during /forecast/run")
+    for field in needs_auto:
+        if auto[field] is not None:
+            out[field] = f"{auto[field]:.4f}"
+    return out
 
 log = logging.getLogger(__name__)
 
@@ -110,12 +161,52 @@ def template(name: str):
 
 @forecast_bp.route("/run", methods=["POST"])
 def run():
-    """Orchestrate forecast: save uploads → parse → aggregate → persist → redirect."""
+    """L10 D4 / L12 v2 D3 — orchestrate forecast end-to-end.
+
+    Wrapped in an outer try/except so a producer / Excel / aggregator failure
+    renders the L12 v2 error.html page instead of letting Flask return a
+    500-with-traceback (V's browser previously saw "internal server error"
+    with no recovery affordance).
+    """
+    try:
+        return _run_impl()
+    except HTTPException:
+        # 413 RequestEntityTooLarge + friends MUST stay 413 — Flask's default
+        # handler turns these into the correct HTTP status code, not 500.
+        raise
+    except Exception as exc:  # noqa: BLE001 - last-resort recovery
+        log.exception("Unexpected error in /forecast/run")
+        from flask import render_template
+        return render_template(
+            "error.html",
+            error_type="Internal Error",
+            message=(
+                f"Đã xảy ra lỗi không mong muốn ({type(exc).__name__}): {exc}. "
+                "Xem console log (cửa sổ run.bat) để debug."
+            ),
+            details=f"{type(exc).__name__}: {exc}",
+            recoverable=False,
+        ), 500
+
+
+def _run_impl():
+    """The L10 /forecast/run body — extracted so the L12 v2 outer wrapper
+    can catch ANY exception and render the friendly error page."""
     upload_dir = Path(current_app.config["UPLOAD_DIR"])
     forecast_store_dir = Path(current_app.config["FORECAST_STORE_DIR"])
     webapp_render_dir = Path(current_app.config["WEBAPP_RENDER_DIR"])
 
     # ---- Step 1: parse + validate numerical inputs ----
+    # L12 v2 D9: 4 of the 8 fields are eligible for auto-fetch fallback when
+    # the user leaves them blank (the form pre-fills them via the home route
+    # auto-fetch, but a blank submit must still produce a usable forecast).
+    raw_form = {f: request.form.get(f) for f, _ in (
+        ("pmi_manufacturing", ""), ("pmi_services", ""), ("cape_ratio", ""),
+        ("sp500_current", ""), ("payrolls_mom", ""), ("unemployment_rate", ""),
+        ("core_cpi_yoy", ""), ("fed_funds_rate", ""),
+    )}
+    raw_form = _fill_auto_fetch_defaults(raw_form)
+
     field_specs = [
         ("pmi_manufacturing", "PMI Manufacturing"),
         ("pmi_services", "PMI Services"),
@@ -130,7 +221,7 @@ def run():
     try:
         for field, label in field_specs:
             numerical_inputs[field] = _parse_float(
-                request.form.get(field), label
+                raw_form.get(field), label
             )
     except ValueError as exc:
         flash(str(exc), "error")

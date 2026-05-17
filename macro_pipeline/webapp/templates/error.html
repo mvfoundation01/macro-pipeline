@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Lỗi &middot; Macro Forecast Terminal{% endblock %}
+{% block content %}
+
+<section class="webapp-section" aria-labelledby="error-heading">
+  <h3 id="error-heading" style="color: var(--accent-bearish);">LỖI: {{ error_type | default("Internal Error") }}</h3>
+
+  <p style="color: var(--text-primary); margin: 16px 0;">
+    {{ message }}
+  </p>
+
+  {% if details %}
+  <details style="margin: 12px 0;">
+    <summary style="color: var(--text-tertiary); font-size: 11px; cursor: pointer;">
+      Chi tiết kỹ thuật (click để xem)
+    </summary>
+    <pre style="background: var(--bg-tertiary); padding: 12px; margin-top: 8px;
+                font-size: 11px; color: var(--text-secondary); overflow-x: auto;">{{ details }}</pre>
+  </details>
+  {% endif %}
+
+  <p style="margin: 24px 0 8px 0;">
+    {% if recoverable %}
+      <a href="{{ url_for('home.index') }}" class="btn-primary" style="text-decoration: none;">
+        ← QUAY LẠI FORM
+      </a>
+      <span class="hint" style="margin-left: 12px;">Sửa input rồi submit lại.</span>
+    {% else %}
+      <a href="{{ url_for('home.index') }}" class="btn-primary" style="text-decoration: none;">
+        ← QUAY LẠI FORM
+      </a>
+      <span class="hint" style="margin-left: 12px;">
+        Lỗi nội bộ — kiểm tra console log (cửa sổ run.bat) để debug.
+      </span>
+    {% endif %}
+  </p>
+</section>
+
+{% endblock %}

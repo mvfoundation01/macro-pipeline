@@ -6,14 +6,14 @@
   TẠO FORECAST MACRO &amp; CHIẾN LƯỢC CỔ PHIẾU
 </h1>
 <p style="color: var(--text-secondary); font-size: 12px; margin-bottom: 24px;">
-  Pipeline tự quét <code>data/raw/official/</code> + <code>data/raw/tradingview/</code> rồi
-  kết hợp với 8 chỉ số macro bạn nhập. Có thể upload Excel để override category cụ thể.
-  Bấm <strong style="color: var(--accent-bullish);">CHẠY FORECAST</strong> khi sẵn sàng.
+  Pipeline tự quét <code>data/raw/</code>, auto-fetch giá SPX + macro chỉ số từ
+  FRED/Yahoo, kết hợp với 4 chỉ số sentiment/valuation bạn nhập. Bấm
+  <strong style="color: var(--accent-bullish);">CHẠY FORECAST</strong> khi sẵn sàng.
 </p>
 
 <form method="POST" action="{{ url_for('forecast.run') }}" enctype="multipart/form-data" id="forecast-form">
 
-  <!-- ============ SECTION 0 (L12 D7): Detected Local Files ============ -->
+  {# ============ SECTION 0 (L12 D7): Detected Local Files ============ #}
   <section class="webapp-section" aria-labelledby="detected-files-heading">
     <h3 id="detected-files-heading">0. DỮ LIỆU CỤC BỘ (TỰ ĐỘNG PHÁT HIỆN)</h3>
     <p class="hint" style="margin-bottom: 12px;">
@@ -36,9 +36,7 @@
       </p>
     {% else %}
       <table class="terminal-table">
-        <thead>
-          <tr><th>Category</th><th>Sub-series</th><th>File</th></tr>
-        </thead>
+        <thead><tr><th>Category</th><th>Sub-series</th><th>File</th></tr></thead>
         <tbody>
           {% for cat in ['yield_curve', 'credit_spreads', 'sentiment'] %}
             {% for f in detected_files.get(cat, []) %}
@@ -66,12 +64,12 @@
     {% endif %}
   </section>
 
-  <!-- ============ SECTION 1: Excel uploads (manual override) ============ -->
+  {# ============ SECTION 1: Excel uploads (manual override) ============ #}
   <section class="webapp-section">
-    <h3>1. Excel upload (tùy chọn — override file cục bộ)</h3>
+    <h3>1. EXCEL UPLOAD (tùy chọn — override file cục bộ)</h3>
 
     <div class="upload-area">
-      <label for="yield_curve_file"><strong>Yield curve</strong> (2Y &amp; 10Y Treasury yields theo ngày)</label><br>
+      <label for="yield_curve_file"><strong>Yield curve</strong> (2Y &amp; 10Y Treasury yields)</label><br>
       <input type="file" id="yield_curve_file" name="yield_curve_file" accept=".xlsx,.csv">
       {% if 'yield_curve' in local_categories %}
         <small style="color: var(--accent-bullish);">[Local files đã cover; upload sẽ override.]</small>
@@ -83,7 +81,7 @@
     </div>
 
     <div class="upload-area">
-      <label for="credit_spreads_file"><strong>Credit spreads</strong> (Investment-grade OAS theo ngày)</label><br>
+      <label for="credit_spreads_file"><strong>Credit spreads</strong> (Investment-grade OAS)</label><br>
       <input type="file" id="credit_spreads_file" name="credit_spreads_file" accept=".xlsx,.csv">
       {% if 'credit_spreads' in local_categories %}
         <small style="color: var(--accent-bullish);">[Local files đã cover; upload sẽ override.]</small>
@@ -107,9 +105,12 @@
     </div>
   </section>
 
-  <!-- ============ SECTION 2 (L12 D8): Numerical inputs with source URLs ============ -->
-  <section class="webapp-section">
-    <h3>2. Chỉ số macro (8 trường — bắt buộc; click link để xem nguồn)</h3>
+  {# ============ SECTION 2A (L12 v2 D9): 4 manual fields ============ #}
+  <section class="webapp-section" aria-labelledby="manual-heading">
+    <h3 id="manual-heading">2A. CHỈ SỐ MANUAL (4 trường — sentiment/valuation)</h3>
+    <p class="hint" style="margin-bottom: 12px;">
+      4 chỉ số không có free auto-fetch — nhập thủ công. Click nguồn để tra cứu giá trị hiện tại.
+    </p>
 
     <div class="form-row">
       <label for="pmi_manufacturing">PMI Manufacturing</label>
@@ -118,19 +119,30 @@
     <div class="form-row"><div class="hint">
       Nguồn:
       <a href="https://www.ismworld.org/supply-management-news-and-reports/reports/ism-report-on-business/pmi/" target="_blank" rel="noopener">ISM (chính)</a> ·
-      <a href="https://tradingeconomics.com/united-states/manufacturing-pmi" target="_blank" rel="noopener">TradingEconomics</a> ·
+      <a href="https://tradingeconomics.com/united-states/business-confidence" target="_blank" rel="noopener">TradingEconomics</a> ·
       trên 50 = mở rộng.
     </div></div>
 
     <div class="form-row">
-      <label for="pmi_services">PMI Services</label>
+      <label for="pmi_services">PMI Services (Non-Manufacturing)</label>
       <input type="number" step="0.1" id="pmi_services" name="pmi_services" required value="52.0" min="0" max="100">
     </div>
     <div class="form-row"><div class="hint">
       Nguồn:
       <a href="https://www.ismworld.org/supply-management-news-and-reports/reports/ism-report-on-business/services/" target="_blank" rel="noopener">ISM Services</a> ·
-      <a href="https://tradingeconomics.com/united-states/services-pmi" target="_blank" rel="noopener">TradingEconomics</a> ·
+      <a href="https://tradingeconomics.com/united-states/non-manufacturing-pmi" target="_blank" rel="noopener">TradingEconomics</a> ·
       trên 50 = mở rộng.
+    </div></div>
+
+    <div class="form-row">
+      <label for="core_cpi_yoy">Core CPI YoY (%)</label>
+      <input type="number" step="0.1" id="core_cpi_yoy" name="core_cpi_yoy" required value="3.0" min="-5" max="20">
+    </div>
+    <div class="form-row"><div class="hint">
+      Nguồn:
+      <a href="https://fred.stlouisfed.org/series/CPILFESL" target="_blank" rel="noopener">FRED CPILFESL</a> ·
+      <a href="https://tradingeconomics.com/united-states/core-inflation-rate" target="_blank" rel="noopener">TradingEconomics Core Inflation</a> ·
+      loại trừ food + energy.
     </div></div>
 
     <div class="form-row">
@@ -141,84 +153,114 @@
       Nguồn:
       <a href="https://www.multpl.com/shiller-pe" target="_blank" rel="noopener">multpl.com</a> ·
       <a href="http://www.econ.yale.edu/~shiller/data.htm" target="_blank" rel="noopener">Shiller dataset (Yale)</a> ·
-      mean lịch sử ~22; trên 30 = đắt.
+      mean lịch sử ~22.
     </div></div>
+  </section>
 
+  {# ============ SECTION 2B (L12 v2 D9+D11): 4 auto-fetch fields ============ #}
+  <section class="webapp-section" aria-labelledby="auto-heading">
+    <h3 id="auto-heading">2B. CHỈ SỐ AUTO-FETCH (4 trường — override bằng cách sửa giá trị)</h3>
+
+    {% if not fred_available %}
+      <div class="flash-info" style="margin-bottom: 12px;">
+        <strong>⚠ FRED_API_KEY chưa được set.</strong> 3 chỉ số FRED dưới đây
+        sẽ rỗng — nhập manual. Cách lấy key miễn phí (~ 1 phút):
+        <a href="https://fred.stlouisfed.org/docs/api/api_key.html" target="_blank" rel="noopener">FRED API</a>
+        rồi thêm <code>FRED_API_KEY=&lt;your_key&gt;</code> vào file <code>.env</code>
+        ở repo root (xem <code>.env.example</code>).
+      </div>
+    {% endif %}
+
+    {# ---- S&P 500 (Yahoo Finance — no key needed) ---- #}
+    {% set sp500 = auto_fetched.sp500_current if auto_fetched else none %}
     <div class="form-row">
-      <label for="sp500_current">S&amp;P 500 (giá hiện tại)</label>
-      <input type="number" step="0.1" id="sp500_current" name="sp500_current" required value="5800.0" min="0">
+      <label for="sp500_current">S&amp;P 500 (current price)</label>
+      <input type="number" step="0.01" id="sp500_current" name="sp500_current" required min="0"
+             value="{% if sp500 and sp500.value is not none %}{{ '%.2f' | format(sp500.value) }}{% endif %}">
+      {% if sp500 and sp500.value is not none %}
+        <small style="color: var(--accent-bullish);">[Auto-fetched · cập nhật {{ sp500.as_of }}]</small>
+      {% else %}
+        <small style="color: var(--accent-caution);">[Auto-fetch failed · nhập manual]</small>
+      {% endif %}
     </div>
     <div class="form-row"><div class="hint">
       Nguồn:
-      <a href="https://finance.yahoo.com/quote/%5EGSPC/" target="_blank" rel="noopener">Yahoo Finance (^GSPC)</a> ·
+      <a href="https://finance.yahoo.com/quote/%5EGSPC/" target="_blank" rel="noopener">Yahoo Finance ^GSPC</a> ·
       <a href="https://www.google.com/finance/quote/.INX:INDEXSP" target="_blank" rel="noopener">Google Finance</a>
     </div></div>
 
-    <div class="form-row">
-      <label for="payrolls_mom">Nonfarm Payrolls MoM (nghìn người)</label>
-      <input type="number" step="1" id="payrolls_mom" name="payrolls_mom" required value="200">
-    </div>
-    <div class="form-row"><div class="hint">
-      Nguồn:
-      <a href="https://fred.stlouisfed.org/series/PAYEMS" target="_blank" rel="noopener">FRED PAYEMS</a> ·
-      <a href="https://www.bls.gov/news.release/empsit.toc.htm" target="_blank" rel="noopener">BLS Employment Situation</a> ·
-      ví dụ 200 = +200,000 jobs.
-    </div></div>
-
+    {# ---- Unemployment Rate (FRED) ---- #}
+    {% set unrate = auto_fetched.unemployment_rate if auto_fetched else none %}
     <div class="form-row">
       <label for="unemployment_rate">Tỷ lệ thất nghiệp (%)</label>
-      <input type="number" step="0.1" id="unemployment_rate" name="unemployment_rate" required value="4.0" min="0" max="20">
+      <input type="number" step="0.1" id="unemployment_rate" name="unemployment_rate" required min="0" max="20"
+             value="{% if unrate and unrate.value is not none %}{{ '%.1f' | format(unrate.value) }}{% endif %}">
+      {% if unrate and unrate.value is not none %}
+        <small style="color: var(--accent-bullish);">[FRED · cập nhật {{ unrate.as_of }}]</small>
+      {% else %}
+        <small style="color: var(--accent-caution);">[FRED không khả dụng · nhập manual]</small>
+      {% endif %}
     </div>
     <div class="form-row"><div class="hint">
       Nguồn:
       <a href="https://fred.stlouisfed.org/series/UNRATE" target="_blank" rel="noopener">FRED UNRATE</a> ·
-      <a href="https://www.bls.gov/news.release/empsit.t01.htm" target="_blank" rel="noopener">BLS U-3</a> ·
-      dưới 4 = thị trường lao động chặt.
+      <a href="https://www.bls.gov/news.release/empsit.t01.htm" target="_blank" rel="noopener">BLS U-3</a>
     </div></div>
 
+    {# ---- Nonfarm Payrolls MoM (FRED PAYEMS Δ) ---- #}
+    {% set payrolls = auto_fetched.payrolls_mom if auto_fetched else none %}
     <div class="form-row">
-      <label for="core_cpi_yoy">Core CPI YoY (%)</label>
-      <input type="number" step="0.1" id="core_cpi_yoy" name="core_cpi_yoy" required value="3.0" min="-5" max="20">
+      <label for="payrolls_mom">Nonfarm Payrolls MoM (nghìn người)</label>
+      <input type="number" step="1" id="payrolls_mom" name="payrolls_mom" required
+             value="{% if payrolls and payrolls.value is not none %}{{ '%.0f' | format(payrolls.value) }}{% endif %}">
+      {% if payrolls and payrolls.value is not none %}
+        <small style="color: var(--accent-bullish);">[FRED PAYEMS Δ · cập nhật {{ payrolls.as_of }}]</small>
+      {% else %}
+        <small style="color: var(--accent-caution);">[FRED không khả dụng · nhập manual]</small>
+      {% endif %}
     </div>
     <div class="form-row"><div class="hint">
       Nguồn:
-      <a href="https://fred.stlouisfed.org/series/CPILFESL" target="_blank" rel="noopener">FRED CPILFESL</a> ·
-      <a href="https://www.bls.gov/cpi/" target="_blank" rel="noopener">BLS CPI</a> ·
-      loại trừ food + energy.
+      <a href="https://fred.stlouisfed.org/series/PAYEMS" target="_blank" rel="noopener">FRED PAYEMS</a> ·
+      <a href="https://www.bls.gov/news.release/empsit.toc.htm" target="_blank" rel="noopener">BLS Employment Situation</a>
     </div></div>
 
+    {# ---- Fed Funds Rate (FRED FEDFUNDS) ---- #}
+    {% set ffr = auto_fetched.fed_funds_rate if auto_fetched else none %}
     <div class="form-row">
       <label for="fed_funds_rate">Fed Funds Rate (%)</label>
-      <input type="number" step="0.05" id="fed_funds_rate" name="fed_funds_rate" required value="4.5" min="0" max="20">
+      <input type="number" step="0.05" id="fed_funds_rate" name="fed_funds_rate" required min="0" max="20"
+             value="{% if ffr and ffr.value is not none %}{{ '%.2f' | format(ffr.value) }}{% endif %}">
+      {% if ffr and ffr.value is not none %}
+        <small style="color: var(--accent-bullish);">[FRED · cập nhật {{ ffr.as_of }}]</small>
+      {% else %}
+        <small style="color: var(--accent-caution);">[FRED không khả dụng · nhập manual]</small>
+      {% endif %}
     </div>
     <div class="form-row"><div class="hint">
       Nguồn:
       <a href="https://fred.stlouisfed.org/series/FEDFUNDS" target="_blank" rel="noopener">FRED FEDFUNDS</a> ·
-      <a href="https://www.federalreserve.gov/monetarypolicy/openmarket.htm" target="_blank" rel="noopener">Federal Reserve FOMC</a> ·
-      effective rate.
+      <a href="https://www.federalreserve.gov/monetarypolicy/openmarket.htm" target="_blank" rel="noopener">Federal Reserve FOMC</a>
     </div></div>
+
+    <p class="hint" style="margin-top: 12px; font-size: 11px;">
+      Override: sửa trực tiếp giá trị trong ô input để override auto-fetched value
+      (ví dụ cho backtest scenario).
+    </p>
   </section>
 
-  <!-- ============ SECTION 3: Horizons ============ -->
+  {# ============ SECTION 3: Horizons ============ #}
   <section class="webapp-section">
-    <h3>3. Horizons (chọn ít nhất 1; mặc định cả 4)</h3>
+    <h3>3. HORIZONS (chọn ít nhất 1; mặc định cả 4)</h3>
     <div class="form-row">
-      <label class="checkbox-inline">
-        <input type="checkbox" name="horizons" value="1" checked> 1Y
-      </label>
-      <label class="checkbox-inline">
-        <input type="checkbox" name="horizons" value="3" checked> 3Y
-      </label>
-      <label class="checkbox-inline">
-        <input type="checkbox" name="horizons" value="5" checked> 5Y
-      </label>
-      <label class="checkbox-inline">
-        <input type="checkbox" name="horizons" value="10" checked> 10Y
-      </label>
+      <label class="checkbox-inline"><input type="checkbox" name="horizons" value="1" checked> 1Y</label>
+      <label class="checkbox-inline"><input type="checkbox" name="horizons" value="3" checked> 3Y</label>
+      <label class="checkbox-inline"><input type="checkbox" name="horizons" value="5" checked> 5Y</label>
+      <label class="checkbox-inline"><input type="checkbox" name="horizons" value="10" checked> 10Y</label>
     </div>
   </section>
 
-  <!-- ============ ACTION ============ -->
+  {# ============ ACTION ============ #}
   <button type="submit" class="btn-primary" id="submit-btn">CHẠY FORECAST</button>
   <p style="color: var(--text-tertiary); font-size: 11px; margin-top: 8px;">
     Quá trình aggregator mất khoảng 5–30 giây tùy số horizon.
@@ -226,7 +268,6 @@
 </form>
 
 <script>
-  // Disable button on submit + show spinner so user doesn't double-click.
   document.getElementById('forecast-form').addEventListener('submit', function () {
     var btn = document.getElementById('submit-btn');
     btn.disabled = true;
