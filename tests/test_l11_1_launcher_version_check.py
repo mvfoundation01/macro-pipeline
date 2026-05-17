@@ -145,22 +145,27 @@ def test_subprocess_exit_code_propagates_for_rejection() -> None:
 
 def test_run_bat_invokes_check_script() -> None:
     """``run.bat`` must call ``scripts\\check_python_version.py`` so V can't
-    silently fall through to pip install with an incompatible Python."""
+    silently fall through to pip install with an incompatible Python.
+
+    L11.2 update: substring relaxed from ``python -m venv`` to ``-m venv``
+    because L11.2's run.bat invokes venv creation via a variable
+    (``!PYTHON_CMD! -m venv .venv``) chosen by the py-launcher cascade.
+    """
     repo_root = SCRIPT_PATH.parent.parent
     run_bat = (repo_root / "run.bat").read_text(encoding="utf-8")
     assert "check_python_version.py" in run_bat
-    # Must call BEFORE creating the venv (i.e. before `python -m venv`).
     check_idx = run_bat.index("check_python_version.py")
-    venv_idx = run_bat.index("python -m venv .venv")
+    venv_idx = run_bat.index("-m venv .venv")
     assert check_idx < venv_idx, (
-        "run.bat must call check_python_version.py BEFORE `python -m venv`"
+        "run.bat must call check_python_version.py BEFORE creating the venv"
     )
 
 
 def test_run_sh_invokes_check_script() -> None:
+    """L11.2 update: same relaxation as run.bat (variable-driven venv)."""
     repo_root = SCRIPT_PATH.parent.parent
     run_sh = (repo_root / "run.sh").read_text(encoding="utf-8")
     assert "check_python_version.py" in run_sh
     check_idx = run_sh.index("check_python_version.py")
-    venv_idx = run_sh.index("python3 -m venv .venv")
+    venv_idx = run_sh.index("-m venv .venv")
     assert check_idx < venv_idx

@@ -6,6 +6,56 @@ Tags are pushed alongside each layer-complete commit (e.g. `l11-accept`).
 The macro pipeline itself (L1-L9) was developed across ~50 convergent sub-phases;
 this changelog starts at L10 when the user-facing surface area began shipping.
 
+## [L11.2 — Environment Bootstrap + Launcher Resilience] — 2026-05-17
+
+Tags: `l11-2-accept`, `l11-2-layer-complete`, `launcher-resilient-v1`.
+
+### Bug (continued from L11.1)
+L11.1's `check_python_version.py` correctly rejected Python 3.14 with a
+clear Vietnamese message, but a user whose only installed Python is 3.14
+was left with a closed loop: the launcher told them what to install but
+didn't help them install it. They also still hit the cryptic
+`... was unexpected at this time.` if PATH ordering surfaced 3.14 before
+a usable interpreter. L11.2 closes both.
+
+### Fix
+- Python 3.13.13 installed on the dev machine via `py install 3.13`
+  (pymanager); confirmed with `py -3.13 --version` → Python 3.13.13.
+- `run.bat` refactored: 3-tier interpreter cascade — `py -3.13` first,
+  then `py -3.12`, then PATH `python` validated by
+  `check_python_version.py`. Each tier verified by running
+  `<interpreter> -c ""` so a stale shim never satisfies the check.
+- `run.sh` parallel refactor: `python3.13` → `python3.12` → `python3`
+  with `check_python_version.py` validation on the generic fallback.
+- `standalone_launcher.py` now reconfigures `sys.stdout` and
+  `sys.stderr` to UTF-8 at startup. Without `chcp 65001`, the default
+  Windows console codepage cp1252 cannot encode Vietnamese characters;
+  the launcher crashed with `UnicodeEncodeError` on direct `python -m`
+  invocation. `run.bat` already sets the codepage, but ad-hoc dev runs
+  and the L11.2 smoke test invoke the launcher directly.
+- Both launchers now invoke `python -m macro_pipeline.standalone_launcher`
+  (instead of `macro_pipeline.webapp.app`) so they share the polished
+  banner, browser-auto-open after 2 s, and OSError-on-port-in-use UX
+  with the PyInstaller frozen mode.
+- 9 new tests in `tests/test_l11_2_launcher_resilience.py` (44 % NEG),
+  including a real subprocess + HTTP smoke test that verifies the
+  Flask server returns HTTP 200 + "MACRO FORECAST TERMINAL" within 60 s.
+
+### Verification
+- `py install 3.13` → Python 3.13.13 installed (3.14/3.13/3.12 all
+  coexist on this machine).
+- Direct smoke: `python -m macro_pipeline.standalone_launcher` →
+  HTTP 200 + 6743-byte HTML body containing "MACRO FORECAST TERMINAL",
+  port 8000 released cleanly on terminate.
+- Pytest: 9 new tests + 1486 / 1486 PASS full suite (1477 + 9 L11.2).
+- Defense Test 12 + cap_cascade: 11 / 11 PASS (unchanged).
+- Ruff (L11.2 scope): clean.
+
+### V's deployment clone
+`D:/macro_pipeline/macro-pipeline` updated to the L11.2 commit so V can
+double-click `run.bat` and reach `http://localhost:8000` without any
+manual Python install (Python 3.13 already on the machine via L11.2 §B).
+
 ## [L11.1 — Launcher Python 3.14 compat hotfix] — 2026-05-17
 
 Tags: `l11-1-hotfix`, `launcher-py314-compat`.

@@ -3,18 +3,43 @@ chcp 65001 >nul
 setlocal enabledelayedexpansion
 cd /d "%~dp0"
 
-echo ============================================================
-echo  MACRO FORECAST TERMINAL - One-click Launcher (Windows)
-echo ============================================================
+echo ===============================================================
+echo  MACRO FORECAST TERMINAL - One-click Launcher (Windows) [L11.2]
+echo ===============================================================
 echo.
 
-REM Step 1: detect Python
-python --version >nul 2>&1
-if errorlevel 1 (
-    echo [ERROR] Python chua duoc cai dat tren may.
+REM === Phase 1: detect best Python via py launcher cascade ===
+set PYTHON_CMD=
+set PYTHON_DESC=
+
+where py >nul 2>&1
+if !ERRORLEVEL! EQU 0 (
+    REM Try py -3.13 first (preferred — most recent supported version)
+    py -3.13 -c "" >nul 2>&1
+    if !ERRORLEVEL! EQU 0 (
+        set "PYTHON_CMD=py -3.13"
+        set "PYTHON_DESC=Python 3.13 (py launcher)"
+        goto :python_found
+    )
+    REM Fallback to py -3.12
+    py -3.12 -c "" >nul 2>&1
+    if !ERRORLEVEL! EQU 0 (
+        set "PYTHON_CMD=py -3.12"
+        set "PYTHON_DESC=Python 3.12 (py launcher)"
+        goto :python_found
+    )
+)
+
+REM === Phase 2: fallback to PATH python (validated by check_python_version.py) ===
+where python >nul 2>&1
+if !ERRORLEVEL! NEQ 0 (
+    echo [ERROR] Khong tim thay Python 3.12 hoac 3.13 tren may.
     echo.
-    echo Vui long tai Python 3.12 hoac 3.13 tu:
-    echo   https://www.python.org/downloads/release/python-3128/
+    echo Cai Python 3.13 tu:
+    echo   https://www.python.org/downloads/release/python-31313/
+    echo.
+    echo Hoac neu da co Python install manager:
+    echo   py install 3.13
     echo.
     echo Khi cai dat, nho TICH O "Add Python to PATH"!
     echo.
@@ -22,59 +47,62 @@ if errorlevel 1 (
     exit /b 1
 )
 
-REM Step 2: show Python version
-for /f "tokens=2" %%i in ('python --version 2^>^&1') do set PYVER=%%i
-echo [INFO] Python version: !PYVER!
-
-REM Step 2a: validate version range (L11.1 — delegates to standalone Python
-REM script so we never have to parse 3-component versions in batch).
 python scripts\check_python_version.py
-if errorlevel 1 (
+if !ERRORLEVEL! NEQ 0 (
     echo.
     echo Pipeline yeu cau Python 3.12 hoac 3.13. Cai dat tai:
-    echo   https://www.python.org/downloads/
-    echo Sau khi cai, dong cua so nay va chay lai run.bat.
+    echo   https://www.python.org/downloads/release/python-31313/
+    echo Hoac dung Python install manager:
+    echo   py install 3.13
+    echo Sau khi cai, dong cua so nay va chay lai run.bat
     echo.
     pause
     exit /b 1
 )
+set "PYTHON_CMD=python"
+set "PYTHON_DESC=Python (PATH, da validate)"
 
-REM Step 3: create venv if missing
+:python_found
+echo [INFO] Su dung: !PYTHON_DESC!
+!PYTHON_CMD! --version
+echo.
+
+REM === Phase 3: venv create if missing ===
 if not exist ".venv\Scripts\python.exe" (
     echo [INFO] Tao virtual environment lan dau (mat ~30 giay)...
-    python -m venv .venv
-    if errorlevel 1 (
+    !PYTHON_CMD! -m venv .venv
+    if !ERRORLEVEL! NEQ 0 (
         echo [ERROR] Khong the tao venv.
         pause
         exit /b 1
     )
 )
 
-REM Step 4: install dependencies if first run
+REM === Phase 4: install dependencies if first run ===
 .venv\Scripts\python.exe -c "import flask" >nul 2>&1
-if errorlevel 1 (
+if !ERRORLEVEL! NEQ 0 (
     echo [INFO] Cai dat dependencies lan dau (mat 3-8 phut)...
     echo        Vui long doi, dung tat cua so nay.
     echo.
     .venv\Scripts\python.exe -m pip install --upgrade pip --quiet
     .venv\Scripts\python.exe -m pip install -e . --quiet
-    .venv\Scripts\python.exe -m pip install flask --quiet
-    if errorlevel 1 (
-        echo [ERROR] Cai dat that bai.
+    if !ERRORLEVEL! NEQ 0 (
+        echo [ERROR] Cai dat phu thuoc that bai.
         pause
         exit /b 1
     )
+    .venv\Scripts\python.exe -m pip install flask --quiet
     echo [OK] Cai dat hoan tat.
     echo.
 )
 
-REM Step 5: generate Excel templates if missing
+REM === Phase 5: generate Excel templates if missing ===
 if not exist "macro_pipeline\webapp\static\templates\yield-curve.xlsx" (
     echo [INFO] Tao Excel templates...
     .venv\Scripts\python.exe scripts\generate_excel_templates.py
 )
 
-REM Step 6: launch
+REM === Phase 6: launch via standalone_launcher (auto-opens browser + handles port conflicts) ===
 echo.
 echo [INFO] Dang khoi dong Macro Forecast Terminal...
 echo [INFO] Browser se tu dong mo tai: http://localhost:8000
@@ -82,7 +110,6 @@ echo.
 echo Nhan Ctrl+C de dung server.
 echo.
 
-start "" cmd /c "timeout /t 3 /nobreak >nul && start http://localhost:8000"
-.venv\Scripts\python.exe -m macro_pipeline.webapp.app
+.venv\Scripts\python.exe -m macro_pipeline.standalone_launcher
 
 endlocal

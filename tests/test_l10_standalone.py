@@ -58,13 +58,22 @@ def test_build_standalone_script_imports_cleanly() -> None:
 # NEG — strict (3 tests)
 # ----------------------------------------------------------------------
 def test_run_bat_exists_at_repo_root() -> None:
-    """run.bat must exist; missing = D7 not shipped."""
+    """run.bat must exist; missing = D7 not shipped.
+
+    L11.2 update: accept either ``macro_pipeline.webapp.app`` (L10) or
+    ``macro_pipeline.standalone_launcher`` (L11.2+) as a valid launch entry —
+    both bind Flask on 127.0.0.1:8000; standalone_launcher adds the banner +
+    auto-browser-open + port-conflict handling.
+    """
     run_bat = REPO_ROOT / "run.bat"
     assert run_bat.exists()
     text = run_bat.read_text(encoding="utf-8")
     # Must not reference an interactive editor or skip-hooks pattern.
     assert "git rebase -i" not in text
-    assert "macro_pipeline.webapp.app" in text
+    assert (
+        "macro_pipeline.webapp.app" in text
+        or "macro_pipeline.standalone_launcher" in text
+    )
 
 
 def test_run_sh_exists_and_has_shebang() -> None:

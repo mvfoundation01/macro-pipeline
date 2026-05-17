@@ -28,6 +28,18 @@ def _open_browser_delayed(delay_seconds: float = 2.0) -> None:
 
 
 def main() -> int:
+    # L11.2 — Force UTF-8 stdout/stderr so Vietnamese strings print on Windows
+    # consoles whose codepage isn't already 65001. run.bat sets the codepage
+    # via `chcp 65001 >nul` before launching us, but direct `python -m`
+    # invocations (smoke tests, ad-hoc dev runs) inherit the OS default cp1252.
+    # `reconfigure` exists in Python 3.7+; errors='replace' rather than 'strict'
+    # so an exotic terminal can degrade gracefully instead of crashing on a
+    # single un-encodable glyph.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            with contextlib.suppress(Exception):
+                stream.reconfigure(encoding="utf-8", errors="replace")
+
     print("=" * 60)
     print(" MACRO FORECAST TERMINAL - Standalone")
     print("=" * 60)
