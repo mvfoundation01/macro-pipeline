@@ -1,0 +1,97 @@
+# L7 alert rule configuration (schema v1)
+#
+# Per Strategic L7 single-sub-phase pre-flight 2026-05-16 (ACCELERATION
+# PROTOCOL v1.0) D6. Declarative rule schema for forecast alert
+# dispatch; consumed by macro_pipeline.alerting.rule_loader.
+#
+# Each rule specifies:
+#   - rule_id          unique identifier
+#   - description      human-readable explanation
+#   - trigger          field + operator + threshold/value to evaluate
+#                      against per-horizon metric outputs
+#   - severity         info | warning | critical (AlertSeverity enum)
+#   - adapters         list of adapter names (email | slack | webhook)
+#                      to dispatch to
+#
+# Rule evaluation discipline:
+#   - Per-horizon rules: trigger.horizon = 1 | 3 | 5 | 10
+#   - Horizon-agnostic rules: omit trigger.horizon
+#   - Multiple rules may fire per forecast cycle; each dispatches
+#     independently
+
+schema_version: v1
+authored_at: "2026-05-16"
+authored_by: "Strategic Track B + Track A L7 D6"
+
+rules:
+  - rule_id: high_confidence_1y_breach
+    description: |
+      1Y forecast confidence exceeds 0.80 (extreme high-conviction
+      regime; institutional reviewer attention warranted).
+    trigger:
+      horizon: 1
+      field: confidence
+      operator: ">"
+      threshold: 0.80
+    severity: critical
+    adapters: [email, slack]
+
+  - rule_id: regime_shift_ood
+    description: |
+      Reference class OOD flag triggers — current macro state has
+      fewer than 3 historical analogs above similarity threshold;
+      forecast analog quality insufficient for institutional confidence.
+    trigger:
+      field: reference_class_ood
+      operator: "=="
+      value: true
+    severity: warning
+    adapters: [email, webhook]
+
+  - rule_id: lucas_critique_flag
+    description: |
+      Lucas critique runtime flag fires — ≥2 structural-break evidence
+      values exceed threshold; historical relationships may not hold
+      under current policy regime.
+    trigger:
+      field: lucas_critique_flag
+      operator: "=="
+      value: true
+    severity: warning
+    adapters: [slack, webhook]
+
+  - rule_id: sqrt_t_scaling_warning_5y
+    description: |
+      Triple-sigma sqrt-t scaling validity flag fires at 5Y horizon —
+      cumulative-sigma approximation degraded; surfacing for caller
+      attention.
+    trigger:
+      horizon: 5
+      field: sqrt_t_scaling_warning
+      operator: "=="
+      value: true
+    severity: info
+    adapters: [slack]
+
+  - rule_id: layer_disagreement_critical
+    description: |
+      11-model ensemble layer disagreement label is non-consensus
+      (mixed_signal_undefined etc.); forecast signals diverging across
+      methodological lenses.
+    trigger:
+      field: layer_disagreement_flag
+      operator: "=="
+      value: true
+    severity: warning
+    adapters: [email, slack]
+
+  - rule_id: ood_reserve_elevated
+    description: |
+      OOD reserve fraction at or above 0.10 (elevated regime); cap
+      cascade tightens to 0.70 across all horizons per Vision §7.
+    trigger:
+      field: ood_reserve_fraction
+      operator: ">="
+      threshold: 0.10
+    severity: info
+    adapters: [slack]
