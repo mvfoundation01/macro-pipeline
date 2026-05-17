@@ -509,6 +509,189 @@ def populate_metric_outputs(
     return outputs
 
 
+def aggregate_horizons_pure(
+    forecast_inputs: ForecastInputs,
+    manual_inputs: Optional[ManualInputSchedule] = None,
+    ood_conditions: Optional[OODConditions] = None,
+    regime_stratified: bool = False,
+    *,
+    valuation_extreme: bool = False,
+    concentration_extreme: bool = False,
+    fiscal_risks_elevated: bool = False,
+    reserve_currency_risk: bool = False,
+    lucas_evidence: Optional[Dict[str, float]] = None,
+    signal_conflict: bool = False,
+) -> Tuple[Dict[int, HorizonResult], float, Tuple[str, ...]]:
+    """L6-J D6 — Pure horizon aggregation (no timestamp / no git SHA / no I/O).
+
+    Per Codex R7 Finding #5 (C-14), the L6-H ``aggregate_ensemble``
+    interleaved pure aggregation with side-effectful replication metadata
+    stamping (``datetime.now(timezone.utc)`` + ``subprocess.run(git
+    rev-parse)``). L6-J extracts the deterministic core into
+    ``aggregate_horizons_pure`` so that:
+
+      - Same inputs → same outputs (reproducible replication kit).
+      - Tests no longer race against wall-clock or git state.
+      - ``aggregate_ensemble`` (below) wraps this pure core + optional
+        injectable timestamp/SHA for orchestrators that need
+        deterministic replication metadata.
+
+    Returns a 3-tuple ``(horizon_results, ood_reserve, ood_reason_codes)``
+    sufficient to compose ``EnsembleResult`` externally.
+
+    All parameters identical to ``aggregate_ensemble`` minus
+    timestamp/SHA injection. See aggregate_ensemble for parameter docs.
+    """
+    # Step 1 — OOD reserve + reason codes (L6-H D1)
+    if ood_conditions is None:
+        ood_reserve = OOD_RESERVE_FLOOR_DEFAULT
+        ood_reason_codes: Tuple[str, ...] = ()
+    else:
+        ood_reserve, ood_reason_codes = compute_ood_reserve(ood_conditions)
+
+    # Step 2 — Lucas critique diagnostics (L6-H D5)
+    lucas_diag = compute_lucas_diagnostics(structural_break_evidence=lucas_evidence)
+
+    horizon_results: Dict[int, HorizonResult] = {}
+
+    for horizon in SUPPORTED_HORIZONS:
+        # Step 3a — point estimate + n_eff
+        point = forecast_inputs.point_estimates[horizon]
+        n_eff = forecast_inputs.point_estimate_n_eff[horizon]
+
+        # Step 3b — manual recession_p override (L1.7-D integration)
+        recession_p = forecast_inputs.recession_probabilities[horizon]
+        if manual_inputs is not None:
+            from macro_pipeline.manual_input.integration import (
+                apply_recession_p_override_for_horizon,
+            )
+            recession_p = apply_recession_p_override_for_horizon(
+                manual_inputs, horizon, recession_p
+            )
+
+        # Step 3c — Bayesian shrinkage at 10Y only (Vision §6)
+        bayesian_applied = False
+        shrinkage_n_eff: Optional[int] = None
+        if horizon == 10:
+            point = apply_bayesian_shrinkage(
+                point_estimate=point,
+                prior=BAYESIAN_PRIOR_10Y_REAL_RETURN,
+                n_eff=n_eff,
+            )
+            bayesian_applied = True
+            shrinkage_n_eff = n_eff
+
+        # Step 3d — DMS adjustment (L6-H D5)
+        dms_raw_pe = point
+        dms_bps, dms_reason = select_dms_adjustment_bps(
+            horizon=horizon,
+            valuation_extreme=valuation_extreme,
+            concentration_extreme=concentration_extreme,
+            fiscal_risks_elevated=fiscal_risks_elevated,
+            reserve_currency_risk=reserve_currency_risk,
+        )
+        dms_adjusted_pe = apply_dms_bps_to_return(dms_raw_pe, dms_bps)
+        point = dms_adjusted_pe
+
+        # Step 3e — Vision §4 additive confidence (L6-H D3)
+        confidence_components = derive_confidence_components(
+            n_eff=n_eff,
+            horizon=horizon,
+            reference_class=forecast_inputs.reference_class,
+            ood_reserve_fraction=ood_reserve,
+        )
+        raw_confidence = compute_bayesian_confidence(
+            components=confidence_components,
+            horizon=horizon,
+        )
+
+        # Step 3f — Vision §4 + §7 + §10 cap cascade (L6-H D2)
+        confidence = apply_confidence_cap_cascade(
+            confidence=raw_confidence,
+            horizon=horizon,
+            regime_stratified=regime_stratified,
+            signal_conflict=signal_conflict,
+            ood_elevated=(ood_reserve >= OOD_ELEVATED_RESERVE_THRESHOLD),
+            ood_reserve_fraction=ood_reserve,
+        )
+
+        # Step 3g — Vision §4 10-component conviction (L6-H D4)
+        conviction_components = derive_conviction_components(
+            confidence=confidence,
+            n_eff=n_eff,
+            horizon=horizon,
+            reference_class=forecast_inputs.reference_class,
+            point_estimate=point,
+        )
+        conviction = compute_conviction_score(conviction_components)
+
+        # Step 3h — TripleDecomposition (defense-in-depth 1st layer)
+        triple_decomp = TripleDecomposition(
+            probability=recession_p,
+            confidence=confidence,
+            conviction=conviction,
+            horizon=horizon,
+            regime_stratified=regime_stratified,
+        )
+
+        # Step 3i — enforce_confidence_caps (defense-in-depth 2nd layer)
+        enforce_confidence_caps(confidence, horizon, regime_stratified)
+
+        # Step 3j — TripleSigma (Vision §5)
+        triple_sigma = TripleSigma(
+            return_sigma=forecast_inputs.return_sigmas[horizon],
+            forecast_error_sigma=forecast_inputs.forecast_sigmas[horizon],
+            analog_dispersion_sigma=forecast_inputs.analog_dispersions[
+                horizon
+            ],
+            horizon=horizon,
+        )
+
+        # Step 3k — metric_outputs
+        metric_outputs = populate_metric_outputs(
+            forecast_inputs=forecast_inputs,
+            horizon=horizon,
+            point_estimate=point,
+            recession_p=recession_p,
+            confidence=confidence,
+            conviction=conviction,
+            dms_raw_point_estimate=dms_raw_pe,
+            dms_adjusted_point_estimate=dms_adjusted_pe,
+            dms_adjustment_bps=dms_bps,
+            lucas_flag=lucas_diag.flag,
+        )
+
+        # L6-I D3+D5 — wrap point_estimates as 11-model placeholder signals
+        # + detect layer disagreement.
+        model_signals = wrap_point_estimates_as_model_signals(
+            point_estimates={h: point if h == horizon else 0.0
+                             for h in SUPPORTED_HORIZONS},
+            horizon=horizon,
+        )
+        disagree_flag, disagree_label = detect_layer_disagreement(
+            model_signals
+        )
+
+        # Step 3l — HorizonResult
+        horizon_results[horizon] = HorizonResult(
+            horizon=horizon,
+            triple_decomposition=triple_decomp,
+            triple_sigma=triple_sigma,
+            metric_outputs=metric_outputs,
+            bayesian_shrinkage_applied=bayesian_applied,
+            shrinkage_n_eff=shrinkage_n_eff,
+            dms_raw_point_estimate=dms_raw_pe,
+            dms_adjusted_point_estimate=dms_adjusted_pe,
+            dms_adjustment_bps=dms_bps,
+            dms_selection_reason=dms_reason,
+            lucas_diagnostics=lucas_diag,
+            layer_disagreement_flag=disagree_flag,
+            layer_disagreement_label=disagree_label,
+        )
+
+    return (horizon_results, ood_reserve, ood_reason_codes)
+
+
 def aggregate_ensemble(
     forecast_inputs: ForecastInputs,
     manual_inputs: Optional[ManualInputSchedule] = None,
@@ -522,6 +705,11 @@ def aggregate_ensemble(
     reserve_currency_risk: bool = False,
     lucas_evidence: Optional[Dict[str, float]] = None,
     signal_conflict: bool = False,
+    # L6-J D6 — injectable replication metadata for deterministic tests
+    # + replication kits. Defaults preserve L6-H backward compat
+    # (dynamic timestamp + git SHA fetch).
+    timestamp_utc: Optional[datetime] = None,
+    code_sha: Optional[str] = None,
 ) -> EnsembleResult:
     """End-to-end ensemble aggregation (L6-F + L6-G + L6-H).
 
@@ -601,164 +789,46 @@ def aggregate_ensemble(
         / ``EnsembleResult``; or invalid n_eff / kappa propagated into
         ``apply_bayesian_shrinkage``; or invalid OOD / Lucas inputs.
     """
-    # Step 1 — OOD reserve + reason codes (L6-H D1)
-    if ood_conditions is None:
-        ood_reserve = OOD_RESERVE_FLOOR_DEFAULT
-        ood_reason_codes: Tuple[str, ...] = ()
+    # L6-J D6 — Step 1+2+3 delegated to pure helper (no I/O, deterministic).
+    horizon_results, ood_reserve, ood_reason_codes = aggregate_horizons_pure(
+        forecast_inputs=forecast_inputs,
+        manual_inputs=manual_inputs,
+        ood_conditions=ood_conditions,
+        regime_stratified=regime_stratified,
+        valuation_extreme=valuation_extreme,
+        concentration_extreme=concentration_extreme,
+        fiscal_risks_elevated=fiscal_risks_elevated,
+        reserve_currency_risk=reserve_currency_risk,
+        lucas_evidence=lucas_evidence,
+        signal_conflict=signal_conflict,
+    )
+
+    # Step 4 — replication-kit metadata (Vision §14).
+    # L6-J D6: injectable timestamp + code SHA for deterministic replication
+    # kits. None defaults preserve L6-H dynamic behaviour.
+    if timestamp_utc is not None:
+        if not isinstance(timestamp_utc, datetime):
+            raise TypeError(
+                f"timestamp_utc must be datetime or None; got "
+                f"{type(timestamp_utc).__name__}"
+            )
+        effective_dt = timestamp_utc
     else:
-        ood_reserve, ood_reason_codes = compute_ood_reserve(ood_conditions)
+        effective_dt = datetime.now(timezone.utc)
+    timestamp = effective_dt.isoformat()
 
-    # Step 2 — Lucas critique diagnostics (L6-H D5)
-    lucas_diag = compute_lucas_diagnostics(structural_break_evidence=lucas_evidence)
-
-    horizon_results: Dict[int, HorizonResult] = {}
-
-    for horizon in SUPPORTED_HORIZONS:
-        # Step 3a — point estimate + n_eff
-        point = forecast_inputs.point_estimates[horizon]
-        n_eff = forecast_inputs.point_estimate_n_eff[horizon]
-
-        # Step 3b — manual recession_p override (L1.7-D integration)
-        recession_p = forecast_inputs.recession_probabilities[horizon]
-        if manual_inputs is not None:
-            # Lazy import keeps top-of-module import graph minimal +
-            # mirrors L5b surface modifications precedent at L1.7-D.
-            from macro_pipeline.manual_input.integration import (
-                apply_recession_p_override_for_horizon,
+    if code_sha is not None:
+        if not isinstance(code_sha, str):
+            raise TypeError(
+                f"code_sha must be str or None; got "
+                f"{type(code_sha).__name__}"
             )
-            recession_p = apply_recession_p_override_for_horizon(
-                manual_inputs, horizon, recession_p
-            )
+        effective_sha = code_sha
+    else:
+        effective_sha = _get_code_sha()
 
-        # Step 3c — Bayesian shrinkage at 10Y only (Vision §6)
-        bayesian_applied = False
-        shrinkage_n_eff: Optional[int] = None
-        if horizon == 10:
-            point = apply_bayesian_shrinkage(
-                point_estimate=point,
-                prior=BAYESIAN_PRIOR_10Y_REAL_RETURN,
-                n_eff=n_eff,
-            )
-            bayesian_applied = True
-            shrinkage_n_eff = n_eff
-
-        # Step 3d — DMS adjustment (L6-H D5 propagation into point estimate)
-        dms_raw_pe = point  # post-shrinkage; pre-DMS
-        dms_bps, dms_reason = select_dms_adjustment_bps(
-            horizon=horizon,
-            valuation_extreme=valuation_extreme,
-            concentration_extreme=concentration_extreme,
-            fiscal_risks_elevated=fiscal_risks_elevated,
-            reserve_currency_risk=reserve_currency_risk,
-        )
-        dms_adjusted_pe = apply_dms_bps_to_return(dms_raw_pe, dms_bps)
-        # The "binding" forecast value at this horizon = DMS-adjusted.
-        point = dms_adjusted_pe
-
-        # Step 3e — Vision §4 additive confidence (L6-H D3)
-        confidence_components = derive_confidence_components(
-            n_eff=n_eff,
-            horizon=horizon,
-            reference_class=forecast_inputs.reference_class,
-            ood_reserve_fraction=ood_reserve,
-        )
-        raw_confidence = compute_bayesian_confidence(
-            components=confidence_components,
-            horizon=horizon,
-        )
-
-        # Step 3f — Vision §4 + §7 + §10 cap cascade (L6-H D2)
-        confidence = apply_confidence_cap_cascade(
-            confidence=raw_confidence,
-            horizon=horizon,
-            regime_stratified=regime_stratified,
-            signal_conflict=signal_conflict,
-            ood_elevated=(ood_reserve >= OOD_ELEVATED_RESERVE_THRESHOLD),
-            ood_reserve_fraction=ood_reserve,
-        )
-
-        # Step 3g — Vision §4 10-component conviction (L6-H D4)
-        conviction_components = derive_conviction_components(
-            confidence=confidence,
-            n_eff=n_eff,
-            horizon=horizon,
-            reference_class=forecast_inputs.reference_class,
-            point_estimate=point,
-        )
-        conviction = compute_conviction_score(conviction_components)
-
-        # Step 3h — TripleDecomposition (defense-in-depth 1st layer)
-        triple_decomp = TripleDecomposition(
-            probability=recession_p,
-            confidence=confidence,
-            conviction=conviction,
-            horizon=horizon,
-            regime_stratified=regime_stratified,
-        )
-
-        # Step 3i — enforce_confidence_caps (defense-in-depth 2nd layer)
-        # Defensive — cascade already capped at step 3f. UNCHANGED at L6-H.
-        enforce_confidence_caps(confidence, horizon, regime_stratified)
-
-        # Step 3j — TripleSigma (Vision §5)
-        triple_sigma = TripleSigma(
-            return_sigma=forecast_inputs.return_sigmas[horizon],
-            forecast_error_sigma=forecast_inputs.forecast_sigmas[horizon],
-            analog_dispersion_sigma=forecast_inputs.analog_dispersions[
-                horizon
-            ],
-            horizon=horizon,
-        )
-
-        # Step 3k — metric_outputs (L6-G + L6-H)
-        metric_outputs = populate_metric_outputs(
-            forecast_inputs=forecast_inputs,
-            horizon=horizon,
-            point_estimate=point,
-            recession_p=recession_p,
-            confidence=confidence,
-            conviction=conviction,
-            dms_raw_point_estimate=dms_raw_pe,
-            dms_adjusted_point_estimate=dms_adjusted_pe,
-            dms_adjustment_bps=dms_bps,
-            lucas_flag=lucas_diag.flag,
-        )
-
-        # L6-I D3+D5 — wrap point_estimates as 11-model placeholder signals
-        # + detect layer disagreement. Placeholder signals all share the
-        # same point_estimate; "consensus" is the L6-I default. Full
-        # pattern detection (valuation_bear_trend_bull et al.) deferred
-        # to L7 per V Decision #2 Option B.
-        model_signals = wrap_point_estimates_as_model_signals(
-            point_estimates={h: point if h == horizon else 0.0
-                             for h in SUPPORTED_HORIZONS},
-            horizon=horizon,
-        )
-        disagree_flag, disagree_label = detect_layer_disagreement(
-            model_signals
-        )
-
-        # Step 3l — HorizonResult (L6-H expanded + L6-I D5 layer fields)
-        horizon_results[horizon] = HorizonResult(
-            horizon=horizon,
-            triple_decomposition=triple_decomp,
-            triple_sigma=triple_sigma,
-            metric_outputs=metric_outputs,
-            bayesian_shrinkage_applied=bayesian_applied,
-            shrinkage_n_eff=shrinkage_n_eff,
-            dms_raw_point_estimate=dms_raw_pe,
-            dms_adjusted_point_estimate=dms_adjusted_pe,
-            dms_adjustment_bps=dms_bps,
-            dms_selection_reason=dms_reason,
-            lucas_diagnostics=lucas_diag,
-            layer_disagreement_flag=disagree_flag,
-            layer_disagreement_label=disagree_label,
-        )
-
-    # Step 4 — replication-kit metadata (Vision §14)
-    timestamp = datetime.now(timezone.utc).isoformat()
     replication_kit_metadata: Dict[str, str] = {
-        "code_sha": _get_code_sha(),
+        "code_sha": effective_sha,
         "aggregation_timestamp_iso": timestamp,
         "n_horizons": str(len(SUPPORTED_HORIZONS)),
         "regime_stratified": str(regime_stratified),

@@ -1,10 +1,19 @@
-"""Reference Class Forecasting (RCF) — Vision v2.0 §6.
+"""Reference Class Forecasting (RCF) — Vision v2.1 §6 (+ L6-J D2 OOD upgrade).
 
-Per Strategic L6-E inline pre-flight 2026-05-15. Implements the
-eight-dimensional macro state vector + cosine-similarity-based reference-
-class identification + Bayesian shrinkage to a long-run prior. The
-module is **standalone** — L6-F aggregator will wire these primitives
-into the end-to-end forecast pipeline at the next sub-phase.
+Per Strategic L6-E inline pre-flight 2026-05-15 + L6-J pre-flight
+2026-05-16 D2. L6-J closes ChatGPT R7 Finding #6 (C-8) by adding:
+
+  - Minimum-similarity threshold (default 0.30; configurable)
+  - Top-3-5 analogs reporting (Vision §6 BINDING requirement)
+  - Sample boundary validation (1913 Fed era start; flag analogs that
+    pre-date the institutional sample window)
+  - Reference-class OOD flag (fires when <3 analogs above threshold)
+  - Horizon-conditional + similarity-conditional kappa for the
+    Bayesian shrinkage scale
+
+Backward compatibility: new ReferenceClass fields default to neutral
+values; existing callers unaffected. New find_reference_class
+keyword arguments default to preserve L6-E behaviour.
 
 Vision §6 mandates Reference Class Forecasting for every forecast:
 
@@ -83,6 +92,43 @@ INSUFFICIENT_HISTORY_THRESHOLD = 30
 # Strategic PD2 + PD3 sanity bound (catches unit errors at MacroStateVector
 # construction time).
 MACRO_STATE_Z_SANITY_BOUND = 10.0
+
+# L6-J D2 (ChatGPT R7 #6 / C-8) RCF OOD constants.
+# Default minimum similarity threshold below which analogs are excluded
+# from the top-k report (analog quality insufficient for reliable
+# reference-class shrinkage).
+DEFAULT_MIN_SIMILARITY_THRESHOLD = 0.30
+
+# Vision §6 BINDING: report top 3-5 analogs. Default to 5; callers may
+# request fewer down to 3.
+DEFAULT_TOP_K_REPORTED = 5
+
+# Vision §10 Fed-era institutional sample boundary. Analogs that pre-date
+# this timestamp are flagged via `sample_boundary_violation=True`.
+SAMPLE_START_BOUNDARY = pd.Timestamp("1913-01-01")
+
+# Reference-class OOD trigger: fires when fewer than this many analogs
+# exceed `min_similarity_threshold`. Default 3 = Vision §6 minimum
+# (top 3 to 5 BINDING requirement).
+RCF_OOD_MIN_NEIGHBORS_THRESHOLD = 3
+
+# L6-J D2 horizon-conditional Bayesian shrinkage base kappa.
+# Longer horizons have lower N_eff (Vision §10: 113 / 38 / 22 / 11
+# non-overlapping windows for 1Y / 3Y / 5Y / 10Y), so kappa scales up
+# to enforce more shrinkage toward the prior when the empirical
+# evidence is weaker. Caller may override via explicit `kappa` arg
+# to `apply_bayesian_shrinkage`.
+BASE_KAPPA_BY_HORIZON: dict[int, float] = {
+    1: 5.0,
+    3: 8.0,
+    5: 12.0,
+    10: 20.0,
+}
+
+# Similarity-conditional kappa scaling floor. When mean_similarity_top_k
+# is very low, kappa_eff inflates; this floor prevents division by zero
+# / kappa_eff explosion when similarity approaches zero.
+SIMILARITY_KAPPA_FLOOR = 0.10
 
 # 8D macro state field names (z-scored). Order is fixed; ``as_array``
 # returns values in this order; YAML/JSON serialization preserves this
@@ -168,26 +214,53 @@ class MacroStateVector:
 
 @dataclass(frozen=True)
 class ReferenceClass:
-    """Result of reference-class identification per Vision §6.
+    """Result of reference-class identification per Vision §6 (+ L6-J D2 OOD).
 
     Stores top-N most-similar historical periods together with the query
-    state and aggregate similarity statistics.
+    state, aggregate similarity statistics, and L6-J OOD diagnostics.
 
     Frozen invariants:
       - ``n_neighbors`` matches ``len(neighbors)``.
       - ``n_neighbors >= 1``.
-      - ``mean_similarity`` in [-1, 1].
+      - ``mean_similarity`` finite + in [-1, 1].
+      - L6-J D2: ``top_k_analogs`` length in [0, 10]; similarities
+        finite + in [-1, 1]; ``mean_similarity_top_k`` finite + in
+        [-1, 1]; ``min_similarity_threshold`` finite + in [0, 1].
 
     ``neighbors`` is stored as ``tuple[tuple[pd.Timestamp, float], ...]``
     (Strategic PD9) to preserve the frozen-dataclass immutability
-    invariant: lists would be mutable references inside a frozen
-    container.
+    invariant.
+
+    L6-J D2 OOD fields (ChatGPT R7 #6 closure)
+    ------------------------------------------
+    ``top_k_analogs``                 Top 3-5 above-threshold analogs
+                                      (subset of ``neighbors``). Empty
+                                      tuple when ``reference_class_ood``
+                                      fires.
+    ``mean_similarity_top_k``         Mean similarity across
+                                      ``top_k_analogs``. 0.0 when empty.
+    ``min_similarity_threshold``      Threshold used to filter analogs
+                                      into ``top_k_analogs``. Defaults
+                                      to neutral value when caller
+                                      doesn't supply (backward compat).
+    ``reference_class_ood``           Fires when
+                                      ``len(top_k_analogs) < 3``;
+                                      indicates analog evidence is too
+                                      weak for reference-class shrinkage.
+    ``sample_boundary_violation``     Fires when any neighbor predates
+                                      ``SAMPLE_START_BOUNDARY`` (1913).
     """
 
     neighbors: Tuple[Tuple[pd.Timestamp, float], ...]
     n_neighbors: int
     mean_similarity: float
     query_state: MacroStateVector
+    # L6-J D2 additions (default values preserve L6-E backward compat).
+    top_k_analogs: Tuple[Tuple[pd.Timestamp, float], ...] = ()
+    mean_similarity_top_k: float = 0.0
+    min_similarity_threshold: float = DEFAULT_MIN_SIMILARITY_THRESHOLD
+    reference_class_ood: bool = False
+    sample_boundary_violation: bool = False
 
     def __post_init__(self) -> None:
         if self.n_neighbors != len(self.neighbors):
@@ -210,6 +283,43 @@ class ReferenceClass:
         if not (-1.0 <= self.mean_similarity <= 1.0):
             raise ValueError(
                 f"mean_similarity {self.mean_similarity} outside [-1, 1]"
+            )
+        # L6-J D2 invariants.
+        if len(self.top_k_analogs) > 10:
+            raise ValueError(
+                f"top_k_analogs length {len(self.top_k_analogs)} > 10 "
+                f"(Vision §6 BINDING requires top 3-5; >10 implies "
+                f"misconfigured top_k_reported)"
+            )
+        for analog_ts, analog_sim in self.top_k_analogs:
+            if not math.isfinite(analog_sim):
+                raise ValueError(
+                    f"top_k_analog similarity must be finite; got "
+                    f"{analog_sim!r}"
+                )
+            if not (-1.0 <= analog_sim <= 1.0):
+                raise ValueError(
+                    f"top_k_analog similarity {analog_sim} outside [-1, 1]"
+                )
+        if not math.isfinite(self.mean_similarity_top_k):
+            raise ValueError(
+                f"mean_similarity_top_k must be finite; got "
+                f"{self.mean_similarity_top_k!r}"
+            )
+        if not (-1.0 <= self.mean_similarity_top_k <= 1.0):
+            raise ValueError(
+                f"mean_similarity_top_k {self.mean_similarity_top_k} "
+                f"outside [-1, 1]"
+            )
+        if not math.isfinite(self.min_similarity_threshold):
+            raise ValueError(
+                f"min_similarity_threshold must be finite; got "
+                f"{self.min_similarity_threshold!r}"
+            )
+        if not (0.0 <= self.min_similarity_threshold <= 1.0):
+            raise ValueError(
+                f"min_similarity_threshold {self.min_similarity_threshold} "
+                f"outside [0, 1]"
             )
 
 
@@ -319,6 +429,9 @@ def find_reference_class(
     current_state: MacroStateVector,
     historical_panel: pd.DataFrame,
     n_neighbors: int = 10,
+    *,
+    min_similarity_threshold: float = DEFAULT_MIN_SIMILARITY_THRESHOLD,
+    top_k_reported: int = DEFAULT_TOP_K_REPORTED,
 ) -> ReferenceClass:
     """Identify the top-N most-similar historical periods.
 
@@ -356,6 +469,21 @@ def find_reference_class(
     """
     if n_neighbors < 1:
         raise ValueError(f"n_neighbors must be >= 1; got {n_neighbors}")
+    # L6-J D2 input validation.
+    if not math.isfinite(min_similarity_threshold):
+        raise ValueError(
+            f"min_similarity_threshold must be finite; got "
+            f"{min_similarity_threshold!r}"
+        )
+    if not (0.0 <= min_similarity_threshold <= 1.0):
+        raise ValueError(
+            f"min_similarity_threshold must be in [0, 1]; got "
+            f"{min_similarity_threshold}"
+        )
+    if not (1 <= top_k_reported <= 10):
+        raise ValueError(
+            f"top_k_reported must be in [1, 10]; got {top_k_reported}"
+        )
 
     missing = [
         f for f in MACRO_STATE_FIELDS if f not in historical_panel.columns
@@ -397,12 +525,104 @@ def find_reference_class(
     )
     mean_sim = float(sum(s for _, s in top_n) / n_neighbors)
 
+    # L6-J D2 — top-k above-threshold filtering + OOD diagnostics.
+    above_threshold = [
+        (ts, sim) for ts, sim in top_n if sim >= min_similarity_threshold
+    ]
+    top_k: Tuple[Tuple[pd.Timestamp, float], ...] = tuple(
+        above_threshold[:top_k_reported]
+    )
+    mean_sim_top_k = (
+        float(sum(s for _, s in top_k) / len(top_k)) if top_k else 0.0
+    )
+    rc_ood = len(top_k) < RCF_OOD_MIN_NEIGHBORS_THRESHOLD
+
+    # Sample boundary check: any neighbor predating 1913 = institutional
+    # sample boundary violation per Vision §10 Fed-era discipline.
+    sample_bound_violation = any(
+        pd.Timestamp(ts) < SAMPLE_START_BOUNDARY for ts, _ in top_n
+    )
+
     return ReferenceClass(
         neighbors=top_n,
         n_neighbors=n_neighbors,
         mean_similarity=mean_sim,
         query_state=current_state,
+        top_k_analogs=top_k,
+        mean_similarity_top_k=mean_sim_top_k,
+        min_similarity_threshold=min_similarity_threshold,
+        reference_class_ood=rc_ood,
+        sample_boundary_violation=sample_bound_violation,
     )
+
+
+def compute_horizon_conditional_kappa(
+    horizon: int,
+    mean_similarity_top_k: float,
+    base_kappa: float | None = None,
+) -> float:
+    """L6-J D2 — Vision §6 + §10 horizon + similarity-conditional kappa.
+
+    Longer horizons + weaker analogs both shrink the empirical estimate
+    further toward the prior. Kappa scales:
+
+      kappa_eff = base_kappa(horizon) / max(mean_similarity_top_k,
+                                            SIMILARITY_KAPPA_FLOOR)
+
+    The denominator floor (``SIMILARITY_KAPPA_FLOOR = 0.10``) prevents
+    explosion when similarity approaches zero. With high similarity
+    (~0.85) at 10Y: kappa_eff = 20.0 / 0.85 ≈ 23.5. With low similarity
+    (0.20) at 10Y: kappa_eff = 20.0 / 0.20 = 100.0 (strong prior pull).
+
+    Parameters
+    ----------
+    horizon
+        Forecast horizon; must be a key in ``BASE_KAPPA_BY_HORIZON``.
+    mean_similarity_top_k
+        Mean similarity across top-k analogs from
+        ``ReferenceClass.mean_similarity_top_k``. Should be in [0, 1].
+    base_kappa
+        Optional override for the horizon's base kappa. ``None`` reads
+        from ``BASE_KAPPA_BY_HORIZON[horizon]``.
+
+    Returns
+    -------
+    float
+        Effective kappa for ``apply_bayesian_shrinkage``.
+
+    Raises
+    ------
+    KeyError
+        ``horizon`` not in ``BASE_KAPPA_BY_HORIZON``.
+    ValueError
+        ``mean_similarity_top_k`` non-finite or outside [-1, 1].
+        ``base_kappa`` non-finite or non-positive.
+    """
+    if not math.isfinite(mean_similarity_top_k):
+        raise ValueError(
+            f"mean_similarity_top_k must be finite; got "
+            f"{mean_similarity_top_k!r}"
+        )
+    if not (-1.0 <= mean_similarity_top_k <= 1.0):
+        raise ValueError(
+            f"mean_similarity_top_k must be in [-1, 1]; got "
+            f"{mean_similarity_top_k}"
+        )
+    if base_kappa is None:
+        if horizon not in BASE_KAPPA_BY_HORIZON:
+            raise KeyError(
+                f"horizon {horizon} not in {sorted(BASE_KAPPA_BY_HORIZON.keys())}"
+            )
+        bk = BASE_KAPPA_BY_HORIZON[horizon]
+    else:
+        if not math.isfinite(base_kappa) or base_kappa <= 0:
+            raise ValueError(
+                f"base_kappa must be finite + positive; got "
+                f"{base_kappa!r}"
+            )
+        bk = float(base_kappa)
+    denom = max(mean_similarity_top_k, SIMILARITY_KAPPA_FLOOR)
+    return bk / denom
 
 
 def apply_bayesian_shrinkage(

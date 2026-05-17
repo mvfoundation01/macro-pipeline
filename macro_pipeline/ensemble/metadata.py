@@ -123,6 +123,62 @@ UPDATE_FREQUENCY_VALID = frozenset(
     }
 )
 
+# L6-J D4 (ChatGPT R7 #8 / C-10) registry lineage schema additions.
+
+# `status` field — computed entries vs deferred-to-future-layer entries.
+METRIC_STATUS = Literal["computed", "deferred"]
+METRIC_STATUS_VALID = frozenset({"computed", "deferred"})
+
+# `deferred_reason` — why a metric is deferred (controlled vocabulary).
+DEFERRED_REASON = Literal[
+    "scheduling",       # waiting on later-sprint scheduling priority
+    "UI",               # UI primitive; needs L8a frontend layer
+    "missing_loader",   # upstream data loader not yet implemented
+    "portfolio_scope",  # portfolio-level concern; L7 scope
+]
+DEFERRED_REASON_VALID = frozenset(
+    {"scheduling", "UI", "missing_loader", "portfolio_scope"}
+)
+
+
+@dataclass(frozen=True)
+class MetricLineage:
+    """L6-J D4 — Replication-grade lineage for a computed metric.
+
+    Per ChatGPT R7 Finding #8 (C-10), replication-grade lineage requires
+    explicit raw_source → loader → transform → model → aggregator_field →
+    output_surface tracing. Each field is Optional[str] to accommodate
+    progressive enrichment: at L6-J entries may have many ``None`` slots
+    (deferred to L7+ for full population); the dataclass shape is the
+    binding schema surface.
+
+    Fields
+    ------
+    raw_source         e.g., "fred:UMCSENT" or "shiller:CAPE"
+    loader             e.g., "macro_pipeline.loaders.fred:FREDLoader.fetch"
+    transform          e.g., "macro_pipeline.analysis.forecast_sigma:compute"
+    model              e.g., "macro_pipeline.models.return_forecast:Ridge"
+    aggregator_field   e.g., "HorizonResult.metric_outputs.confidence"
+    output_surface     e.g., "L8a.dashboard.confidence_metric"
+    """
+
+    raw_source: Optional[str] = None
+    loader: Optional[str] = None
+    transform: Optional[str] = None
+    model: Optional[str] = None
+    aggregator_field: Optional[str] = None
+    output_surface: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        for f_name in ("raw_source", "loader", "transform", "model",
+                       "aggregator_field", "output_surface"):
+            val = getattr(self, f_name)
+            if val is not None and not isinstance(val, str):
+                raise TypeError(
+                    f"MetricLineage.{f_name} must be str or None; got "
+                    f"{type(val).__name__}"
+                )
+
 
 @dataclass(frozen=True)
 class MetricMetadata:
@@ -169,6 +225,13 @@ class MetricMetadata:
     citations: Tuple[str, ...] = ()
     computation_path: Optional[str] = None
     deferred_to: Optional[str] = None
+    # L6-J D4 — replication-grade lineage schema (additive; YAML
+    # population deferred to L6-K). When None, derives status from
+    # legacy fields: computed if computation_path is not None, else
+    # deferred (matching existing 40/50 split per L6-G + Codex audit).
+    status: Optional[str] = None
+    deferred_reason: Optional[str] = None
+    lineage: Optional[MetricLineage] = None
 
     def __post_init__(self) -> None:
         # metric_id: non-empty + snake_case (alphanumeric + underscore).
@@ -272,3 +335,45 @@ class MetricMetadata:
                 f"deferred_to must be None / 'L7' / 'L8a'; got "
                 f"{self.deferred_to!r}"
             )
+        # L6-J D4 — status + deferred_reason + lineage validation.
+        if self.status is not None and self.status not in METRIC_STATUS_VALID:
+            raise ValueError(
+                f"status must be one of {sorted(METRIC_STATUS_VALID)}; got "
+                f"{self.status!r} for metric_id={self.metric_id!r}"
+            )
+        if (
+            self.deferred_reason is not None
+            and self.deferred_reason not in DEFERRED_REASON_VALID
+        ):
+            raise ValueError(
+                f"deferred_reason must be one of "
+                f"{sorted(DEFERRED_REASON_VALID)}; got "
+                f"{self.deferred_reason!r} for metric_id={self.metric_id!r}"
+            )
+        # If status explicitly set, enforce consistency with lineage/deferred.
+        if self.status == "computed":
+            if self.deferred_to is not None or self.deferred_reason is not None:
+                raise ValueError(
+                    f"computed metric {self.metric_id!r} must not have "
+                    f"deferred_to or deferred_reason set"
+                )
+        elif self.status == "deferred":
+            if self.deferred_to is None:
+                raise ValueError(
+                    f"deferred metric {self.metric_id!r} must have "
+                    f"deferred_to set"
+                )
+
+    def derive_status(self) -> str:
+        """L6-J D4 — derive ``status`` from legacy fields when not set.
+
+        Returns ``"computed"`` if explicit ``status="computed"`` OR
+        ``computation_path is not None``; else ``"deferred"``. Used by
+        registry validation to enforce 40 computed + 50 deferred count
+        (Track A L6-G claim) without requiring full YAML migration.
+        """
+        if self.status is not None:
+            return self.status
+        if self.computation_path is not None:
+            return "computed"
+        return "deferred"

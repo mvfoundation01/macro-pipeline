@@ -51,18 +51,39 @@ L6-H additions
 from __future__ import annotations
 
 from macro_pipeline.ensemble.metadata import (
+    DEFERRED_REASON,
+    DEFERRED_REASON_VALID,
     LAYER_ORIGIN,
     LAYER_ORIGIN_VALID,
+    METRIC_STATUS,
+    METRIC_STATUS_VALID,
     SUBCATEGORY,
     SUBCATEGORY_VALID,
     UPDATE_FREQUENCY,
     UPDATE_FREQUENCY_VALID,
+    MetricLineage,
     MetricMetadata,
 )
 from macro_pipeline.ensemble.registry import (
     DEFAULT_REGISTRY_PATH,
+    _clear_registry_cache_for_testing,
+    _load_default_registry_cached,
     load_metrics_registry,
     save_metrics_registry,
+    validate_registry_counts,
+)
+from macro_pipeline.ensemble.triple_sigma import (
+    DEFAULT_REALIZED_VOL_RATIO_THRESHOLD,
+    SIGMA_VALIDITY_REASON_CODES,
+    compute_sigma_validity_diagnostics,
+)
+from macro_pipeline.ensemble.rcf import (
+    BASE_KAPPA_BY_HORIZON,
+    DEFAULT_MIN_SIMILARITY_THRESHOLD,
+    DEFAULT_TOP_K_REPORTED,
+    RCF_OOD_MIN_NEIGHBORS_THRESHOLD,
+    SAMPLE_START_BOUNDARY,
+    compute_horizon_conditional_kappa,
 )
 from macro_pipeline.ensemble.triple_decomposition import (
     CONFIDENCE_CAP_10Y_NON_STRATIFIED,
@@ -101,6 +122,7 @@ from macro_pipeline.ensemble.aggregator import (
     ForecastInputs,
     HorizonResult,
     aggregate_ensemble,
+    aggregate_horizons_pure,
     populate_metric_outputs,
 )
 from macro_pipeline.ensemble.bayesian_confidence import (
@@ -202,4 +224,24 @@ __all__ = [
     "aggregate_model_signals",
     "detect_layer_disagreement",
     "wrap_point_estimates_as_model_signals",
+    # L6-J D2 RCF OOD enhancements
+    "BASE_KAPPA_BY_HORIZON",
+    "DEFAULT_MIN_SIMILARITY_THRESHOLD",
+    "DEFAULT_TOP_K_REPORTED",
+    "RCF_OOD_MIN_NEIGHBORS_THRESHOLD",
+    "SAMPLE_START_BOUNDARY",
+    "compute_horizon_conditional_kappa",
+    # L6-J D3 triple sigma validity diagnostics
+    "DEFAULT_REALIZED_VOL_RATIO_THRESHOLD",
+    "SIGMA_VALIDITY_REASON_CODES",
+    "compute_sigma_validity_diagnostics",
+    # L6-J D4 registry lineage replication-grade
+    "DEFERRED_REASON",
+    "DEFERRED_REASON_VALID",
+    "METRIC_STATUS",
+    "METRIC_STATUS_VALID",
+    "MetricLineage",
+    "validate_registry_counts",
+    # L6-J D6 aggregator purity
+    "aggregate_horizons_pure",
 ]

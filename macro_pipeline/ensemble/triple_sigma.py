@@ -43,6 +43,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from typing import Optional, Tuple
 
 # Range bounds (Strategic L6-C spec).
 SIGMA_MIN = 0.0
@@ -55,6 +56,20 @@ SUPPORTED_HORIZONS = frozenset({1, 3, 5, 10})
 SIGMA_TYPES = frozenset(
     {"return_sigma", "forecast_error_sigma", "analog_dispersion_sigma"}
 )
+
+# L6-J D3 (ChatGPT R7 #7 / C-9) sqrt-t validity reason codes per Vision §5
+# + §11. Each code names a runtime condition that degrades the sqrt-t
+# scaling approximation. The flag fires when any condition is detected.
+SIGMA_VALIDITY_REASON_CODES = frozenset({
+    "vol_cluster_detected",
+    "structural_break_detected",
+    "policy_shock_detected",
+    "realized_vol_ratio_threshold_breach",
+})
+
+# Default realized-vol ratio threshold: when realized vol > 2x ann vol the
+# sqrt-t approximation has materially degraded; flag triggers.
+DEFAULT_REALIZED_VOL_RATIO_THRESHOLD = 2.0
 
 
 @dataclass(frozen=True)
@@ -87,6 +102,10 @@ class TripleSigma:
     forecast_error_sigma: float
     analog_dispersion_sigma: float
     horizon: int
+    # L6-J D3 — sqrt-t runtime validity diagnostic (defaults preserve
+    # L6-C backward compat).
+    sqrt_t_scaling_warning: bool = False
+    sqrt_t_validity_reason_codes: Tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         # Invariant 1 (L6-I D1) — finite checks BEFORE range checks.
@@ -122,6 +141,26 @@ class TripleSigma:
             raise ValueError(
                 f"horizon {self.horizon} not in "
                 f"{sorted(SUPPORTED_HORIZONS)}"
+            )
+        # L6-J D3 invariants — sqrt-t validity diagnostics.
+        if not isinstance(self.sqrt_t_validity_reason_codes, tuple):
+            raise TypeError(
+                f"sqrt_t_validity_reason_codes must be tuple; got "
+                f"{type(self.sqrt_t_validity_reason_codes).__name__}"
+            )
+        for code in self.sqrt_t_validity_reason_codes:
+            if code not in SIGMA_VALIDITY_REASON_CODES:
+                raise ValueError(
+                    f"Unknown sqrt_t validity reason code: {code!r}; "
+                    f"expected one of "
+                    f"{sorted(SIGMA_VALIDITY_REASON_CODES)}"
+                )
+        # Flag must agree with reason-codes presence (single source of truth).
+        expected_warning = len(self.sqrt_t_validity_reason_codes) > 0
+        if self.sqrt_t_scaling_warning != expected_warning:
+            raise ValueError(
+                f"sqrt_t_scaling_warning ({self.sqrt_t_scaling_warning}) "
+                f"must equal (reason_codes non-empty: {expected_warning})"
             )
 
     def cumulative_sigma(self, sigma_type: str = "return_sigma") -> float:
@@ -165,3 +204,87 @@ class TripleSigma:
                 f"{sorted(SIGMA_TYPES)}"
             )
         return base * math.sqrt(self.horizon)
+
+
+# =============================================================================
+# L6-J D3 — sqrt-t scaling runtime validity diagnostics
+# =============================================================================
+
+
+def compute_sigma_validity_diagnostics(
+    vol_cluster_flag: bool = False,
+    structural_break_flag: bool = False,
+    policy_shock_flag: bool = False,
+    realized_vol_ratio: Optional[float] = None,
+    realized_vol_ratio_threshold: float = DEFAULT_REALIZED_VOL_RATIO_THRESHOLD,
+) -> Tuple[bool, Tuple[str, ...]]:
+    """L6-J D3 — Vision §5 + §11 runtime validity diagnostic for sqrt-t scaling.
+
+    Cumulative sigma ≈ ann. sigma × sqrt(t) is APPROXIMATE per Vision §5.
+    The approximation degrades under:
+
+      - vol_cluster_detected           variance non-stationarity / GARCH
+                                       heteroscedasticity
+      - structural_break_detected      regime shift in mean / variance
+      - policy_shock_detected          Fed framework / fiscal dominance shift
+      - realized_vol_ratio_threshold_breach
+                                       realized_vol > threshold × ann_vol
+                                       (default threshold 2.0)
+
+    Producer integration discipline (L6-J): the three boolean flags
+    accept defaults of False (no detection). Producers for these flags
+    (vol-cluster detector, structural-break test like Quandt-Andrews
+    supW, policy-shock indicator) are deferred to L7. The
+    ``realized_vol_ratio`` is computable from existing aggregator
+    diagnostics (forecast_error_sigma vs return_sigma) and is the
+    sole L6-J-empirical flag.
+
+    Parameters
+    ----------
+    vol_cluster_flag, structural_break_flag, policy_shock_flag
+        Optional runtime detector flags. Defaults to False (no detection).
+    realized_vol_ratio
+        Optional realized/expected vol ratio; ``None`` skips threshold check.
+    realized_vol_ratio_threshold
+        Threshold above which ``realized_vol_ratio_threshold_breach``
+        fires. Default ``DEFAULT_REALIZED_VOL_RATIO_THRESHOLD`` (2.0).
+
+    Returns
+    -------
+    tuple[bool, tuple[str, ...]]
+        ``(sqrt_t_scaling_warning, reason_codes)``. Warning fires iff
+        any reason code present. Reason codes are returned in canonical
+        order matching ``SIGMA_VALIDITY_REASON_CODES``.
+
+    Raises
+    ------
+    ValueError
+        If ``realized_vol_ratio`` or ``realized_vol_ratio_threshold``
+        is non-finite.
+    """
+    if realized_vol_ratio is not None and not math.isfinite(realized_vol_ratio):
+        raise ValueError(
+            f"realized_vol_ratio must be finite or None; got "
+            f"{realized_vol_ratio!r}"
+        )
+    if not math.isfinite(realized_vol_ratio_threshold):
+        raise ValueError(
+            f"realized_vol_ratio_threshold must be finite; got "
+            f"{realized_vol_ratio_threshold!r}"
+        )
+
+    reasons: list = []
+    if vol_cluster_flag:
+        reasons.append("vol_cluster_detected")
+    if structural_break_flag:
+        reasons.append("structural_break_detected")
+    if policy_shock_flag:
+        reasons.append("policy_shock_detected")
+    if (
+        realized_vol_ratio is not None
+        and realized_vol_ratio > realized_vol_ratio_threshold
+    ):
+        reasons.append("realized_vol_ratio_threshold_breach")
+
+    warning = len(reasons) > 0
+    return (warning, tuple(reasons))
