@@ -1,0 +1,208 @@
+/* L10 D2 — webapp-specific additions on top of terminal.css.
+ * Per Strategic L10 single comprehensive pre-flight 2026-05-17.
+ * Inherits all CSS variables (--bg-*, --text-*, --accent-*) from terminal.css.
+ */
+
+/* Upload zones */
+.upload-area {
+    border: 1px dashed var(--border-primary);
+    padding: 16px;
+    margin-bottom: 12px;
+    background: var(--bg-tertiary);
+    border-radius: 4px;
+}
+.upload-area:hover { border-color: var(--accent-neutral); }
+.upload-area input[type="file"] {
+    margin-top: 8px;
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+}
+.upload-area .template-link {
+    display: inline-block;
+    color: var(--accent-neutral);
+    text-decoration: none;
+    font-size: 11px;
+    margin-top: 4px;
+}
+.upload-area .template-link:hover { text-decoration: underline; }
+
+/* Form rows */
+.form-row {
+    display: flex;
+    align-items: center;
+    margin-bottom: 10px;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+.form-row label { min-width: 260px; color: var(--text-primary); }
+.form-row input[type="number"],
+.form-row input[type="text"] {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-primary);
+    color: var(--text-primary);
+    padding: 8px 12px;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    flex: 1;
+    max-width: 220px;
+}
+.form-row input:focus {
+    outline: 2px solid var(--accent-neutral);
+    outline-offset: 1px;
+}
+.form-row .hint {
+    color: var(--text-tertiary);
+    font-size: 11px;
+    width: 100%;
+    padding-left: 260px;
+    margin-top: -4px;
+    margin-bottom: 4px;
+}
+
+.checkbox-inline {
+    display: inline-flex;
+    align-items: center;
+    margin-right: 20px;
+    min-width: auto !important;
+    gap: 6px;
+}
+
+/* Primary action button */
+.btn-primary {
+    background: var(--accent-bullish);
+    color: var(--bg-primary);
+    border: none;
+    padding: 14px 32px;
+    font-family: var(--font-mono);
+    font-size: 14px;
+    font-weight: bold;
+    cursor: pointer;
+    margin-top: 20px;
+    letter-spacing: 1px;
+    border-radius: 4px;
+}
+.btn-primary:hover { background: #6fd874; }
+.btn-primary:disabled {
+    background: var(--text-tertiary);
+    cursor: not-allowed;
+}
+
+/* Loading spinner (for in-progress submit) */
+.spinner {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border: 2px solid var(--text-tertiary);
+    border-top-color: var(--accent-neutral);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin-right: 6px;
+    vertical-align: middle;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Sections — visual rhythm */
+section.webapp-section {
+    margin-bottom: 28px;
+    padding: 16px 18px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-primary);
+    border-radius: 4px;
+}
+section.webapp-section h3 {
+    color: var(--accent-neutral);
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border-secondary);
+}
+
+/* Flash messages */
+.flash-error {
+    background: rgba(248, 81, 73, 0.10);
+    border-left: 3px solid var(--accent-bearish);
+    padding: 12px 16px;
+    margin-bottom: 16px;
+    color: var(--accent-bearish);
+    font-size: 13px;
+}
+.flash-info {
+    background: rgba(88, 166, 255, 0.10);
+    border-left: 3px solid var(--accent-neutral);
+    padding: 12px 16px;
+    margin-bottom: 16px;
+    color: var(--accent-neutral);
+    font-size: 13px;
+}
+.flash-success {
+    background: rgba(86, 211, 100, 0.10);
+    border-left: 3px solid var(--accent-bullish);
+    padding: 12px 16px;
+    margin-bottom: 16px;
+    color: var(--accent-bullish);
+    font-size: 13px;
+}
+
+/* Header nav (webapp) */
+.webapp-nav {
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-primary);
+    padding: 8px 16px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+.webapp-nav a {
+    color: var(--accent-neutral);
+    text-decoration: none;
+    margin-right: 12px;
+}
+.webapp-nav a:hover { color: var(--text-primary); text-decoration: underline; }
+
+/* Help page lists + tables */
+.help-content { max-width: 900px; }
+.help-content h2 {
+    color: var(--accent-neutral);
+    margin: 24px 0 8px 0;
+    font-size: 16px;
+}
+.help-content h3 {
+    color: var(--text-primary);
+    margin: 16px 0 6px 0;
+    font-size: 13px;
+}
+.help-content ol, .help-content ul {
+    margin: 8px 0 16px 24px;
+    color: var(--text-primary);
+}
+.help-content li { margin-bottom: 6px; }
+.help-content p { margin-bottom: 12px; color: var(--text-primary); }
+.help-content code {
+    background: var(--bg-tertiary);
+    padding: 2px 6px;
+    border-radius: 2px;
+    font-size: 12px;
+    color: var(--accent-caution);
+}
+.help-content table.terminal-table { margin: 8px 0 16px 0; }
+.help-content .data-source {
+    background: var(--bg-tertiary);
+    padding: 12px 16px;
+    border-left: 3px solid var(--accent-neutral);
+    margin: 8px 0;
+    font-size: 12px;
+}
+
+/* Accessibility */
+.skip-to-content {
+    position: absolute;
+    left: -9999px;
+    top: 0;
+    background: var(--accent-neutral);
+    color: var(--bg-primary);
+    padding: 8px 12px;
+    z-index: 100;
+}
+.skip-to-content:focus { left: 0; }

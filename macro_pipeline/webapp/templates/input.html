@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+{% block title %}Nhập dữ liệu &middot; Macro Forecast Terminal{% endblock %}
+{% block content %}
+
+<h1 style="color: var(--text-primary); font-size: 18px; margin-bottom: 4px;">
+  TẠO FORECAST MACRO &amp; CHIẾN LƯỢC CỔ PHIẾU
+</h1>
+<p style="color: var(--text-secondary); font-size: 12px; margin-bottom: 24px;">
+  Tải dữ liệu Excel (yield curve / credit spreads / sentiment), nhập 8 chỉ số macro, chọn horizon, rồi bấm
+  <strong style="color: var(--accent-bullish);">CHẠY FORECAST</strong>. Kết quả sẽ hiển thị ngay trên trình duyệt.
+</p>
+
+<form method="POST" action="{{ url_for('forecast.run') }}" enctype="multipart/form-data" id="forecast-form">
+
+  <!-- ============ SECTION 1: Excel uploads ============ -->
+  <section class="webapp-section">
+    <h3>1. Dữ liệu Excel (tùy chọn — có template sẵn để tải)</h3>
+
+    <div class="upload-area">
+      <label for="yield_curve_file"><strong>Yield curve</strong> (2Y &amp; 10Y Treasury yields theo ngày)</label><br>
+      <input type="file" id="yield_curve_file" name="yield_curve_file" accept=".xlsx,.csv">
+      <br>
+      <a class="template-link" href="{{ url_for('forecast.template', name='yield-curve') }}">
+        &darr; Tải template yield-curve.xlsx
+      </a>
+    </div>
+
+    <div class="upload-area">
+      <label for="credit_spreads_file"><strong>Credit spreads</strong> (Investment-grade OAS theo ngày)</label><br>
+      <input type="file" id="credit_spreads_file" name="credit_spreads_file" accept=".xlsx,.csv">
+      <br>
+      <a class="template-link" href="{{ url_for('forecast.template', name='credit-spreads') }}">
+        &darr; Tải template credit-spreads.xlsx
+      </a>
+    </div>
+
+    <div class="upload-area">
+      <label for="sentiment_file"><strong>Sentiment</strong> (AAII / NAAIM / ISM / …)</label><br>
+      <input type="file" id="sentiment_file" name="sentiment_file" accept=".xlsx,.csv">
+      <br>
+      <a class="template-link" href="{{ url_for('forecast.template', name='sentiment') }}">
+        &darr; Tải template sentiment.xlsx
+      </a>
+    </div>
+  </section>
+
+  <!-- ============ SECTION 2: Numerical inputs ============ -->
+  <section class="webapp-section">
+    <h3>2. Chỉ số macro (8 trường — bắt buộc)</h3>
+
+    <div class="form-row">
+      <label for="pmi_manufacturing">PMI Manufacturing</label>
+      <input type="number" step="0.1" id="pmi_manufacturing" name="pmi_manufacturing" required value="50.0" min="0" max="100">
+    </div>
+    <div class="form-row"><div class="hint">Nguồn: ISM (US), S&amp;P Global. Trên 50 = mở rộng.</div></div>
+
+    <div class="form-row">
+      <label for="pmi_services">PMI Services</label>
+      <input type="number" step="0.1" id="pmi_services" name="pmi_services" required value="52.0" min="0" max="100">
+    </div>
+    <div class="form-row"><div class="hint">Nguồn: ISM Services. Trên 50 = mở rộng.</div></div>
+
+    <div class="form-row">
+      <label for="cape_ratio">CAPE Ratio (Shiller P/E)</label>
+      <input type="number" step="0.1" id="cape_ratio" name="cape_ratio" required value="32.0" min="5" max="100">
+    </div>
+    <div class="form-row"><div class="hint">Nguồn: multpl.com. Trên 30 = đắt; dưới 15 = rẻ (lịch sử mean ~22).</div></div>
+
+    <div class="form-row">
+      <label for="sp500_current">S&amp;P 500 (giá hiện tại)</label>
+      <input type="number" step="0.1" id="sp500_current" name="sp500_current" required value="5800.0" min="0">
+    </div>
+    <div class="form-row"><div class="hint">Nguồn: TradingView, Yahoo Finance.</div></div>
+
+    <div class="form-row">
+      <label for="payrolls_mom">Nonfarm Payrolls MoM (nghìn người)</label>
+      <input type="number" step="1" id="payrolls_mom" name="payrolls_mom" required value="200">
+    </div>
+    <div class="form-row"><div class="hint">Nguồn: BLS Employment Situation. Ví dụ 200 = +200,000 jobs.</div></div>
+
+    <div class="form-row">
+      <label for="unemployment_rate">Tỷ lệ thất nghiệp (%)</label>
+      <input type="number" step="0.1" id="unemployment_rate" name="unemployment_rate" required value="4.0" min="0" max="20">
+    </div>
+    <div class="form-row"><div class="hint">Nguồn: BLS U-3. Dưới 4 = thị trường lao động chặt.</div></div>
+
+    <div class="form-row">
+      <label for="core_cpi_yoy">Core CPI YoY (%)</label>
+      <input type="number" step="0.1" id="core_cpi_yoy" name="core_cpi_yoy" required value="3.0" min="-5" max="20">
+    </div>
+    <div class="form-row"><div class="hint">Nguồn: BLS CPI. Loại trừ thực phẩm + năng lượng.</div></div>
+
+    <div class="form-row">
+      <label for="fed_funds_rate">Fed Funds Rate (%)</label>
+      <input type="number" step="0.05" id="fed_funds_rate" name="fed_funds_rate" required value="4.5" min="0" max="20">
+    </div>
+    <div class="form-row"><div class="hint">Nguồn: FRED FEDFUNDS. Effective rate, không phải target.</div></div>
+  </section>
+
+  <!-- ============ SECTION 3: Horizons ============ -->
+  <section class="webapp-section">
+    <h3>3. Horizons (chọn ít nhất 1; mặc định cả 4)</h3>
+    <div class="form-row">
+      <label class="checkbox-inline">
+        <input type="checkbox" name="horizons" value="1" checked> 1Y
+      </label>
+      <label class="checkbox-inline">
+        <input type="checkbox" name="horizons" value="3" checked> 3Y
+      </label>
+      <label class="checkbox-inline">
+        <input type="checkbox" name="horizons" value="5" checked> 5Y
+      </label>
+      <label class="checkbox-inline">
+        <input type="checkbox" name="horizons" value="10" checked> 10Y
+      </label>
+    </div>
+  </section>
+
+  <!-- ============ ACTION ============ -->
+  <button type="submit" class="btn-primary" id="submit-btn">CHẠY FORECAST</button>
+  <p style="color: var(--text-tertiary); font-size: 11px; margin-top: 8px;">
+    Quá trình aggregator mất khoảng 5–30 giây tùy số horizon.
+  </p>
+</form>
+
+<script>
+  // Disable button on submit + show spinner so user doesn't double-click.
+  document.getElementById('forecast-form').addEventListener('submit', function () {
+    var btn = document.getElementById('submit-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>ĐANG CHẠY FORECAST...';
+  });
+</script>
+
+{% endblock %}

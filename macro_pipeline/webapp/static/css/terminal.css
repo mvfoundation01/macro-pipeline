@@ -1,0 +1,308 @@
+/* L8 Dark Financial Terminal — Bloomberg-inspired aesthetic
+ * Per Strategic L8 pre-flight 2026-05-16 D1.
+ * Vision §X UX requirements: high information density; monospace numerics;
+ * muted color accents (bullish green / bearish red / caution amber); dark
+ * background to reduce eye strain during prolonged forecast review.
+ */
+
+:root {
+    --bg-primary: #0a0e14;
+    --bg-secondary: #11151c;
+    --bg-tertiary: #1a1f2a;
+    --text-primary: #c9d1d9;
+    --text-secondary: #8b949e;
+    --text-tertiary: #6e7681;
+    --accent-bullish: #56d364;
+    --accent-bearish: #f85149;
+    --accent-caution: #d29922;
+    --accent-neutral: #58a6ff;
+    --border-primary: #30363d;
+    --border-secondary: #21262d;
+    --font-mono: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+    --font-sans: -apple-system, 'Segoe UI', sans-serif;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    line-height: 1.4;
+    padding: 0 0 32px 0;
+}
+
+/* Header — institutional terminal style */
+.terminal-header {
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-primary);
+    padding: 8px 16px;
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-secondary);
+}
+
+.terminal-nav {
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-primary);
+    padding: 8px 16px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.terminal-nav a {
+    color: var(--accent-neutral);
+    text-decoration: none;
+    margin-right: 4px;
+}
+
+.terminal-nav a:hover {
+    color: var(--text-primary);
+    text-decoration: underline;
+}
+
+main {
+    padding: 16px;
+    max-width: 1400px;
+    margin: 0 auto;
+}
+
+/* Data blocks */
+.data-block {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-primary);
+    padding: 12px 16px;
+    margin-bottom: 12px;
+}
+
+.data-block-title {
+    color: var(--text-tertiary);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 8px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--border-secondary);
+}
+
+/* Tables — high information density */
+table.terminal-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-variant-numeric: tabular-nums;
+}
+
+table.terminal-table th,
+table.terminal-table td {
+    padding: 6px 8px;
+    text-align: left;
+    border-bottom: 1px solid var(--border-secondary);
+}
+
+table.terminal-table th {
+    color: var(--text-tertiary);
+    font-weight: normal;
+    text-transform: uppercase;
+    font-size: 10px;
+    letter-spacing: 0.5px;
+    background: var(--bg-tertiary);
+}
+
+table.terminal-table td.numeric {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+table.terminal-table td.bullish { color: var(--accent-bullish); }
+table.terminal-table td.bearish { color: var(--accent-bearish); }
+table.terminal-table td.caution { color: var(--accent-caution); }
+table.terminal-table td.neutral { color: var(--accent-neutral); }
+
+/* Progressive disclosure (D9) */
+.explanation-block {
+    margin: 8px 0;
+    padding: 8px 12px;
+    background: var(--bg-tertiary);
+    border-left: 3px solid var(--accent-neutral);
+    font-family: var(--font-sans);
+    font-size: 12px;
+    color: var(--text-primary);
+}
+
+.explanation-l1 {
+    /* always visible */
+    color: var(--text-primary);
+}
+
+.explanation-toggle {
+    color: var(--accent-neutral);
+    cursor: pointer;
+    font-size: 11px;
+    text-decoration: underline;
+    margin-left: 8px;
+    user-select: none;
+}
+
+.explanation-l2,
+.explanation-l3 {
+    display: none;
+    margin-top: 6px;
+    padding-top: 6px;
+    border-top: 1px solid var(--border-secondary);
+    font-size: 11px;
+    color: var(--text-secondary);
+}
+
+.explanation-l2.expanded,
+.explanation-l3.expanded {
+    display: block;
+}
+
+.explanation-vision-ref {
+    font-size: 10px;
+    color: var(--text-tertiary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-top: 4px;
+}
+
+/* Conviction / confidence indicators */
+.conviction-bar {
+    display: inline-block;
+    width: 60px;
+    height: 6px;
+    background: var(--bg-tertiary);
+    position: relative;
+    vertical-align: middle;
+    margin-left: 6px;
+}
+
+.conviction-bar::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    background: var(--accent-neutral);
+    width: var(--conviction-percent, 0%);
+}
+
+/* Status badges */
+.status-badge {
+    display: inline-block;
+    padding: 1px 6px;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border: 1px solid currentColor;
+    border-radius: 2px;
+}
+
+.status-badge.warning { color: var(--accent-caution); }
+.status-badge.critical { color: var(--accent-bearish); }
+.status-badge.info { color: var(--accent-neutral); }
+.status-badge.ok { color: var(--accent-bullish); }
+
+/* Academic page lineage table */
+.lineage-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+}
+
+.lineage-table th,
+.lineage-table td {
+    padding: 4px 8px;
+    border-bottom: 1px solid var(--border-secondary);
+    text-align: left;
+}
+
+.download-button {
+    display: inline-block;
+    background: var(--accent-neutral);
+    color: var(--bg-primary);
+    padding: 8px 16px;
+    text-decoration: none;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-weight: bold;
+}
+
+.download-button:hover {
+    background: var(--text-primary);
+}
+
+/* Footer note */
+.terminal-footer {
+    color: var(--text-tertiary);
+    font-size: 10px;
+    text-align: center;
+    margin-top: 16px;
+    padding-top: 8px;
+    border-top: 1px solid var(--border-secondary);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    body { font-size: 11px; }
+    .data-block { padding: 8px 12px; }
+    main { padding: 8px; }
+}
+
+/* L9 D4 — WCAG 2.1 AA accessibility additions */
+
+/* Focus indicators (WCAG 2.4.7 Focus Visible) */
+:focus-visible {
+    outline: 2px solid var(--accent-neutral);
+    outline-offset: 2px;
+}
+
+a:focus-visible,
+.explanation-toggle:focus-visible,
+.download-button:focus-visible {
+    outline: 2px solid var(--accent-neutral);
+    outline-offset: 3px;
+    background: var(--bg-tertiary);
+}
+
+/* Skip to main content (WCAG 2.4.1 Bypass Blocks) */
+.skip-to-content {
+    position: absolute;
+    left: -9999px;
+    top: 0;
+    background: var(--accent-neutral);
+    color: var(--bg-primary);
+    padding: 8px 16px;
+    z-index: 100;
+    text-decoration: none;
+    font-weight: bold;
+}
+.skip-to-content:focus {
+    left: 8px;
+    top: 8px;
+}
+
+/* Screen-reader-only utility (WCAG 1.3.1 Info and Relationships) */
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+/* Ensure text-secondary AA contrast on bg-primary by lightening */
+/* Original #8b949e on #0a0e14 = approx 6.5:1 (passes AA); kept as-is */
+/* text-tertiary #6e7681 on #0a0e14 = approx 4.7:1 (passes AA for small text) */
+

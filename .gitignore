@@ -34,6 +34,10 @@ data/output/
 # Raw data (large; users provide their own)
 data/raw/
 
+# L10 web app runtime artifacts (user uploads + rendered reports)
+data/uploads/
+data/forecasts/webapp_renders/
+
 # Data file formats
 *.parquet
 

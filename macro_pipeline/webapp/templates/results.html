@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Kết quả Forecast &middot; {{ partition }}{% endblock %}
+{% block content %}
+
+<h1 style="color: var(--text-primary); font-size: 18px; margin-bottom: 16px;">
+  KẾT QUẢ FORECAST &mdash; {{ partition }}
+</h1>
+
+<p style="color: var(--text-secondary); margin-bottom: 16px;">
+  Báo cáo đầy đủ (8 trang) có sẵn ở các đường dẫn sau:
+</p>
+
+<ul style="margin-left: 24px; color: var(--accent-neutral);">
+  <li><a href="{{ url_for('results.asset', partition=partition, filename='index.html') }}">Tổng quan</a></li>
+  <li><a href="{{ url_for('results.asset', partition=partition, filename='forecast_results.html') }}">Forecast Results (mọi horizon)</a></li>
+  <li><a href="{{ url_for('results.asset', partition=partition, filename='macro_snapshot.html') }}">Macro Snapshot</a></li>
+  <li><a href="{{ url_for('results.asset', partition=partition, filename='scenarios.html') }}">Scenarios</a></li>
+  <li><a href="{{ url_for('results.asset', partition=partition, filename='drawdown_risk.html') }}">Drawdown Risk</a></li>
+  <li><a href="{{ url_for('results.asset', partition=partition, filename='analogs.html') }}">Analogs</a></li>
+  <li><a href="{{ url_for('results.asset', partition=partition, filename='sector_factor.html') }}">Sector / Factor</a></li>
+</ul>
+
+{% endblock %}
