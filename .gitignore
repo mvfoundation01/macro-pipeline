@@ -31,6 +31,7 @@ data/output/
 !data/cache/hmm/*.pkl
 !data/cache/hmm/*.meta.json
 
+
 # Raw data (large; users provide their own)
 data/raw/
 
@@ -40,6 +41,13 @@ data/forecasts/webapp_renders/
 
 # Data file formats
 *.parquet
+
+# L11 — data_snapshot/ bundled with PyInstaller for one-click forecast.
+# Carve-out (placed AFTER *.parquet so it overrides last-rule-wins) so the
+# snapshot panels + meta.json ARE committed. Snapshot is built by
+# scripts/build_data_snapshot.py from V's local data/cache/.
+!macro_pipeline/data_snapshot/
+!macro_pipeline/data_snapshot/**
 
 # Local scratch (catalogs, prompts, zip backups)
 save/

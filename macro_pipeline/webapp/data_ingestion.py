@@ -1,6 +1,6 @@
-"""L10 D3 — Excel/CSV data ingestion + ForecastInputs builder.
+"""L10 D3 / L11 D4 — Excel/CSV data ingestion + ForecastInputs builder.
 
-Bridges the L10 web form (8 numerical inputs + 3 file uploads) to the L6-H
+Bridges the web form (8 numerical inputs + 3 file uploads) to the L6-H
 ``ForecastInputs`` dataclass consumed by ``aggregate_ensemble``.
 
 Design notes
@@ -11,14 +11,14 @@ Design notes
 * **Validation is strict**: missing required columns, non-finite numerics, empty
   files, and missing date columns all produce a structured ``IngestionResult``
   with ``success=False`` and a Vietnamese-friendly ``error`` string.
-* **Heuristics for ForecastInputs**: the 8 form fields (PMI, CAPE, unemployment,
-  …) drive light modulation of the L6-H canonical defaults from
-  ``tests/test_aggregator.py``. The defaults are conservative; the modulators
-  exist so the form is **responsive** (changing PMI noticeably moves the 1Y
-  forecast). They are NOT a substitute for the full L5b producer chain — that
-  integration is L11+ scope. See ``ForecastInputsBuilder.build`` docstring for
-  the exact formulas + the ``defaults_used`` field that surfaces which fields
-  fell back to defaults.
+* **ForecastInputs derivation (L11)**: the primary path delegates to
+  ``macro_pipeline.webapp.producer_adapter.ProducerAdapter``, which derives all
+  six ForecastInputs fields from the bundled L11 data snapshot
+  (`macro_pipeline/data_snapshot/`) with the form values overlaid as the latest
+  observation. If the snapshot is missing or the adapter raises for any reason,
+  the call transparently falls back to the legacy L10 heuristic-modulator path
+  (preserved verbatim as ``_build_heuristic``). The provenance is recorded on
+  ``ForecastInputsBuilder.last_provenance`` for UI display.
 
 Public API
 ----------
@@ -29,6 +29,7 @@ Public API
 from __future__ import annotations
 
 import csv
+import logging
 import math
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -37,6 +38,8 @@ from typing import Any
 from openpyxl import load_workbook
 
 from macro_pipeline.ensemble.aggregator import SUPPORTED_HORIZONS, ForecastInputs
+
+log = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -256,26 +259,39 @@ class BuildResult:
 
 
 class ForecastInputsBuilder:
-    """Map L10 form + uploaded data to a valid ``ForecastInputs``.
+    """Map web form + uploaded data to a valid ``ForecastInputs``.
 
-    Heuristic modulators (all bounded to keep the resulting ForecastInputs
-    inside L6-H invariants):
+    L11 primary path: delegate to ``ProducerAdapter``, which derives all six
+    ForecastInputs fields from real historical panels in the bundled L11 data
+    snapshot, with the form values overlaid as the latest observation. The
+    panel-derived path produces honest cross-period dispersion + realized vol +
+    NBER-base-rate recession probabilities; previously L10 used heuristic
+    modulators around canonical L6-H defaults.
 
-    * **Point estimates** — for 1Y/3Y/5Y, blend canonical default with a cyclical
-      signal (PMI deviation from 50 + unemployment deviation from 5.0).
-      Weight on cyclical is 0.7 / 0.5 / 0.3 at 1Y / 3Y / 5Y. 10Y receives a
-      Shiller-style CAPE mean-reversion adjustment around CAPE=22.
-    * **Recession probabilities** — additive bumps from low PMI, high
-      unemployment, and (if yield-curve uploaded) 2Y>10Y inversion. Capped
-      at the canonical default × 1.5 to prevent unrealistic spikes.
-    * **Sigmas + n_eff** — defaults are used unchanged (sigma estimation is
-      out of scope for a one-click form; L5b producers own that).
+    L11 fallback path (preserved verbatim from L10): if the snapshot is missing
+    or the adapter raises, ``_build_heuristic`` runs the original heuristic
+    modulator block. This guarantees the web app keeps working even when V's
+    snapshot is unbuilt.
 
-    The ``BuildResult.defaults_used`` tuple records fields that fell back to
-    pure defaults so the UI can warn the user.
+    Public API (BINDING — Gate 8): ``build()`` signature unchanged from L10.
+    L11 adds ``last_provenance`` instance attribute set after every ``build()``
+    call (route handlers read it for results.html provenance display).
     """
 
     LONG_RUN_REAL_RETURN = 0.065
+
+    def __init__(self, producer_adapter: Any | None = None) -> None:
+        # ``producer_adapter`` typed as ``Any`` to avoid hard import of
+        # ProducerAdapter at class-definition time (snapshot_loader must remain
+        # importable in environments where pandas is partially installed).
+        self._adapter = producer_adapter
+        self.last_provenance: dict[str, Any] = {}
+
+    def _get_adapter(self):
+        if self._adapter is None:
+            from macro_pipeline.webapp.producer_adapter import ProducerAdapter
+            self._adapter = ProducerAdapter()
+        return self._adapter
 
     def build(
         self,
@@ -283,7 +299,7 @@ class ForecastInputsBuilder:
         numerical_inputs: dict[str, float],
         horizons: tuple[int, ...] = SUPPORTED_HORIZONS,
     ) -> ForecastInputs:
-        """Build a valid ForecastInputs.
+        """Build a valid ForecastInputs (panel-derived primary, heuristic fallback).
 
         Parameters
         ----------
@@ -302,6 +318,11 @@ class ForecastInputsBuilder:
         ForecastInputs
             Validated immutable inputs ready for ``aggregate_ensemble``.
 
+        Side effects
+        ------------
+        Sets ``self.last_provenance`` to a dict describing which path ran +
+        which panels/producers + any fallbacks.
+
         Raises
         ------
         ValueError
@@ -310,6 +331,44 @@ class ForecastInputsBuilder:
         uploaded_data = uploaded_data or {}
         self._require_numerical(numerical_inputs)
 
+        # ---- L11 primary path: producer-derived from bundled snapshot ----
+        try:
+            from macro_pipeline.webapp.snapshot_loader import SnapshotNotFoundError
+
+            adapter = self._get_adapter()
+            result = adapter.derive_forecast_inputs(numerical_inputs, uploaded_data)
+            self.last_provenance = dict(result.provenance)
+            return result.inputs
+        except SnapshotNotFoundError as exc:
+            self.last_provenance = self._fallback_provenance(
+                f"snapshot_missing: {exc}"
+            )
+        except Exception as exc:
+            log.exception("ProducerAdapter failed; falling back to heuristic")
+            self.last_provenance = self._fallback_provenance(
+                f"{type(exc).__name__}: {exc}"
+            )
+
+        # ---- L10 fallback path: heuristic modulators (preserved verbatim) --
+        return self._build_heuristic(uploaded_data, numerical_inputs)
+
+    def _fallback_provenance(self, reason: str) -> dict[str, Any]:
+        return {
+            "mode": "heuristic_fallback",
+            "fallback_reason": reason,
+            "snapshot_date": "n/a",
+            "panels_used": (),
+            "producers_run": (),
+            "fallbacks": (("producer_chain", reason),),
+            "form_overlay_applied": True,
+        }
+
+    def _build_heuristic(
+        self,
+        uploaded_data: dict[str, dict[str, Any]],
+        numerical_inputs: dict[str, float],
+    ) -> ForecastInputs:
+        """L10 heuristic-modulator path (preserved verbatim as L11 fallback)."""
         pmi_avg = 0.5 * (
             numerical_inputs["pmi_manufacturing"]
             + numerical_inputs["pmi_services"]

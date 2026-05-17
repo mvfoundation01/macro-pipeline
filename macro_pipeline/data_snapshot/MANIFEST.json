@@ -1,0 +1,273 @@
+{
+  "build_timestamp_utc": "2026-05-17T14:38:16.049412+00:00",
+  "errors": [],
+  "panels_copied": 35,
+  "panels_missing": 0,
+  "records": [
+    {
+      "bytes": 385695,
+      "meta_present": true,
+      "sha256": "6b55515822a2a74c9bf29b9840b82a979bd35769a35fc965e2827e88f2dec7a6",
+      "stem": "official_SHILLER_TR_PRICE"
+    },
+    {
+      "bytes": 377641,
+      "meta_present": true,
+      "sha256": "8c54e8bd075403c78f928977ffbb2bf4c0dc78cd86f46793f9432fcf1993f101",
+      "stem": "official_SHILLER_PRICE"
+    },
+    {
+      "bytes": 385508,
+      "meta_present": true,
+      "sha256": "aec2a1d5f00412f88491f699bd37f2cce7c0664b9ff20f20f9f83f985f2ffe1e",
+      "stem": "official_SHILLER_REAL_PRICE"
+    },
+    {
+      "bytes": 360670,
+      "meta_present": true,
+      "sha256": "c6d62c27c0a3bb7516fc0293ef1fbd8c5b88ce101e7c62424fc1a83d6fb38bd8",
+      "stem": "official_SHILLER_CAPE"
+    },
+    {
+      "bytes": 360694,
+      "meta_present": true,
+      "sha256": "3c186d54a7c3c8dcee0dd1e45bf8ee83c72814c551f891e18a900cab1c9e0136",
+      "stem": "official_SHILLER_TR_CAPE"
+    },
+    {
+      "bytes": 378512,
+      "meta_present": true,
+      "sha256": "b4c65e176def74b57e3b549a6f3de0445223d2ab94e035ff16d018887644ba65",
+      "stem": "official_SHILLER_EARNINGS"
+    },
+    {
+      "bytes": 377268,
+      "meta_present": true,
+      "sha256": "72022d6852d2e7008ad2c47cef1600fe5c367400884c10a84ca7317cf10a7a00",
+      "stem": "official_SHILLER_DIVIDEND"
+    },
+    {
+      "bytes": 376570,
+      "meta_present": true,
+      "sha256": "439c099807e4f0d076574bcb01975c5d0d6f7bdf05f4c5ac78a0f0baed19474d",
+      "stem": "official_SHILLER_GS10"
+    },
+    {
+      "bytes": 373571,
+      "meta_present": true,
+      "sha256": "297d4fb2c5309fa3a77ded16735804c941b55675f01130e343af9a972dc05504",
+      "stem": "official_SHILLER_CPI"
+    },
+    {
+      "bytes": 374806,
+      "meta_present": true,
+      "sha256": "f9e688dbf3aa0084d4586ff4d7849353b6b6899b9ebac6428ea2af00196f6b70",
+      "stem": "yahoo_SPX_PRICE"
+    },
+    {
+      "bytes": 374782,
+      "meta_present": true,
+      "sha256": "ab6ad2887cc9c16542c1d268a5db48628402ebf5c78135717534dbeea142490d",
+      "stem": "yahoo_SPX_TR"
+    },
+    {
+      "bytes": 187558,
+      "meta_present": true,
+      "sha256": "847edeeef17aa789775a35099cffe1fac660ef031ba9da7d5511657a3fb7ca2b",
+      "stem": "yahoo_VIX_YAHOO"
+    },
+    {
+      "bytes": 177239,
+      "meta_present": true,
+      "sha256": "453c520287e8e36484a00d5b9d254dfc90c22966c6faaece7f82623c8558fa1e",
+      "stem": "yahoo_VIX3M"
+    },
+    {
+      "bytes": 403051,
+      "meta_present": true,
+      "sha256": "1d9749bde26be5edbcb7f33392ed40729824420755fb18f5825336994b536960",
+      "stem": "fred_USREC"
+    },
+    {
+      "bytes": 177669,
+      "meta_present": true,
+      "sha256": "2250082ce08ba3f08e16ade92cc35173d42fe73e1e889ea17388de5a53d9d90c",
+      "stem": "fred_T10Y2Y"
+    },
+    {
+      "bytes": 176279,
+      "meta_present": true,
+      "sha256": "a5bc0bfc1ec520f3872d27fb8f9e4d39a41497a8f288ffb383d3d14b9291bd8b",
+      "stem": "fred_T10Y3M"
+    },
+    {
+      "bytes": 68763,
+      "meta_present": true,
+      "sha256": "819b14f23005dd84c68e552dac07b172072e50b0fc8900378c9966ceb2bc9605",
+      "stem": "analysis/r_squared_panel"
+    },
+    {
+      "bytes": 212978,
+      "meta_present": true,
+      "sha256": "ef338324899f5466aa2b229a41dd1a20b60715261f6d4536e20b0e887c260b30",
+      "stem": "fred_PAYEMS"
+    },
+    {
+      "bytes": 165112,
+      "meta_present": true,
+      "sha256": "4aaf055f28c78c697a5fdc26fdefb5755cfcc56b1733fd8104fdffa4a314f680",
+      "stem": "fred_PCEPILFE"
+    },
+    {
+      "bytes": 166101,
+      "meta_present": true,
+      "sha256": "7c38e26dbe221d564a44199907b3ae4ed3bd69c61d9e93deafd22b8b1544fc83",
+      "stem": "fred_CORESTICKM159SFRBATL"
+    },
+    {
+      "bytes": 164058,
+      "meta_present": true,
+      "sha256": "7e125c62f484dd921169113111a5a5a5d96a7a88db8bb81904404768c0121ede",
+      "stem": "fred_MEDCPIM158SFRBCLE"
+    },
+    {
+      "bytes": 168732,
+      "meta_present": true,
+      "sha256": "49ed4716bc6964a40cd2a29634995ecff9d8f8d6cd7616547d410c54f455d20c",
+      "stem": "fred_NFCI"
+    },
+    {
+      "bytes": 169753,
+      "meta_present": true,
+      "sha256": "a3626af9f6be42b205b58781fd4d3bdf91556b989a3b2430a4bb94bead3d08b7",
+      "stem": "fred_ANFCI"
+    },
+    {
+      "bytes": 163073,
+      "meta_present": true,
+      "sha256": "15e06cfb9ebb7765be42b943b51554a2f36d87d5f882cf501ccddf8067719cfb",
+      "stem": "fred_KCFSI"
+    },
+    {
+      "bytes": 263742,
+      "meta_present": true,
+      "sha256": "8c9d5997f51c642502a99ce6e42f1219d7afdc4992527e88256081e40c92005d",
+      "stem": "fred_INDPRO"
+    },
+    {
+      "bytes": 160284,
+      "meta_present": true,
+      "sha256": "a5479ce0bea1f8f14651b067e9631157907cfa6f2e68aab7591ad20e804f17c0",
+      "stem": "fred_SAHMREALTIME"
+    },
+    {
+      "bytes": 165320,
+      "meta_present": true,
+      "sha256": "e3de68c43483a31e67e949a2c1b789fe7f50cca3b3ec8a8bc31a2e5001f2db21",
+      "stem": "fed_EBP"
+    },
+    {
+      "bytes": 301911,
+      "meta_present": true,
+      "sha256": "2a6630f2f1198686d91328498e73ffba22434bb1876f3a3a028515906e25d5c8",
+      "stem": "fed_NTFS_DAILY_DASHBOARD"
+    },
+    {
+      "bytes": 16719,
+      "meta_present": true,
+      "sha256": "1864be39da53ea70e0ec73dfd0ed4596b61001e6dead35cb9596e6619a822fea",
+      "stem": "fed_NTFS_OFFICIAL_REPL"
+    },
+    {
+      "bytes": 125915,
+      "meta_present": true,
+      "sha256": "3cd9784b5f3e31021d9a5ec973fed9a71b5eb8821e5e60fe44da813fa14374e6",
+      "stem": "vintage_panels/PAYEMS_vintage"
+    },
+    {
+      "bytes": 76853,
+      "meta_present": true,
+      "sha256": "fd4228bdd59a01dd8dbbe39d445656ee776400badf5d51e43af512cdd93aff81",
+      "stem": "vintage_panels/PCEPILFE_vintage"
+    },
+    {
+      "bytes": 297208,
+      "meta_present": true,
+      "sha256": "b7ab264198aa94b95fc58833495c0f2a4958f6eb258c772645608679b7c32cb7",
+      "stem": "vintage_panels/INDPRO_vintage"
+    },
+    {
+      "bytes": 68672,
+      "meta_present": true,
+      "sha256": "383d77f569dd8f8a2067a87b0514d173ac051426ada11233710e2ed09218f97d",
+      "stem": "vintage_panels/CFNAIMA3_vintage"
+    },
+    {
+      "bytes": 54648,
+      "meta_present": true,
+      "sha256": "644685a79afa44dc56d1dee43db875a72697f004c721d737d12c8f260128aedf",
+      "stem": "vintage_panels/RSAFS_vintage"
+    },
+    {
+      "bytes": 64419,
+      "meta_present": true,
+      "sha256": "146fe4856570d25cbdeb31a01ea9d33187c022d194ca98bb18e9f1f0e005b112",
+      "stem": "vintage_panels/RRSFS_vintage"
+    }
+  ],
+  "schema_version": "1.0",
+  "snapshot_dir": "D:\\macro_pipeline\\.claude\\worktrees\\layer-5-build\\macro_pipeline\\data_snapshot",
+  "source_cache": "D:\\macro_pipeline\\.claude\\worktrees\\layer-5-build\\data\\cache",
+  "tiers": {
+    "tier1_analysis_artifacts": [
+      "analysis/r_squared_panel"
+    ],
+    "tier1_market_modern": [
+      "yahoo_SPX_PRICE",
+      "yahoo_SPX_TR",
+      "yahoo_VIX_YAHOO",
+      "yahoo_VIX3M"
+    ],
+    "tier1_recession_anchors": [
+      "fred_USREC",
+      "fred_T10Y2Y",
+      "fred_T10Y3M"
+    ],
+    "tier1_shiller": [
+      "official_SHILLER_TR_PRICE",
+      "official_SHILLER_PRICE",
+      "official_SHILLER_REAL_PRICE",
+      "official_SHILLER_CAPE",
+      "official_SHILLER_TR_CAPE",
+      "official_SHILLER_EARNINGS",
+      "official_SHILLER_DIVIDEND",
+      "official_SHILLER_GS10",
+      "official_SHILLER_CPI"
+    ],
+    "tier2_financial_stress": [
+      "fed_EBP",
+      "fed_NTFS_DAILY_DASHBOARD",
+      "fed_NTFS_OFFICIAL_REPL"
+    ],
+    "tier2_form_overlay_anchors": [
+      "fred_PAYEMS",
+      "fred_PCEPILFE",
+      "fred_CORESTICKM159SFRBATL",
+      "fred_MEDCPIM158SFRBCLE",
+      "fred_NFCI",
+      "fred_ANFCI",
+      "fred_KCFSI",
+      "fred_INDPRO",
+      "fred_SAHMREALTIME"
+    ],
+    "tier3_vintage_panels": [
+      "vintage_panels/PAYEMS_vintage",
+      "vintage_panels/PCEPILFE_vintage",
+      "vintage_panels/INDPRO_vintage",
+      "vintage_panels/CFNAIMA3_vintage",
+      "vintage_panels/RSAFS_vintage",
+      "vintage_panels/RRSFS_vintage"
+    ]
+  },
+  "total_bytes": 8121774
+}

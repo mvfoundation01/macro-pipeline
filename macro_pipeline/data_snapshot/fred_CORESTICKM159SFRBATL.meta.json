@@ -1,0 +1,23 @@
+{
+  "indicator_id": "CORESTICKM159SFRBATL",
+  "source": "FRED_API",
+  "frequency": "M",
+  "first_obs": "1967-12-01T00:00:00",
+  "last_obs": "2026-03-01T00:00:00",
+  "last_update": "2026-05-09T12:23:11.228930",
+  "needs_vintage": false,
+  "unit": "pct",
+  "release_lag_days": 14,
+  "description": "Atlanta Fed Sticky Core CPI YoY %",
+  "expected_min": -2.0,
+  "expected_max": 16.0,
+  "data_quality_suspect_periods": [],
+  "vintage_date": null,
+  "n_outliers_iqr5": 0,
+  "n_obs": 15225,
+  "data_sha256": "7c38e26dbe221d564a44199907b3ae4ed3bd69c61d9e93deafd22b8b1544fc83",
+  "schema_version": "1.0",
+  "row_count": 17572,
+  "cache_written_at": "2026-05-09T08:23:11.238001",
+  "pipeline_processed": true
+}

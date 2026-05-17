@@ -1,0 +1,23 @@
+{
+  "indicator_id": "ANFCI",
+  "source": "FRED_API",
+  "frequency": "W",
+  "first_obs": "1971-01-08T00:00:00",
+  "last_obs": "2026-05-01T00:00:00",
+  "last_update": "2026-05-09T12:23:08.577602",
+  "needs_vintage": false,
+  "unit": "index",
+  "release_lag_days": 1,
+  "description": "Adjusted NFCI (controlling for economic conditions)",
+  "expected_min": -3.0,
+  "expected_max": 6.0,
+  "data_quality_suspect_periods": [],
+  "vintage_date": null,
+  "n_outliers_iqr5": 18,
+  "n_obs": 14436,
+  "data_sha256": "a3626af9f6be42b205b58781fd4d3bdf91556b989a3b2430a4bb94bead3d08b7",
+  "schema_version": "1.0",
+  "row_count": 17572,
+  "cache_written_at": "2026-05-09T08:23:08.588730",
+  "pipeline_processed": true
+}

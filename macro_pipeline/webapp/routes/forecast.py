@@ -202,6 +202,7 @@ def run():
     except ValueError as exc:
         flash(f"Lỗi khi xây dựng dữ liệu forecast: {exc}", "error")
         return redirect(url_for("home.index"))
+    provenance = dict(builder.last_provenance)
 
     try:
         ensemble_result = aggregate_ensemble(forecast_inputs)
@@ -256,6 +257,21 @@ def run():
         persistence_store=store,
     )
     renderer = ForecastUIRenderer(ui_config)
-    renderer.render_full_report(partition)
+    report_dir = renderer.render_full_report(partition)
+
+    # L11 D9 — persist provenance alongside the report dir so the results
+    # page can show "Producers run / Snapshot date / Fallbacks".
+    provenance_path = report_dir / "PROVENANCE.json"
+    serializable = {
+        k: (list(v) if isinstance(v, tuple) else v)
+        for k, v in provenance.items()
+    }
+    # Convert any tuples-of-tuples (e.g. fallbacks list) to JSON-safe lists.
+    if "fallbacks" in serializable:
+        serializable["fallbacks"] = [list(f) for f in serializable["fallbacks"]]
+    provenance_path.write_text(
+        json.dumps(serializable, indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
 
     return redirect(url_for("results.show", partition=partition))

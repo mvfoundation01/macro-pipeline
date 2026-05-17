@@ -1,0 +1,10 @@
+{
+  "indicator_id": "r_squared_panel",
+  "schema_version": "1.0",
+  "source": "LAYER_3D_R_SQUARED_PANEL",
+  "frequency": "panel",
+  "unit": "regression_stats",
+  "row_count": 968,
+  "data_sha256": "819b14f23005dd84c68e552dac07b172072e50b0fc8900378c9966ceb2bc9605",
+  "pipeline_processed": true
+}

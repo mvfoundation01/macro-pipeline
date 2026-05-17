@@ -1,0 +1,23 @@
+{
+  "indicator_id": "PAYEMS",
+  "source": "FRED_API",
+  "frequency": "M",
+  "first_obs": "1939-01-01T00:00:00",
+  "last_obs": "2026-04-01T00:00:00",
+  "last_update": "2026-05-09T12:23:03.617930",
+  "needs_vintage": true,
+  "unit": "count_k",
+  "release_lag_days": 5,
+  "description": "All Employees, Total Nonfarm (thousands of persons)",
+  "expected_min": 29000,
+  "expected_max": 200000,
+  "data_quality_suspect_periods": [],
+  "vintage_date": null,
+  "n_outliers_iqr5": 0,
+  "n_obs": 22790,
+  "data_sha256": "ef338324899f5466aa2b229a41dd1a20b60715261f6d4536e20b0e887c260b30",
+  "schema_version": "1.0",
+  "row_count": 22790,
+  "cache_written_at": "2026-05-09T08:23:03.628027",
+  "pipeline_processed": true
+}

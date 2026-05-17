@@ -1,0 +1,31 @@
+{
+  "indicator_id": "SPX_PRICE",
+  "source": "YAHOO_FINANCE",
+  "frequency": "D",
+  "first_obs": "1927-12-30T00:00:00",
+  "last_obs": "2026-05-15T00:00:00",
+  "last_update": "2026-05-16T14:59:21.147380",
+  "needs_vintage": false,
+  "unit": "index",
+  "release_lag_days": 0,
+  "description": "S&P 500 price index (Yahoo, auto_adjust=False)",
+  "expected_min": 50,
+  "expected_max": 100000.0,
+  "data_quality_suspect_periods": [],
+  "yahoo_ticker": "^GSPC",
+  "auto_adjust": false,
+  "tier": 3,
+  "category": "equity_index",
+  "use_for": [
+    "drawdown",
+    "threshold_check",
+    "above_below_MA"
+  ],
+  "n_outliers_iqr5": 184,
+  "n_obs": 25666,
+  "data_sha256": "f9e688dbf3aa0084d4586ff4d7849353b6b6899b9ebac6428ea2af00196f6b70",
+  "schema_version": "1.0",
+  "row_count": 25666,
+  "cache_written_at": "2026-05-16T10:59:21.159060",
+  "pipeline_processed": true
+}

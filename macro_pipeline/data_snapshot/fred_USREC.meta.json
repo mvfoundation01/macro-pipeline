@@ -1,0 +1,23 @@
+{
+  "indicator_id": "USREC",
+  "source": "FRED_API",
+  "frequency": "M",
+  "first_obs": "1854-12-01T00:00:00",
+  "last_obs": "2026-04-01T00:00:00",
+  "last_update": "2026-05-09T12:23:13.693333",
+  "needs_vintage": false,
+  "unit": "binary",
+  "release_lag_days": 60,
+  "description": "NBER recession indicator (1 = peak-to-trough)",
+  "expected_min": 0,
+  "expected_max": 1,
+  "data_quality_suspect_periods": [],
+  "vintage_date": null,
+  "n_outliers_iqr5": 0,
+  "n_obs": 44726,
+  "data_sha256": "1d9749bde26be5edbcb7f33392ed40729824420755fb18f5825336994b536960",
+  "schema_version": "1.0",
+  "row_count": 44726,
+  "cache_written_at": "2026-05-09T08:23:13.718714",
+  "pipeline_processed": true
+}

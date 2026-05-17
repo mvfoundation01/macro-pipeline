@@ -1,0 +1,33 @@
+{
+  "indicator_id": "NTFS_DAILY_DASHBOARD",
+  "source": "FED_BOARD_GSW + FRED_DTB3",
+  "frequency": "D",
+  "first_obs": "1961-06-14T00:00:00",
+  "last_obs": "2026-05-01T00:00:00",
+  "last_update": "2026-05-09T13:15:32.450649",
+  "needs_vintage": false,
+  "unit": "pct",
+  "release_lag_days": 1,
+  "description": "Engstrom-Sharpe Near-Term Forward Spread (daily, dashboard variant; spot leg = DTB3). NOT for backtest \u2014 use NTFS_OFFICIAL_REPL (monthly).",
+  "expected_min": -3.0,
+  "expected_max": 3.0,
+  "data_quality_suspect_periods": [],
+  "reference": "Engstrom & Sharpe (2018, 2019, 2022) 'Don't Fear the Yield Curve'.",
+  "definition": "f_t(18m, 3m) - y_t(3m)",
+  "non_vintage_perfect": true,
+  "challenger_to": "T10Y3M",
+  "spot_3m_source": "DTB3",
+  "use_for": [
+    "current_monitoring",
+    "dashboard_display"
+  ],
+  "do_not_use_for": [
+    "crps_backtest"
+  ],
+  "n_obs": 16185,
+  "data_sha256": "2a6630f2f1198686d91328498e73ffba22434bb1876f3a3a028515906e25d5c8",
+  "schema_version": "1.0",
+  "row_count": 16185,
+  "cache_written_at": "2026-05-09T09:15:32.462580",
+  "pipeline_processed": true
+}

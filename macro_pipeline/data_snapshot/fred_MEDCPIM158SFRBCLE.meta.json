@@ -1,0 +1,23 @@
+{
+  "indicator_id": "MEDCPIM158SFRBCLE",
+  "source": "FRED_API",
+  "frequency": "M",
+  "first_obs": "1983-01-01T00:00:00",
+  "last_obs": "2026-03-01T00:00:00",
+  "last_update": "2026-05-09T12:23:11.648282",
+  "needs_vintage": false,
+  "unit": "pct",
+  "release_lag_days": 14,
+  "description": "Cleveland Fed Median CPI YoY %",
+  "expected_min": -2.0,
+  "expected_max": 15.0,
+  "data_quality_suspect_periods": [],
+  "vintage_date": null,
+  "n_outliers_iqr5": 0,
+  "n_obs": 11310,
+  "data_sha256": "7e125c62f484dd921169113111a5a5a5d96a7a88db8bb81904404768c0121ede",
+  "schema_version": "1.0",
+  "row_count": 17572,
+  "cache_written_at": "2026-05-09T08:23:11.657419",
+  "pipeline_processed": true
+}

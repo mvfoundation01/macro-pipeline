@@ -1,0 +1,33 @@
+{
+  "indicator_id": "SAHMREALTIME",
+  "source": "FRED_API",
+  "frequency": "M",
+  "first_obs": "1959-12-01T00:00:00",
+  "last_obs": "2026-04-01T00:00:00",
+  "last_update": "2026-05-09T13:19:42.940447",
+  "needs_vintage": true,
+  "unit": "pct",
+  "release_lag_days": 7,
+  "description": "Sahm Rule real-time recession indicator. COINCIDENT signal (detects recession start, not 12M ahead). Use for recession_start_detection only \u2014 see 1.5C.4.",
+  "expected_min": -1.0,
+  "expected_max": 10.0,
+  "data_quality_suspect_periods": [],
+  "fred_series_id": "SAHMREALTIME",
+  "vintage_date": null,
+  "n_outliers_iqr5": 32,
+  "n_obs": 17334,
+  "signal_type": "coincident",
+  "valid_uses": [
+    "recession_start_detection",
+    "real_time_recession_indicator"
+  ],
+  "INVALID_uses": [
+    "12M_recession_probability_composite",
+    "12M_leading_indicator"
+  ],
+  "data_sha256": "a5479ce0bea1f8f14651b067e9631157907cfa6f2e68aab7591ad20e804f17c0",
+  "schema_version": "1.0",
+  "row_count": 17572,
+  "cache_written_at": "2026-05-09T09:19:42.940447",
+  "pipeline_processed": true
+}

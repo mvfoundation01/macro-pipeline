@@ -87,7 +87,34 @@
   <li><strong>Browser không tự mở</strong> &mdash; mở thủ công <code>http://localhost:8000</code>.</li>
 </ul>
 
-<h2>6. FAQ</h2>
+<h2>6. Data Snapshot (L11) &mdash; Vì sao có nó và làm thế nào để rebuild</h2>
+<p>
+  Từ L11 trở đi, web app này dùng <strong>data snapshot</strong> bundled trong PyInstaller (.exe)
+  để derive ForecastInputs từ các panel lịch sử thực (Shiller, SPX, VIX, FRED macro, NBER USREC...)
+  thay vì dùng heuristic modulators như L10. Snapshot là một thư mục
+  <code>macro_pipeline/data_snapshot/</code> chứa ~35 panels parquet (~7-8 MB).
+</p>
+<p>
+  Trang <a href="{{ url_for('results.latest') }}">Kết quả mới nhất</a> có phần
+  <strong>DATA PROVENANCE</strong> cho biết:
+</p>
+<ul>
+  <li><strong>Chế độ</strong>: <code>producer_derived</code> (panel-based, tốt) hoặc
+      <code>heuristic_fallback</code> (snapshot mất, fallback sang L10)</li>
+  <li><strong>Ngày build snapshot</strong>: nếu cũ hơn 90 ngày, kết quả ít chính xác hơn</li>
+  <li><strong>Producers chạy</strong> + <strong>panels sử dụng</strong>: minh bạch về data source</li>
+</ul>
+<h3>Rebuild snapshot khi dữ liệu lịch sử cập nhật</h3>
+<p>Nếu bạn có dev environment với <code>data/cache/</code> đã refresh từ FRED + Yahoo:</p>
+<ol>
+  <li>Mở terminal trong thư mục repo</li>
+  <li>Chạy: <code>python scripts/build_data_snapshot.py</code></li>
+  <li>(Tùy chọn) Kiểm tra checksums: <code>python scripts/build_data_snapshot.py --check</code></li>
+  <li>Rebuild .exe: <code>python scripts/build_standalone.py</code></li>
+</ol>
+<p>Hoặc xem manifest hiện tại: <code>python scripts/build_data_snapshot.py --list</code></p>
+
+<h2>7. FAQ</h2>
 <p><strong>Q: Tôi có thể bỏ qua phần upload Excel không?</strong></p>
 <p>Có. Khi không có upload, hệ thống dùng giá trị mặc định cho yield curve / credit spreads / sentiment.
    Kết quả vẫn ra nhưng kém chính xác hơn so với có dữ liệu.</p>

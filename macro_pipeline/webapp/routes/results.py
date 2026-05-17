@@ -15,11 +15,20 @@ GET /results/<partition>/<path:filename>           Serve any file in the report 
 """
 from __future__ import annotations
 
+import json
 import re
 from datetime import UTC, datetime
 from pathlib import Path
 
-from flask import Blueprint, abort, current_app, redirect, send_from_directory, url_for
+from flask import (
+    Blueprint,
+    abort,
+    current_app,
+    redirect,
+    render_template,
+    send_from_directory,
+    url_for,
+)
 
 results_bp = Blueprint("results", __name__)
 
@@ -65,12 +74,21 @@ def latest():
 @results_bp.route("/<partition>")
 @results_bp.route("/<partition>/")
 def show(partition: str):
-    """Serve the L8 report index for the given partition."""
+    """Render the L11 results wrapper with provenance + links to L8 pages."""
     _validate_partition(partition)
     render_dir = Path(current_app.config["WEBAPP_RENDER_DIR"]) / f"report_{partition}"
     if not render_dir.exists():
         abort(404)
-    return send_from_directory(str(render_dir), "index.html")
+    provenance: dict | None = None
+    prov_path = render_dir / "PROVENANCE.json"
+    if prov_path.exists():
+        try:
+            provenance = json.loads(prov_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            provenance = None
+    return render_template(
+        "results.html", partition=partition, provenance=provenance
+    )
 
 
 @results_bp.route("/<partition>/<path:filename>")

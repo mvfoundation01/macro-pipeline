@@ -1,0 +1,23 @@
+{
+  "indicator_id": "NFCI",
+  "source": "FRED_API",
+  "frequency": "W",
+  "first_obs": "1971-01-08T00:00:00",
+  "last_obs": "2026-05-01T00:00:00",
+  "last_update": "2026-05-09T12:23:07.981364",
+  "needs_vintage": false,
+  "unit": "index",
+  "release_lag_days": 1,
+  "description": "Chicago Fed National Financial Conditions Index",
+  "expected_min": -3.0,
+  "expected_max": 6.0,
+  "data_quality_suspect_periods": [],
+  "vintage_date": null,
+  "n_outliers_iqr5": 20,
+  "n_obs": 14436,
+  "data_sha256": "49ed4716bc6964a40cd2a29634995ecff9d8f8d6cd7616547d410c54f455d20c",
+  "schema_version": "1.0",
+  "row_count": 17572,
+  "cache_written_at": "2026-05-09T08:23:07.991346",
+  "pipeline_processed": true
+}

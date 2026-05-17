@@ -1,0 +1,20 @@
+{
+  "series_id": "PCEPILFE",
+  "source": "FRED_ALFRED_VINTAGE",
+  "schema": [
+    "obs_date",
+    "value",
+    "realtime_start",
+    "realtime_end"
+  ],
+  "schema_version": "1.0",
+  "data_sha256": "fd4228bdd59a01dd8dbbe39d445656ee776400badf5d51e43af512cdd93aff81",
+  "row_count": 9083,
+  "n_obs_dates": 807,
+  "n_vintages": 311,
+  "first_obs_date": "1959-01-01T00:00:00",
+  "last_obs_date": "2026-03-01T00:00:00",
+  "first_realtime_start": "2000-08-01T00:00:00",
+  "last_realtime_start": "2026-04-30T00:00:00",
+  "cache_written_at": "2026-05-09T12:12:44.655305"
+}

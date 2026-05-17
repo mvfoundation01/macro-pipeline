@@ -1,0 +1,30 @@
+{
+  "indicator_id": "VIX_YAHOO",
+  "source": "YAHOO_FINANCE",
+  "frequency": "D",
+  "first_obs": "1990-01-02T00:00:00",
+  "last_obs": "2026-05-15T00:00:00",
+  "last_update": "2026-05-16T14:59:27.474024",
+  "needs_vintage": false,
+  "unit": "index",
+  "release_lag_days": 0,
+  "description": "Cboe VIX (Yahoo). TV CSV mirror is `VIX`.",
+  "expected_min": 5,
+  "expected_max": 100,
+  "data_quality_suspect_periods": [],
+  "yahoo_ticker": "^VIX",
+  "auto_adjust": true,
+  "tier": 3,
+  "category": "volatility",
+  "use_for": [
+    "volatility_regime",
+    "vol_term_structure"
+  ],
+  "n_outliers_iqr5": 21,
+  "n_obs": 9489,
+  "data_sha256": "847edeeef17aa789775a35099cffe1fac660ef031ba9da7d5511657a3fb7ca2b",
+  "schema_version": "1.0",
+  "row_count": 17577,
+  "cache_written_at": "2026-05-16T10:59:27.484610",
+  "pipeline_processed": true
+}

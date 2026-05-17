@@ -1,0 +1,31 @@
+{
+  "indicator_id": "SHILLER_TR_PRICE",
+  "source": "SHILLER_XLS",
+  "frequency": "M",
+  "first_obs": "1871-01-01T00:00:00",
+  "last_obs": "2026-04-01T00:00:00",
+  "last_update": "2026-05-17T13:49:11.722703",
+  "needs_vintage": false,
+  "unit": "index",
+  "release_lag_days": 30,
+  "description": "Real total return cumulative price (dividends reinvested, CPI-adjusted)",
+  "expected_min": 50.0,
+  "expected_max": 100000000.0,
+  "data_quality_suspect_periods": [],
+  "tier": "2A",
+  "source_file": "ie_data.xls",
+  "source_sheet": "Data",
+  "source_column_index": 9,
+  "n_outliers_iqr5": 149,
+  "n_obs": 40535,
+  "role": "regression_target",
+  "use_for": [
+    "forward_return_calc",
+    "r_squared_regression"
+  ],
+  "data_sha256": "6b55515822a2a74c9bf29b9840b82a979bd35769a35fc965e2827e88f2dec7a6",
+  "schema_version": "1.0",
+  "row_count": 40535,
+  "cache_written_at": "2026-05-17T09:49:11.734466",
+  "pipeline_processed": true
+}

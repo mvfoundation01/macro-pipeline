@@ -1,0 +1,23 @@
+{
+  "indicator_id": "INDPRO",
+  "source": "FRED_API",
+  "frequency": "M",
+  "first_obs": "1919-01-01T00:00:00",
+  "last_obs": "2026-03-01T00:00:00",
+  "last_update": "2026-05-09T12:23:05.750471",
+  "needs_vintage": true,
+  "unit": "index",
+  "release_lag_days": 17,
+  "description": "Industrial Production Index (2017=100)",
+  "expected_min": 3.0,
+  "expected_max": 200.0,
+  "data_quality_suspect_periods": [],
+  "vintage_date": null,
+  "n_outliers_iqr5": 0,
+  "n_obs": 28008,
+  "data_sha256": "8c9d5997f51c642502a99ce6e42f1219d7afdc4992527e88256081e40c92005d",
+  "schema_version": "1.0",
+  "row_count": 28008,
+  "cache_written_at": "2026-05-09T08:23:05.759530",
+  "pipeline_processed": true
+}

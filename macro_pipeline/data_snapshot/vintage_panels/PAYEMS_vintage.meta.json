@@ -1,0 +1,20 @@
+{
+  "series_id": "PAYEMS",
+  "source": "FRED_ALFRED_VINTAGE",
+  "schema": [
+    "obs_date",
+    "value",
+    "realtime_start",
+    "realtime_end"
+  ],
+  "schema_version": "1.0",
+  "data_sha256": "3cd9784b5f3e31021d9a5ec973fed9a71b5eb8821e5e60fe44da813fa14374e6",
+  "row_count": 13676,
+  "n_obs_dates": 1048,
+  "n_vintages": 855,
+  "first_obs_date": "1939-01-01T00:00:00",
+  "last_obs_date": "2026-04-01T00:00:00",
+  "first_realtime_start": "1955-05-06T00:00:00",
+  "last_realtime_start": "2026-05-08T00:00:00",
+  "cache_written_at": "2026-05-09T12:12:02.408348"
+}

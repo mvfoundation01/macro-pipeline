@@ -1,0 +1,20 @@
+{
+  "series_id": "RRSFS",
+  "source": "FRED_ALFRED_VINTAGE",
+  "schema": [
+    "obs_date",
+    "value",
+    "realtime_start",
+    "realtime_end"
+  ],
+  "schema_version": "1.0",
+  "data_sha256": "146fe4856570d25cbdeb31a01ea9d33187c022d194ca98bb18e9f1f0e005b112",
+  "row_count": 6693,
+  "n_obs_dates": 411,
+  "n_vintages": 489,
+  "first_obs_date": "1992-01-01T00:00:00",
+  "last_obs_date": "2026-03-01T00:00:00",
+  "first_realtime_start": "2001-06-15T00:00:00",
+  "last_realtime_start": "2026-04-21T00:00:00",
+  "cache_written_at": "2026-05-09T12:12:37.869909"
+}

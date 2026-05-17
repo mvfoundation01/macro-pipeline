@@ -1,0 +1,33 @@
+{
+  "indicator_id": "NTFS_OFFICIAL_REPL",
+  "source": "FED_BOARD_GSW + FRED_TB3MS",
+  "frequency": "M",
+  "first_obs": "1961-06-01T00:00:00",
+  "last_obs": "2026-05-01T00:00:00",
+  "last_update": "2026-05-09T13:15:18.307899",
+  "needs_vintage": false,
+  "unit": "pct",
+  "release_lag_days": 1,
+  "description": "Engstrom-Sharpe Near-Term Forward Spread (monthly, official replication; spot leg = TB3MS). Backtest variant \u2014 see NTFS_DAILY_DASHBOARD for live monitoring.",
+  "expected_min": -3.0,
+  "expected_max": 3.0,
+  "data_quality_suspect_periods": [],
+  "reference": "Engstrom & Sharpe (2018, 2019, 2022) 'Don't Fear the Yield Curve'.",
+  "definition": "f_t(18m, 3m) - y_t(3m)",
+  "non_vintage_perfect": true,
+  "challenger_to": "T10Y3M",
+  "spot_3m_source": "TB3MS",
+  "use_for": [
+    "crps_estimation",
+    "walk_forward_backtest"
+  ],
+  "do_not_use_for": [
+    "intraday_alerting"
+  ],
+  "n_obs": 780,
+  "data_sha256": "1864be39da53ea70e0ec73dfd0ed4596b61001e6dead35cb9596e6619a822fea",
+  "schema_version": "1.0",
+  "row_count": 780,
+  "cache_written_at": "2026-05-09T09:15:18.318309",
+  "pipeline_processed": true
+}

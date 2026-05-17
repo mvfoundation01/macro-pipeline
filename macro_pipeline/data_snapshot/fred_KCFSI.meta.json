@@ -1,0 +1,23 @@
+{
+  "indicator_id": "KCFSI",
+  "source": "FRED_API",
+  "frequency": "M",
+  "first_obs": "1990-02-01T00:00:00",
+  "last_obs": "2026-04-01T00:00:00",
+  "last_update": "2026-05-09T12:23:08.946824",
+  "needs_vintage": false,
+  "unit": "index",
+  "release_lag_days": 30,
+  "description": "Kansas City Fed Financial Stress Index",
+  "expected_min": -3.0,
+  "expected_max": 7.0,
+  "data_quality_suspect_periods": [],
+  "vintage_date": null,
+  "n_outliers_iqr5": 4,
+  "n_obs": 9462,
+  "data_sha256": "15e06cfb9ebb7765be42b943b51554a2f36d87d5f882cf501ccddf8067719cfb",
+  "schema_version": "1.0",
+  "row_count": 17572,
+  "cache_written_at": "2026-05-09T08:23:08.957105",
+  "pipeline_processed": true
+}

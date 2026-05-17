@@ -1,0 +1,23 @@
+{
+  "indicator_id": "PCEPILFE",
+  "source": "FRED_API",
+  "frequency": "M",
+  "first_obs": "1959-01-01T00:00:00",
+  "last_obs": "2026-03-01T00:00:00",
+  "last_update": "2026-05-09T12:23:10.743217",
+  "needs_vintage": true,
+  "unit": "index",
+  "release_lag_days": 30,
+  "description": "Core PCE price index level",
+  "expected_min": 10.0,
+  "expected_max": 250.0,
+  "data_quality_suspect_periods": [],
+  "vintage_date": null,
+  "n_outliers_iqr5": 0,
+  "n_obs": 17572,
+  "data_sha256": "4aaf055f28c78c697a5fdc26fdefb5755cfcc56b1733fd8104fdffa4a314f680",
+  "schema_version": "1.0",
+  "row_count": 17572,
+  "cache_written_at": "2026-05-09T08:23:10.751773",
+  "pipeline_processed": true
+}

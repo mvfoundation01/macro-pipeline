@@ -1,0 +1,29 @@
+{
+  "indicator_id": "VIX3M",
+  "source": "YAHOO_FINANCE",
+  "frequency": "D",
+  "first_obs": "2006-07-17T00:00:00",
+  "last_obs": "2026-05-15T00:00:00",
+  "last_update": "2026-05-16T14:59:28.281673",
+  "needs_vintage": false,
+  "unit": "index",
+  "release_lag_days": 0,
+  "description": "Cboe 3-Month VIX",
+  "expected_min": 5,
+  "expected_max": 100,
+  "data_quality_suspect_periods": [],
+  "yahoo_ticker": "^VIX3M",
+  "auto_adjust": true,
+  "tier": 3,
+  "category": "volatility",
+  "use_for": [
+    "vol_term_structure"
+  ],
+  "n_outliers_iqr5": 4,
+  "n_obs": 5175,
+  "data_sha256": "453c520287e8e36484a00d5b9d254dfc90c22966c6faaece7f82623c8558fa1e",
+  "schema_version": "1.0",
+  "row_count": 17577,
+  "cache_written_at": "2026-05-16T10:59:28.291247",
+  "pipeline_processed": true
+}

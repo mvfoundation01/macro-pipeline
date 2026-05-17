@@ -6,18 +6,86 @@
   KẾT QUẢ FORECAST &mdash; {{ partition }}
 </h1>
 
-<p style="color: var(--text-secondary); margin-bottom: 16px;">
-  Báo cáo đầy đủ (8 trang) có sẵn ở các đường dẫn sau:
-</p>
+{# ---------- L11 D9 — Data provenance section ---------- #}
+{% if provenance %}
+<section class="webapp-section" aria-labelledby="provenance-heading">
+  <h3 id="provenance-heading">DATA PROVENANCE (L11)</h3>
+  <table class="terminal-table" style="margin-bottom: 8px;">
+    <tbody>
+      <tr>
+        <td style="width: 220px;">Chế độ</td>
+        <td>
+          {% if provenance.mode == "producer_derived" %}
+            <strong style="color: var(--accent-bullish);">producer_derived</strong>
+            &mdash; ForecastInputs được tính từ các panel lịch sử thực
+          {% else %}
+            <strong style="color: var(--accent-caution);">heuristic_fallback</strong>
+            &mdash; Snapshot không có; rơi vào L10 heuristic modulator
+          {% endif %}
+        </td>
+      </tr>
+      <tr>
+        <td>Ngày build snapshot</td>
+        <td><code>{{ provenance.snapshot_date or "n/a" }}</code></td>
+      </tr>
+      {% if provenance.producers_run %}
+      <tr>
+        <td>Producers chạy ({{ provenance.producers_run | length }})</td>
+        <td>
+          {% for p in provenance.producers_run %}
+            <code style="margin-right: 8px;">{{ p }}</code>
+          {% endfor %}
+        </td>
+      </tr>
+      {% endif %}
+      {% if provenance.panels_used %}
+      <tr>
+        <td>Panels sử dụng ({{ provenance.panels_used | length }})</td>
+        <td>
+          {% for p in provenance.panels_used %}
+            <code style="margin-right: 8px; font-size: 11px;">{{ p }}</code>
+          {% endfor %}
+        </td>
+      </tr>
+      {% endif %}
+      {% if provenance.fallbacks %}
+      <tr>
+        <td>Fallbacks ({{ provenance.fallbacks | length }})</td>
+        <td>
+          <ul style="margin-left: 16px; color: var(--accent-caution);">
+            {% for f in provenance.fallbacks %}
+              <li><code>{{ f[0] }}</code>: {{ f[1] }}</li>
+            {% endfor %}
+          </ul>
+        </td>
+      </tr>
+      {% endif %}
+      {% if provenance.fallback_reason %}
+      <tr>
+        <td>Lý do fallback</td>
+        <td style="color: var(--accent-caution);">{{ provenance.fallback_reason }}</td>
+      </tr>
+      {% endif %}
+    </tbody>
+  </table>
+  <p style="font-size: 11px; color: var(--text-tertiary); margin-top: 8px;">
+    Snapshot cũ → forecast kém chính xác. Rebuild bằng
+    <code>python scripts/build_data_snapshot.py</code> rồi rebuild .exe.
+  </p>
+</section>
+{% endif %}
 
-<ul style="margin-left: 24px; color: var(--accent-neutral);">
-  <li><a href="{{ url_for('results.asset', partition=partition, filename='index.html') }}">Tổng quan</a></li>
-  <li><a href="{{ url_for('results.asset', partition=partition, filename='forecast_results.html') }}">Forecast Results (mọi horizon)</a></li>
-  <li><a href="{{ url_for('results.asset', partition=partition, filename='macro_snapshot.html') }}">Macro Snapshot</a></li>
-  <li><a href="{{ url_for('results.asset', partition=partition, filename='scenarios.html') }}">Scenarios</a></li>
-  <li><a href="{{ url_for('results.asset', partition=partition, filename='drawdown_risk.html') }}">Drawdown Risk</a></li>
-  <li><a href="{{ url_for('results.asset', partition=partition, filename='analogs.html') }}">Analogs</a></li>
-  <li><a href="{{ url_for('results.asset', partition=partition, filename='sector_factor.html') }}">Sector / Factor</a></li>
-</ul>
+<section class="webapp-section">
+  <h3>BÁO CÁO ĐẦY ĐỦ &mdash; 8 trang</h3>
+  <ul style="margin-left: 24px;">
+    <li><a href="{{ url_for('results.asset', partition=partition, filename='index.html') }}">Tổng quan</a></li>
+    <li><a href="{{ url_for('results.asset', partition=partition, filename='forecast_results.html') }}">Forecast Results (mọi horizon)</a></li>
+    <li><a href="{{ url_for('results.asset', partition=partition, filename='macro_snapshot.html') }}">Macro Snapshot</a></li>
+    <li><a href="{{ url_for('results.asset', partition=partition, filename='scenarios.html') }}">Scenarios</a></li>
+    <li><a href="{{ url_for('results.asset', partition=partition, filename='drawdown_risk.html') }}">Drawdown Risk</a></li>
+    <li><a href="{{ url_for('results.asset', partition=partition, filename='analogs.html') }}">Analogs</a></li>
+    <li><a href="{{ url_for('results.asset', partition=partition, filename='sector_factor.html') }}">Sector / Factor</a></li>
+  </ul>
+</section>
 
 {% endblock %}
