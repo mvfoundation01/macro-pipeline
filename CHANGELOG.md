@@ -6,6 +6,111 @@ Tags are pushed alongside each layer-complete commit (e.g. `l11-accept`).
 The macro pipeline itself (L1-L9) was developed across ~50 convergent sub-phases;
 this changelog starts at L10 when the user-facing surface area began shipping.
 
+## [L12 — UX refinement v1: multi-format CSV ingest + local data manager + source URL annotations + deps catch-up] — 2026-05-17
+
+Tags: `l12-accept`, `l12-layer-complete`, `ux-refinement-v1`.
+
+### Context
+V tested the L11.x pipeline end-to-end and surfaced 4 issues:
+
+1. **Schema mismatch** — V uploaded a raw TradingView CSV
+   (`time,open,high,low,close`); the L10 webapp only accepted the bespoke
+   template format (`date,2y,10y`).
+2. **Workflow mismatch** — V already has 22 raw CSVs sitting in
+   `data/raw/tradingview/` (TradingView exports of FRED + CBOE + INDEX + USI
+   series). Wanted drop-in directory ingestion, not manual upload of three
+   templates.
+3. **Source friction** — the 8 numerical form fields had no inline links to
+   the government / primary data sources, forcing V to re-Google each one.
+4. **Catch-up dep gap** — `flask` was missing from `pyproject.toml`; `run.bat`
+   papered over it with a separate `pip install flask`. A fresh `pip install
+   -e .` produced a venv that couldn't import the webapp.
+
+### Fix — 10 deliverables in a single sub-phase
+
+**D1 — pyproject.toml dep catch-up.** Added `flask>=3.0,<4.0` and
+`werkzeug>=3.0,<4.0`. Removed the redundant `pip install flask` from
+`run.bat` and `run.sh` — pyproject is now the single source of truth.
+
+**D2 — Fresh-venv install test.** New
+`tests/test_l12_fresh_venv_install.py` has 4 tests: static guards that
+flask + werkzeug are declared in pyproject; import check from the running
+venv; a slow `pip install --dry-run -e .` gate that verifies the full
+dependency tree resolves without conflicts. Registered the `slow` marker
+in `pyproject.toml`.
+
+**D3 — Multi-format CSV parsers.** New
+`macro_pipeline/webapp/csv_parsers.py` with a `CSVParser` ABC and concrete
+`TradingViewParser` (handles both 2-col `time,close` and 5-col OHLC) +
+`FREDParser` (handles `DATE,VALUE` / `observation_date,value` from the
+FRED web UI). `ParserRegistry` does first-match-wins dispatch with
+defensive NaT-index filtering (unparseable dates raise instead of silently
+producing garbage).
+
+**D4-D6 — LocalDataManager.** New
+`macro_pipeline/webapp/local_data_manager.py` scans
+`data/raw/{official,tradingview}/`, classifies each CSV by filename via a
+22-entry `FILENAME_PATTERNS` regex registry, and aggregates per-file
+series into the EXACT dict shape `ExcelDataIngester.parse_*` returns
+(so `ForecastInputsBuilder.build(uploaded_data=...)` consumes it with
+zero code changes). Includes unit-correction (FRED publishes IG OAS in
+percent; aggregator multiplies by 100 to match the L10 template's
+basis-points convention so `elevated = oas > 200 bps` keeps working).
+
+**D7 — Detected-files panel.** `input.html` gained a new "0. DỮ LIỆU CỤC
+BỘ" section above the manual upload widgets. Renders a table of detected
+files grouped by category, plus a collapsible list of unclassified files.
+Each manual upload widget shows a green `[Local files đã cover; upload sẽ
+override.]` hint when the relevant category has local data.
+
+**D8 — Source URL annotations.** Each of the 8 numerical fields now has
+a Vietnamese hint line with 2 hyperlinks: a primary government / central-
+bank source (ISM, FRED, multpl, Fed, Yahoo) and a secondary convenient
+mirror (TradingEconomics, BLS, Shiller Yale, Google Finance). All
+`target="_blank"` + `rel="noopener"` (16 external anchors total).
+
+**D9 — help.html update.** New "Workflow với data cục bộ (L12)" section
+documents the two raw-data directories, the filename patterns table, and
+the manual-override semantics.
+
+**D10 — Test coverage.** 21 new tests across 4 files:
+* `test_l12_csv_parsers.py`           7 tests (4 NEG / 3 POS) 57% NEG
+* `test_l12_local_data_manager.py`    6 tests (3 NEG / 3 POS) 50% NEG
+* `test_l12_source_url_rendering.py`  4 tests (1 NEG / 3 POS) 25% NEG
+* `test_l12_fresh_venv_install.py`    4 tests (0 NEG / 4 POS) (CI gates)
+
+L12 aggregate: 8 NEG / 13 POS = 38 % NEG. Combined with prior launcher
++ producer suites the cross-layer NEG ratio stays well above 45 %.
+
+### Verification
+
+* L12 GATE 6 — classification coverage: **22 / 22 of V's TradingView CSVs
+  classified** (100 % of CSV coverage; the 17 XLS/XLSX/PDF files in
+  `data/raw/official/` are out of L12 scope — non-CSV parsers deferred).
+* L12 GATE 16 end-to-end smoke (verbatim):
+
+  ```
+  [OK] GET / shows V actual files in detected-files panel
+       (TVC_US10Y_1D.csv + FRED_BAMLC0A0CM_1D.csv visible)
+  [OK] POST /forecast/run -> 302 /results/2026-05/
+  [OK] results page renders DATA PROVENANCE
+  [OK] PROVENANCE mode=producer_derived, snapshot_date=2026-05-17
+       producers_run=[point_estimates, point_estimate_n_eff,
+                      forecast_sigmas, analog_dispersions,
+                      return_sigmas, recession_probabilities]
+  ```
+
+* Full pytest: 1515 / 1515 PASS (1494 + 21 L12).
+* Defense Test 12 + cap_cascade: 11 / 11 PASS (unchanged).
+* Ruff (L12 scope): clean.
+
+### V's deployment clone
+
+`D:/macro_pipeline/macro-pipeline` updated to the L12 commit. V can now
+drop any TradingView / FRED CSV into `data/raw/tradingview/`, double-click
+`run.bat`, and the form auto-detects the file without any template
+reshape work.
+
 ## [L11.3 — run.bat cmd-parser hotfix + true E2E] — 2026-05-17
 
 Tags: `l11-3-hotfix`, `run-bat-e2e-verified`, `launcher-true-e2e-v1`.

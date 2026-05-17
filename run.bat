@@ -80,8 +80,7 @@ echo.
 .venv\Scripts\python.exe -m pip install --upgrade pip --quiet
 .venv\Scripts\python.exe -m pip install -e . --quiet
 if errorlevel 1 goto :pip_failed
-.venv\Scripts\python.exe -m pip install flask --quiet
-if errorlevel 1 goto :pip_failed
+REM L12 — flask + werkzeug now pulled in by `pip install -e .` via pyproject.toml.
 echo [OK] Cai dat hoan tat.
 echo.
 

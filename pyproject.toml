@@ -27,6 +27,11 @@ dependencies = [
     "matplotlib>=3.8",
     "seaborn>=0.13",
     "PyYAML>=6.0",
+    # L12 — webapp launcher dependencies (previously installed separately in
+    # run.bat / run.sh; that gap let a fresh `pip install -e .` produce a venv
+    # that couldn't import `macro_pipeline.webapp.app`).
+    "flask>=3.0,<4.0",
+    "werkzeug>=3.0,<4.0",
 ]
 
 [project.optional-dependencies]
@@ -109,3 +114,6 @@ ignore = ["E501", "RUF002", "RUF003", "RUF046", "RUF059"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+markers = [
+    "slow: tests that take >10s; opt-in via `pytest -m slow` (L12 D2 fresh-venv gate)",
+]

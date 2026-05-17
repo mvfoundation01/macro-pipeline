@@ -47,7 +47,7 @@ if ! .venv/bin/python -c "import flask" 2>/dev/null; then
     echo "[INFO] Cài đặt dependencies lần đầu (3-8 phút)..."
     .venv/bin/python -m pip install --upgrade pip --quiet
     .venv/bin/python -m pip install -e . --quiet
-    .venv/bin/python -m pip install flask --quiet
+    # L12 — flask + werkzeug now pulled in by `pip install -e .` via pyproject.toml
 fi
 
 if [ ! -f "macro_pipeline/webapp/static/templates/yield-curve.xlsx" ]; then

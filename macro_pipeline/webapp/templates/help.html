@@ -7,6 +7,46 @@
 <h1 style="color: var(--text-primary); font-size: 18px;">HƯỚNG DẪN SỬ DỤNG MACRO FORECAST TERMINAL</h1>
 <p style="color: var(--text-secondary);">Một-cú-click để tạo forecast Macro &amp; Equity Strategy theo phương pháp luận institutional (Vision v2.1).</p>
 
+<h2>0. Workflow với data cục bộ (L12)</h2>
+<p>
+  Từ L12, pipeline tự quét hai thư mục mỗi lần load form:
+</p>
+<ul>
+  <li><code>D:/macro_pipeline/data/raw/official/</code> — files từ FRED/BLS/BEA/Fed direct
+      (XLS/XLSX cho L13+; CSV hỗ trợ ngay)</li>
+  <li><code>D:/macro_pipeline/data/raw/tradingview/</code> — TradingView CSV exports
+      (format <code>time,close</code> hoặc <code>time,open,high,low,close</code>)</li>
+</ul>
+<p>Filename patterns được hỗ trợ ngay (filename → category/subseries):</p>
+<table class="terminal-table">
+  <thead><tr><th>Filename pattern</th><th>Category</th><th>Subseries</th></tr></thead>
+  <tbody>
+    <tr><td><code>TVC_US02Y*</code></td><td>yield_curve</td><td>2y</td></tr>
+    <tr><td><code>TVC_US10Y*</code></td><td>yield_curve</td><td>10y</td></tr>
+    <tr><td><code>TVC_US03MY*</code></td><td>yield_curve</td><td>3m</td></tr>
+    <tr><td><code>FRED_BAMLC0A0CM*</code></td><td>credit_spreads</td><td>ig_oas</td></tr>
+    <tr><td><code>FRED_BAMLH0A0HYM2*</code></td><td>credit_spreads</td><td>hy_oas</td></tr>
+    <tr><td><code>FRED_BAMLH0A1HYBB*</code></td><td>credit_spreads</td><td>bb_oas</td></tr>
+    <tr><td><code>FRED_BAMLH0A3HYC*</code></td><td>credit_spreads</td><td>ccc_oas</td></tr>
+    <tr><td><code>FRED_UMCSENT*</code></td><td>sentiment</td><td>umich</td></tr>
+    <tr><td><code>FRED_CSCICP03USM665S*</code></td><td>sentiment</td><td>consumer_confidence</td></tr>
+    <tr><td><code>CBOE_DLY_VIX*</code></td><td>sentiment</td><td>vix</td></tr>
+    <tr><td><code>CBOE_DLY_GAMMA*</code></td><td>sentiment</td><td>dealer_gamma</td></tr>
+    <tr><td><code>INDEX_S5FI*</code> / <code>INDEX_S5TH*</code></td><td>sentiment</td><td>spx_above_50/200dma</td></tr>
+    <tr><td><code>USI_PCCE*</code></td><td>sentiment</td><td>put_call_equity</td></tr>
+  </tbody>
+</table>
+<p>
+  Trang chủ hiển thị bảng <strong>"DỮ LIỆU CỤC BỘ (TỰ ĐỘNG PHÁT HIỆN)"</strong> liệt kê
+  file nào đã được phân loại + danh sách file chưa phân loại (collapsed).
+  Manual Excel upload (Section 1) sẽ <strong>override</strong> category cụ thể nếu cần.
+</p>
+<p>
+  File không khớp pattern được liệt kê dưới "không phân loại được". Nếu muốn pipeline hỗ trợ,
+  thêm regex mới vào <code>FILENAME_PATTERNS</code> trong
+  <code>macro_pipeline/webapp/local_data_manager.py</code>.
+</p>
+
 <h2>1. Quy trình 4 bước</h2>
 <ol>
   <li><strong>Tải template Excel</strong> &mdash; ở trang chủ, mỗi vùng upload có liên kết &ldquo;Tải template&rdquo;.

@@ -30,6 +30,7 @@ from macro_pipeline.webapp.data_ingestion import (
     ForecastInputsBuilder,
     IngestionResult,
 )
+from macro_pipeline.webapp.local_data_manager import LocalDataManager
 
 log = logging.getLogger(__name__)
 
@@ -183,7 +184,20 @@ def run():
     if any_upload_attempted and not any_ingest_ok:
         return redirect(url_for("home.index"))
 
-    uploaded_data: dict[str, dict] = {}
+    # L12 D6 — seed uploaded_data with whatever LocalDataManager auto-detected
+    # from data/raw/{official,tradingview}/. Manual Excel uploads OVERRIDE
+    # any category they cover (V's intent: a freshly-uploaded file always
+    # supersedes the on-disk snapshot of that same category).
+    try:
+        uploaded_data: dict[str, dict] = LocalDataManager().build_uploaded_data()
+    except Exception as exc:
+        log.exception("LocalDataManager scan during POST failed")
+        flash(
+            f"Cảnh báo: không quét được dữ liệu cục bộ ({type(exc).__name__}). "
+            "Forecast sẽ chỉ dùng file bạn upload + giá trị form.",
+            "info",
+        )
+        uploaded_data = {}
     if yield_curve_result and yield_curve_result.data:
         uploaded_data["yield_curve"] = yield_curve_result.data
     if credit_spreads_result and credit_spreads_result.data:
